@@ -62,7 +62,37 @@
   - реальная hook payload schema Claude Code 2.1.136 — stdin JSON: `{session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input.file_path (АБСОЛЮТНЫЙ), tool_response, tool_use_id}`. Env vars `CLAUDE_TOOL_PATH/NAME/AGENT_NAME` НЕ существуют, payload идёт строго через stdin;
   - реальный `claude --print` end-to-end получает stderr от `exit 2` хука и сам сообщает пользователю причину блока («store помечен как read_only») — это и есть рабочий ACL UX, без API.
 
-## ADR-006 — Onboarding всегда интервьюирует
+## ADR-007 — Built-ins-first revisited: retire 6 skills + 2 agents как дубликаты
+
+- **Дата**: 2026-05-09
+- **Контекст**: Stage 2 battle-test на FastApi-Base + критический ревью пользователя выявили **системное нарушение foundational principle** в v0.1 expansion коммите (76c4f37). Я создал 7 user-triggered skills и пять custom agents без верификации built-in каталога Claude Code 2.1.x. Поверхностный bug (`AskUserQuestion` несовместим с `context: fork`, фикс был в ADR-006) вёл к более глубокому: половина skills вообще не должна была существовать.
+- **Решение**: удалить из harness'а компоненты, дублирующие built-ins или bundled skills:
+  - `skills/onboard/` → дубликат `/init` (NEW project bootstrap CLAUDE.md) + `/team-onboarding` (v2.1.101+, ramp-up для team handoff) + `/memory` (refine existing CLAUDE.md).
+  - `skills/review/` → дубликат built-in `/review`. Для cloud multi-agent — shell `claude ultrareview`.
+  - `skills/debug-loop/` → дубликат bundled `/debug`.
+  - `skills/refactor/` → тонкий wrapper («use Plan to design») без value над прямым `/plan` или Shift+Tab×2.
+  - `skills/create-skill/` → дубликат canonical `skill-creator` из marketplace `anthropics/skills`. Установка через `claude plugin install skill-creator@anthropics-skills` на user-level.
+  - `skills/spawn-agent/` → low-value wrapper над manual edit `.claude/agents/<name>.md` + built-in `/agents` view. Создание агентов остаётся через `meta-creator` subagent (вызываемый напрямую через Task tool).
+  - `agents/onboarding-agent.md` → отзывается вместе с `/onboard` skill.
+  - `agents/debug-loop.md` → отзывается вместе с `/debug-loop` skill.
+- **Финальный inventory harness'а**:
+  - `.claude/skills/`: только `devlog` (уникальная schema + auto-index) и `plan-deliverable` (deliverable-driven contract без декомпозиции — уникальный подход не покрыт built-ins).
+  - `.claude/agents/`: `deliverable-planner`, `code-reviewer`, `meta-creator`. `code-reviewer` остаётся marginally — даёт structured JSON output, отличный от built-in `/review` UX.
+- **Обоснование**:
+  1. Foundational principle (zafiksirován в `.claude/CLAUDE.md`): «если Opus 4.7 уже умеет X нативно — компонент не добавляется». Built-ins покрывают onboarding/review/debug/refactor нативно лучше. Каждый дубликат — assumption «модель/built-ins не справятся», которая не подтверждается.
+  2. Built-ins (`/init`, `/team-onboarding`, `/review`, `/debug`, `/simplify`, `/plan`, `/memory`) maintained Anthropic'ом, evolve вместе с CLI. Наши копии — frozen, drift гарантирован.
+  3. Контекст-бюджет: 7 skill descriptions всегда грузятся в системный промпт. Каждый дубликат отъедает character budget без выигрыша.
+  4. Language preference (которая всплыла в pilot): Opus 4.7 нативно отвечает на языке запроса. Не нужен skill-уровень для language directive — только опциональная строка `Working language: <язык>` в проектном CLAUDE.md, если важно зафиксировать durably.
+- **ADR-006 superseded**: проблема, которую ADR-006 решал (mandatory interview в `/onboard`), становится moot вместе с удалением `/onboard`. Built-in `/init` и `/team-onboarding` сами решают что и как спрашивать; harness не вмешивается.
+- **Альтернатива (отвергнута)**: оставить наши skills как «harness-flavored alternatives» с добавленной project-spec логикой. Отвергнута: (а) project-spec логика принадлежит проектному CLAUDE.md, не harness skills; (б) maintaining двух поверхностей (наша + built-in) — anti-pattern foundational principle.
+- **Запрет на возврат**: воссоздавать `.claude/skills/onboard|review|debug-loop|refactor|create-skill|spawn-agent` или `.claude/agents/onboarding-agent|debug-loop` — запрещено без пересмотра этого ADR. Перед добавлением любого нового skill/agent — обязательная проверка built-in/bundled каталога через `https://code.claude.com/docs/en/commands`.
+- **Урок процесса**: для любого нового harness-компонента — WebFetch built-in catalog ДО реализации. Foundational principle проверяется не в обзоре, а в моменте предложения компонента.
+
+## ADR-006 — Onboarding всегда интервьюирует (SUPERSEDED by ADR-007)
+
+> **Status**: superseded 2026-05-09 by ADR-007 (удаление `/onboard` skill и `onboarding-agent`). Сохранён как исторический контекст процесса.
+
+
 
 - **Дата**: 2026-05-09
 - **Контекст**: Stage 2 battle-test на pilot'е FastApi-Base показал, что `onboarding-agent` в auto-mode **пропустил интервью** на mature-проекте, сославшись на мета-CLAUDE.md guidance «trust the model, prefer action over questions». Результат: пилотный CLAUDE.md создан без подтверждения language preference (англоязычный вместо желаемого русского), без подтверждённого target deliverable, без согласования verification gate с разработчиком. Качество invariants было высоким (хороший fingerprint + encoded bans), но контракт-смысл потерян: документ описывал repo-state, а не договорённость с человеком.
