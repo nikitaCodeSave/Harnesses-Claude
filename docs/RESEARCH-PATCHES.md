@@ -12,9 +12,9 @@
 |---|---|---|
 | P0 | Корректность фактов / API cleanup | 5 |
 | P1 | Дубликаты + неверные числа | 4 |
-| P2 | Новые секции (CLI-ergonomic) + sources reliability | 3 |
+| P2 | Новые секции (CLI-ergonomic / sources reliability / Phase 2 design) | 4 |
 | P3 | Снижение категоричности (хедж) | 2 |
-| **Итого** | | **14** |
+| **Итого** | | **15** |
 
 ---
 
@@ -202,6 +202,27 @@
 - **Куда**: новый подпункт в разделе «Caveats» (после пункта 10)
 - **Content**:
   > **11. Sources reliability**. Часть утверждений в этом research'е опирается на community / interpretive sources, не на canonical Anthropic docs. Конкретно: цитаты, для которых WebFetch вернул certificate error или которые цитируются по transcribed video (C4, C10); числовые границы и имена файлов, не подтверждённые дословно (B6, B7, B16); community observations без публичных issue (A3, B10). Применять с осторожностью; перепроверять при следующем audit.
+
+### P2-4 — добавить разделы 11.5/11.6/11.7 «Phase 2 design decisions»
+
+- **Источник**: ADR-002, ADR-003, ADR-004 в `docs/HARNESS-DECISIONS.md` + foundational principle (там же).
+- **Куда**: новые подразделы после раздела 11 «Эволюция harness'а через self-creation», перед разделом 12 «Открытые вопросы».
+- **Content**:
+  > #### 11.5 Главный принцип: минимум обвязки → максимум продуктивности
+  >
+  > Под Opus 4.7 минимум обвязки даёт максимум продуктивности. Симптом «трудности в росте harness'а» — почти всегда признак того, что обвязка переросла полезность модели. Если компонент кодирует assumption «модель не умеет X», и Opus 4.7 уже умеет X нативно — компонент не добавляется. Прямая отсылка: «every component in a harness encodes an assumption … those assumptions can quickly go stale» (Anthropic engineering / AddyOsmani; см. C4/C8).
+  >
+  > #### 11.6 Anti-patterns from Phase 2 (фиксированные ADR'ами)
+  >
+  > - **TDD-тройка субагентов (test-writer / impl / refactor) — НЕ создавать.** Изоляция контекста — решение для Sonnet 3.5/Opus 3, не для 4.7. Test-writer без conftest/фикстур/style — потеря конвенций; 3× round-trip ухудшает координацию. RED/GREEN/REFACTOR держим в одном контексте через TaskCreate с pass-критериями. Запрет фиксирован в `docs/HARNESS-DECISIONS.md` ADR-002.
+  > - **TDD/BDD как мета-обвязка — НЕ зашиваем.** Opus 4.7 без обвязки сам предлагает тесты, запускает pytest, видит регрессии. BDD/Gherkin осмыслен только при product-аналитиках. Замена — `.claude/rules/testing.md` (5 правил, ≤25 строк). Запрет в ADR-003.
+  >
+  > #### 11.7 Devlog format
+  >
+  > - `entries/YYYY/NNNN-slug.md` — единственный source of truth, markdown с YAML frontmatter (формат skill'ов из anthropics/skills).
+  > - `index.json` — производный, **никогда не правится руками**. Регенерируется через `python3 .claude/devlog/rebuild-index.py`.
+  > - rebuild-index валидирует: уникальность числового id, детерминированный slug (lowercase + alnum + collapse), required frontmatter fields (id/date/title).
+  > - Партиция архива — каталог по году. Решение в ADR-004.
 
 ---
 
