@@ -62,7 +62,37 @@
   - реальная hook payload schema Claude Code 2.1.136 — stdin JSON: `{session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input.file_path (АБСОЛЮТНЫЙ), tool_response, tool_use_id}`. Env vars `CLAUDE_TOOL_PATH/NAME/AGENT_NAME` НЕ существуют, payload идёт строго через stdin;
   - реальный `claude --print` end-to-end получает stderr от `exit 2` хука и сам сообщает пользователю причину блока («store помечен как read_only») — это и есть рабочий ACL UX, без API.
 
-## ADR-008 — Sandbox enabled + SessionStart context + effort guidance (canonical Anthropic baseline)
+## ADR-009 — Retire sandbox baseline (workflow friction > security gain)
+
+- **Дата**: 2026-05-09
+- **Контекст**: ADR-008 включал sandbox в harness baseline ссылаясь на canonical Anthropic recommendation («84% reduction in permission prompts»). Эмпирическое использование в этой же сессии показало:
+  1. Sandbox активировался автоматически после ConfigChange hook reload и заблокировал writes в pilot-проекты (`/home/nikita/PROJECTS/FastApi-Base/`, `/home/nikita/PROJECTS/AI_analyst_migration_battletest/`) — это desired security posture в abstract, но конкретно для harness'а где Stage 2 install требует cross-project deploy — это блокировало работу.
+  2. `/tmp` стал read-only до явного добавления в `filesystem.allowWrite`, что сломало 11/11 hook smoke tests (которые пишут payload в `/tmp`). Пришлось добавлять `/tmp`, `/var/tmp`, `~/.cache` — это де-факто откатывает значимую часть isolation'а.
+  3. Bubblewrap создавал артефакты в cwd (character device `.bash_profile` с owner `nobody`, fake overlay для dotfiles), что ломало `git add -A` в harness репо.
+  4. Network allowlist требует maintenance per-project: каждый новый dev domain (Slack, Sentry, internal API, registry mirror) — explicit add. Approval-fatigue переезжает с permission prompts на «забыл добавить в allowedDomains».
+- **Решение**: **полностью удалить** `sandbox` блок из harness baseline `.claude/settings.json`. Boundary policy держится через:
+  - `permissions.{allow,ask,deny}` whitelist (106/23/13 правил, см. devlog #3);
+  - проектные hooks (`secret-scan.sh`, `dangerous-cmd-block.sh`);
+  - стандартный auto-mode classifier Claude Code.
+- **Обоснование**:
+  1. **Foundational principle инверсия**: «sandbox baseline» был добавлен по canonical recommendation Anthropic, но эмпирически добавил friction > чем убрал. Под Opus 4.7 минимум обвязки = больше продуктивности; sandbox оказался обвязкой, которая мешает, не помогает в текущем рабочем контексте.
+  2. **Use case mismatch**: Anthropic sandboxing рекомендация целевая для untrusted code execution, experimental scripts, third-party agent workflows. Harness используется для разработки между доверенными проектами одного владельца — модель угроз другая.
+  3. **Defense-in-depth остаётся**: secret-scan hook (PreToolUse:Edit/Write) блокирует writes секретов; dangerous-cmd-block hook (PreToolUse:Bash) блокирует destructive команды; permissions.deny запрещает чтение `~/.ssh`, `~/.env`, etc. на app-level.
+  4. **Per-project escape hatch**: если конкретный проект требует sandbox (например, тестирование untrusted package), включается через `settings.local.json` (gitignored) — без правки harness baseline.
+- **Что НЕ меняется** в harness'е:
+  - SessionStart hook (`session-context.sh`) — остаётся, не связан с sandbox.
+  - Effort guidance в meta-CLAUDE.md — остаётся.
+  - Permission whitelist (106 allow / 23 ask / 13 deny) — остаётся, primary boundary.
+  - `secret-scan.sh`, `dangerous-cmd-block.sh` — остаются.
+- **Supersedes**: ADR-008 раздел про sandbox (1-й из 3 пунктов). SessionStart hook и effort guidance из ADR-008 остаются in force.
+- **Урок процесса**: canonical recommendation из docs не = «обязательно для нашего harness'а». Каждое заимствование должно проходить foundational principle stress-test В РАБОЧЕМ КОНТЕКСТЕ, не только в обзоре статьи. Эмпирика > рекомендации, когда рекомендация конфликтует с реальным workflow.
+- **Запрет на возврат**: возвращать sandbox в harness baseline (`.claude/settings.json` в репо) запрещено без empirical evidence что workflow friction исчез или модель угроз изменилась. Per-project sandbox в `settings.local.json` — допустимо.
+
+## ADR-008 — SessionStart context + effort guidance (sandbox part SUPERSEDED by ADR-009)
+
+> **Status**: частично superseded 2026-05-09 by ADR-009 — sandbox baseline удалён. SessionStart hook и effort guidance в meta-CLAUDE.md — остаются in force. Сохранён как исторический контекст.
+
+
 
 - **Дата**: 2026-05-09
 - **Контекст**: Прогон по 6 canonical Anthropic статьям ([harness-design](https://www.anthropic.com/engineering/harness-design-long-running-apps), [effective-harnesses](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents), [sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing), [opus-4-7-best-practices](https://claude.com/blog/best-practices-for-using-claude-opus-4-7-with-claude-code), [multi-agent-systems](https://claude.com/blog/building-multi-agent-systems-when-and-how-to-use-them), [common-workflow-patterns](https://claude.com/blog/common-workflow-patterns-for-ai-agents-and-when-to-use-them)) выявил 3 baseline practice, явно рекомендованных Anthropic, у которых в harness'е НЕ было реализации:
