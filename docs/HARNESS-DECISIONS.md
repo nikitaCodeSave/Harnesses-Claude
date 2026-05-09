@@ -62,6 +62,44 @@
   - реальная hook payload schema Claude Code 2.1.136 — stdin JSON: `{session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input.file_path (АБСОЛЮТНЫЙ), tool_response, tool_use_id}`. Env vars `CLAUDE_TOOL_PATH/NAME/AGENT_NAME` НЕ существуют, payload идёт строго через stdin;
   - реальный `claude --print` end-to-end получает stderr от `exit 2` хука и сам сообщает пользователю причину блока («store помечен как read_only») — это и есть рабочий ACL UX, без API.
 
+## ADR-008 — Sandbox enabled + SessionStart context + effort guidance (canonical Anthropic baseline)
+
+- **Дата**: 2026-05-09
+- **Контекст**: Прогон по 6 canonical Anthropic статьям ([harness-design](https://www.anthropic.com/engineering/harness-design-long-running-apps), [effective-harnesses](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents), [sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing), [opus-4-7-best-practices](https://claude.com/blog/best-practices-for-using-claude-opus-4-7-with-claude-code), [multi-agent-systems](https://claude.com/blog/building-multi-agent-systems-when-and-how-to-use-them), [common-workflow-patterns](https://claude.com/blog/common-workflow-patterns-for-ai-agents-and-when-to-use-them)) выявил 3 baseline practice, явно рекомендованных Anthropic, у которых в harness'е НЕ было реализации:
+  1. **Sandbox в settings.json** — Anthropic: «sandboxing safely reduces permission prompts by 84%». У нас был только permission whitelist (106 allow rules), что лечит симптом, а не причину.
+  2. **SessionStart hook с git/devlog context** — Effective harnesses pattern: «session reads git log + progress at start». У нас SessionStart event не использовался.
+  3. **Effort level guidance** — Best Practices Opus 4.7: default `xhigh`, `max` редко (diminishing returns). У нас не зафиксировано в meta-CLAUDE.md.
+
+- **Решение**:
+  1. **Sandbox enabled** в `.claude/settings.json` с canonical baseline:
+     - `enabled: true`, `autoAllowBashIfSandboxed: true`, `failIfUnavailable: false` (graceful fallback на macOS/Linux/WSL2 где доступно).
+     - `filesystem.allowWrite`: `/tmp`, `/var/tmp`, `~/.cache` — для scratch + package managers; рабочая директория уже writable по default.
+     - `filesystem.denyRead`: `~/.aws/credentials`, `~/.aws/config`, `~/.ssh`, `~/.gnupg`, `~/.kube/config`, `~/.docker/config.json`, `~/.netrc`, `~/.pgpass` — sensitive credentials, defense-in-depth поверх `permissions.deny`.
+     - `network.allowedDomains`: github + GHCR, npm, PyPI, Anthropic/Claude domains, OS package mirrors. Расширяется per-project через project-level settings.
+     - Permission whitelist (106 allow rules) сохранён — sandbox это не «вместо», а «вдобавок»: sandbox даёт OS-level boundary, whitelist даёт app-level UX.
+  2. **SessionStart hook**: `.claude/hooks/session-context.sh` инжектит compact `additionalContext` JSON: branch, modified count, last 5 commits, last devlog entry. Не блокирует. Логирует в `.claude/memory/session-starts.jsonl`. Wired в `settings.json` под `SessionStart` event.
+  3. **Effort & sandbox defaults** секция в `.claude/CLAUDE.md` фиксирует canonical guidance: `xhigh` default, `max` редко, sandbox baseline.
+
+- **Обоснование**:
+  1. **Sandbox** — единственная canonical Anthropic recommendation, целиком посвящённая отдельной статье ([claude-code-sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing)). 84% permission reduction — измеренный effect. Foundational principle prefer sandbox over manual whitelist: defense-in-depth + меньше approval-fatigue.
+  2. **SessionStart context** — единственный pattern из Effective harnesses, который реально повышает continuity между сессиями без overhead'а. Альтернатива (manual `git status` каждый раз в начале) — лишний user turn, противоречит «batch questions» из Best Practices.
+  3. **Effort guidance** — нативная фича Opus 4.7, но без guidance модель/пользователь могут уйти в `max` (diminishing returns) или остаться в `low` (плохо для agentic). Зафиксированный default снижает разброс.
+
+- **Эмпирически подтверждено в текущей сессии**:
+  - Sandbox активировался автоматически после ConfigChange hook (settings.json reload), `/tmp` стал read-only до добавления в `allowWrite`. Это валидация что sandbox реально работает на этой машине (Linux + bubblewrap).
+  - SessionStart hook прогнан вручную: возвращает корректный JSON с `additionalContext`, includes branch + 5 commits + last devlog.
+  - Все 11 hook smoke tests продолжают PASS (regression check после sandbox enable + allowWrite fix).
+
+- **Что НЕ добавляется (foundational principle проверен по тем же статьям)**:
+  - Planner/Generator/Evaluator triad — Anthropic [harness-design]: «removed Generator entirely, Opus 4.6 handles natively». Уже запрещено в ADR-002.
+  - `init.sh`/`feature-list.json` — project-specific (как стартовать dev / список фич), принадлежит проектному CLAUDE.md/scripts, не harness baseline.
+  - PreCompact summary hook — Opus 4.7 1M context делает auto-compact редким; marginal value на baseline уровне.
+  - Output styles — Opus 4.7 нативно адаптируется из контекста запроса.
+  - MCP wiring в harness baseline — project-specific (Playwright/GitHub/Sentry — per project).
+  - Multi-agent для sequential work — Anthropic [multi-agent-systems]: «splitting by workflow phase creates telephone-game handoffs»; «multi-agent uses 3-10x more tokens». ADR-001/007 уже фиксируют.
+
+- **Запрет на возврат**: отключать sandbox по умолчанию (`enabled: false`) запрещено без пересмотра этого ADR. Удалять SessionStart hook без замены — запрещено. Расширять `allowWrite` за пределы списка выше — допустимо в project settings.local.json, не в harness baseline.
+
 ## ADR-007 — Built-ins-first revisited: retire 6 skills + 2 agents как дубликаты
 
 - **Дата**: 2026-05-09
