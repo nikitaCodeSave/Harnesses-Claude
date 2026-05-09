@@ -18,34 +18,58 @@ fi
 
 [ -z "$cmd" ] && exit 0
 
+# Short-circuit: if first command word is echo/printf/cat, this is text output —
+# patterns inside quotes are literal data, not executable. Skips false-positives
+# like `echo 'rm -rf /'` or test scaffolding.
+first_word="$(printf '%s' "$cmd" | awk '{
+    for (i=1; i<=NF; i++) {
+        if ($i ~ /=/) continue          # skip env vars like FOO=bar
+        print $i; exit
+    }
+}')"
+case "$first_word" in
+    echo|printf|cat|true|false|:)
+        if command -v jq >/dev/null 2>&1; then
+            jq -cn --arg ts "$ts" --arg cmd "$cmd" --arg fw "$first_word" \
+                '{ts:$ts, decision:"allowed", cmd:$cmd, skip_reason:("text-output: " + $fw)}' >> "$LOG_FILE"
+        fi
+        exit 0
+        ;;
+esac
+
+# Strip quoted strings before pattern matching: content inside single/double quotes
+# is data, not commands. Avoids false-positives in compound commands like
+# `git commit -m "fix rm -rf bug"`.
+cmd_scan="$(printf '%s' "$cmd" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g")"
+
 block_reason=""
 
 # rm -rf on root, home, or anchored paths.
-if printf '%s' "$cmd" | grep -qE '(^|[[:space:]&|;])rm[[:space:]]+(-[a-zA-Z]*r[a-zA-Z]*[a-zA-Z]*f|-rf|-fr)([[:space:]]+--?[a-zA-Z]+)*[[:space:]]+(/|~|\$HOME|\*)([[:space:]]|$)'; then
+if printf '%s' "$cmd_scan" | grep -qE '(^|[[:space:]&|;])rm[[:space:]]+(-[a-zA-Z]*r[a-zA-Z]*[a-zA-Z]*f|-rf|-fr)([[:space:]]+--?[a-zA-Z]+)*[[:space:]]+(/|~|\$HOME|\*)([[:space:]]|$)'; then
     block_reason="rm -rf on root/home/wildcard"
 fi
 # Filesystem destruction
-if printf '%s' "$cmd" | grep -qE '(^|[[:space:]&|;])(mkfs|dd[[:space:]]+if=.*of=/dev/|shred[[:space:]]+/)'; then
+if printf '%s' "$cmd_scan" | grep -qE '(^|[[:space:]&|;])(mkfs|dd[[:space:]]+if=.*of=/dev/|shred[[:space:]]+/)'; then
     block_reason="${block_reason:+$block_reason; }filesystem destruction"
 fi
 # Force-push to protected branches
-if printf '%s' "$cmd" | grep -qE 'git[[:space:]]+push[[:space:]]+(--force|-f)([^a-zA-Z]|$).*\b(main|master|prod|production|release)\b'; then
+if printf '%s' "$cmd_scan" | grep -qE 'git[[:space:]]+push[[:space:]]+(--force|-f)([^a-zA-Z]|$).*\b(main|master|prod|production|release)\b'; then
     block_reason="${block_reason:+$block_reason; }force-push to protected branch"
 fi
 # Force-push to all remotes
-if printf '%s' "$cmd" | grep -qE 'git[[:space:]]+push[[:space:]]+(--force|-f).*--all'; then
+if printf '%s' "$cmd_scan" | grep -qE 'git[[:space:]]+push[[:space:]]+(--force|-f).*--all'; then
     block_reason="${block_reason:+$block_reason; }force-push --all"
 fi
 # Fork bomb
-if printf '%s' "$cmd" | grep -qE ':\(\)[[:space:]]*\{[[:space:]]*:\|:&[[:space:]]*\};:'; then
+if printf '%s' "$cmd_scan" | grep -qE ':\(\)[[:space:]]*\{[[:space:]]*:\|:&[[:space:]]*\};:'; then
     block_reason="${block_reason:+$block_reason; }fork bomb"
 fi
 # chmod 777 on broad paths
-if printf '%s' "$cmd" | grep -qE 'chmod[[:space:]]+(-R[[:space:]]+)?777[[:space:]]+(/|~|\$HOME)'; then
+if printf '%s' "$cmd_scan" | grep -qE 'chmod[[:space:]]+(-R[[:space:]]+)?777[[:space:]]+(/|~|\$HOME)'; then
     block_reason="${block_reason:+$block_reason; }chmod 777 on root/home"
 fi
 # Shutdown / reboot
-if printf '%s' "$cmd" | grep -qE '(^|[[:space:]&|;])(shutdown|halt|poweroff|reboot)([[:space:]]|$)'; then
+if printf '%s' "$cmd_scan" | grep -qE '(^|[[:space:]&|;])(shutdown|halt|poweroff|reboot)([[:space:]]|$)'; then
     block_reason="${block_reason:+$block_reason; }system power command"
 fi
 # git reset --hard on bare HEAD without explicit commit (rare but catastrophic if uncommitted work)
