@@ -1,19 +1,21 @@
 ---
 name: onboard
-description: First-session bootstrap for a project. Detects mode (new vs mature), interviews developer for stack/acceptance criteria, produces a project-level CLAUDE.md in repo root. Use only on first contact with a repo or when an existing CLAUDE.md is empty/trivial.
+description: First-session bootstrap for a project. ALWAYS interviews developer (language, target deliverable, verification command, sensitive paths) BEFORE detecting mode and producing project CLAUDE.md. Skip only if project-level CLAUDE.md already exists and is non-trivial (≥30 lines).
 disable-model-invocation: true
 context: fork
 agent: onboarding-agent
 ---
 
-Запусти onboarding для текущего репозитория. Аргументы пользователя (если есть): $ARGUMENTS.
+Запусти onboarding для текущего репозитория. Аргументы пользователя
+(если есть): $ARGUMENTS.
 
-Phase 1 — detect mode:
-- Empty / minimal scaffold → NEW project
-- Has code, tests, docs → MATURE project
+Per ADR-006 в `docs/HARNESS-DECISIONS.md` — интервью обязательно в обоих
+режимах (NEW и MATURE), даже в auto-mode. Никаких write-операций до
+получения ответов на минимум 3 вопроса (язык / target deliverable /
+verification command).
 
-Phase 2 — выполни workflow согласно агенту onboarding-agent:
-- NEW: интервью через AskUserQuestion (стек, target deployment, acceptance criteria первого deliverable, verification mechanism), создать `./CLAUDE.md` в корне репо (короткий, императивный).
-- MATURE: запустить built-in `Explore` для архитектурной карты, дополнить существующий CLAUDE.md (не переписывать).
+Phase 1 — interview через AskUserQuestion (один вызов, multi-question).
+Phase 2 — detect mode (NEW vs MATURE).
+Phase 3 — создать или дополнить проектный CLAUDE.md в корне репо.
 
 Не трогай `.claude/CLAUDE.md` — это мета-уровень, отдельный артефакт.

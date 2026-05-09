@@ -62,6 +62,20 @@
   - реальная hook payload schema Claude Code 2.1.136 — stdin JSON: `{session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input.file_path (АБСОЛЮТНЫЙ), tool_response, tool_use_id}`. Env vars `CLAUDE_TOOL_PATH/NAME/AGENT_NAME` НЕ существуют, payload идёт строго через stdin;
   - реальный `claude --print` end-to-end получает stderr от `exit 2` хука и сам сообщает пользователю причину блока («store помечен как read_only») — это и есть рабочий ACL UX, без API.
 
+## ADR-006 — Onboarding всегда интервьюирует
+
+- **Дата**: 2026-05-09
+- **Контекст**: Stage 2 battle-test на pilot'е FastApi-Base показал, что `onboarding-agent` в auto-mode **пропустил интервью** на mature-проекте, сославшись на мета-CLAUDE.md guidance «trust the model, prefer action over questions». Результат: пилотный CLAUDE.md создан без подтверждения language preference (англоязычный вместо желаемого русского), без подтверждённого target deliverable, без согласования verification gate с разработчиком. Качество invariants было высоким (хороший fingerprint + encoded bans), но контракт-смысл потерян: документ описывал repo-state, а не договорённость с человеком.
+- **Решение**: `onboarding-agent` **обязан** проводить интервью через `AskUserQuestion` в обоих режимах (NEW и MATURE), независимо от auto-mode и любой общей guidance «prefer action over questions». Минимум — 3 вопроса в одном вызове: язык общения, target deliverable, verification command. Опциональный 4-й — sensitive paths/commands. Никакие write-операции в проектный CLAUDE.md не выполняются до получения ответов.
+- **Обоснование**:
+  1. Onboarding — единственное место в harness'е, где questions ARE the action. CLAUDE.md создаётся как контракт с разработчиком; без его участия это интерпретация, а не контракт.
+  2. Pilot не наследует user-level preferences (например, language) автоматически, если они зафиксированы в session-scope origin-сессии. Спросить — гарантирует корректность.
+  3. Auto-mode «prefer action» — guidance общего случая. Onboarding — единственный explicit exception, где это правило не действует.
+  4. Минимальное интервью (3 вопроса) занимает <1 минуты пользователя; пропущенный язык / неподтверждённый verification gate стоят дороже на каждой последующей сессии.
+- **Альтернатива (отвергнута)**: Inferring preferences from repo-state (что фактически и сделал pilot). Отвергнута: agent не может знать, что «русский» — желаемый язык, если в коде/комментариях смесь EN/RU; и не может знать, какой verification gate считается binding'ом, без подтверждения.
+- **Запрет на возврат**: удалять `AskUserQuestion` из `onboarding-agent` или делать interview phase «опциональной по auto-mode» — запрещено без пересмотра этого ADR. Фраза «no interview was conducted» в выводе onboarding-agent'а — bug, не feature.
+- **Артефакты**: `.claude/agents/onboarding-agent.md` (mandatory Phase 1), `.claude/skills/onboard/SKILL.md` (отражает требование в frontmatter description).
+
 ## ADR-004 — Devlog format: index.json (auto) + entries/*.md (truth)
 
 - **Контекст**: нужен журнал решений / прогресса между сессиями. Два writable источника = рассинхрон.
