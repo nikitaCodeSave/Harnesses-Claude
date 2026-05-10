@@ -52,6 +52,6 @@ Outside threshold → investigate root cause. Inside → harness change OK.
 
 ## Runner
 
-`run-tier1.sh` — validates task definitions, lists discovered tasks, checks fixture readiness. **Actual Claude invocation остаётся manual** (требует interactive Claude session или `claude --bare --print` CI mode).
+`run-tier1.sh` — validates task definitions, lists discovered tasks, checks fixture readiness. **Actual Claude invocation остаётся manual** (требует interactive Claude session или `claude --print` headless mode на OAuth-подписке; `--bare` требует API-key и out of scope).
 
-Roadmap: full automation через `claude --bare --print --add-dir <fixture>` orchestrator с output capture + metrics extraction.
+Roadmap: full automation через `claude --print --add-dir <fixture>` orchestrator с output capture + metrics extraction.

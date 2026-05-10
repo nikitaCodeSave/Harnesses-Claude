@@ -36,7 +36,7 @@ Full methodology — `.claude/docs/benchmark.md`.
 ## Current automation state
 
 - Tier 0: **fully automated** (`static-checks.sh`, 14 checks, 44ms runtime)
-- Tier 1: **scaffolding ready** — task definitions valid, fixture present; actual Claude invocation остаётся manual (`claude --bare --print --add-dir <fixture>` для CI)
+- Tier 1: **operational** (devlog #24) — `headless-runner.sh` runs real `claude --print` on fixture clone, captures JSON metrics, optional pytest judge. Supports `--inject-from <dir>` for cross-harness comparison.
 - Tier 2: **scaffolding ready** — eval sets defined для skills, runner validates structure; actual trigger evaluation manual
 
 ## Reports
@@ -45,6 +45,6 @@ Full methodology — `.claude/docs/benchmark.md`.
 
 ## Roadmap
 
-- Tier 1 full automation: `claude --bare --print` orchestrator с output parsing для tokens/turns/files metrics
+- Tier 1 polyglot tasks (T04-T07): refactor, docs, ops, research — added as need arises
 - Tier 2 full automation: per-query skill discovery probe + accuracy aggregation
-- Cross-harness comparison fixtures: clone select community harness'ов (everything-claude-code, claude-code-harness, Superpowers) для quantitative comparison на same task suite
+- Cross-harness comparison expansion (T03+ multi-fixture): первый baseline в `reports/CROSS-HARNESS-COMPARISON.md` (T01/T02 × 4 harness variants, 2026-05-11)

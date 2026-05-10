@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tier 1 runner — validates task suite structure, lists tasks для manual execution.
-# Future: automate via `claude --bare --print --add-dir <fixture>` cycle.
+# Future: automate via `claude --print --add-dir <fixture>` cycle (OAuth-compatible).
 set -uo pipefail
 
 cd "$(dirname "$0")/../../.."

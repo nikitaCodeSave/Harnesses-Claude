@@ -184,7 +184,7 @@ Report storage: либо section в ADR, либо separate `.claude/benchmark/re
 ## Roadmap
 
 - **Done**: Tier 0 automation, Tier 1/2 scaffolding, self-contained fixture, Stop-hook validation.
-- **Next**: Tier 1 full automation через `claude --bare --print --add-dir <fixture>` orchestrator с output parsing для tokens/turns/files metrics.
+- **Next**: Tier 1 full automation через `claude --print --add-dir <fixture>` orchestrator (OAuth-compatible) с output parsing для tokens/turns/files metrics. `--bare` остаётся out of scope (strictly требует `ANTHROPIC_API_KEY` per `claude --help`).
 - **Future**: cross-harness comparison fixtures (clone everything-claude-code / claude-code-harness / Superpowers для quantitative benchmark на same task suite).
 
 ---

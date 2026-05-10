@@ -30,7 +30,7 @@ Hook smoke tests covered в Tier 0 (`static-checks.sh`). Tier 2 — non-applicab
 2. Counts entries per skill
 3. Reports coverage
 
-**Actual trigger evaluation manual** — requires Claude session с skill discovery enabled. Roadmap: automate через `claude --bare --print "<query>" --json-schema '{...}'` parsing.
+**Actual trigger evaluation manual** — requires Claude session с skill discovery enabled. Roadmap: automate через `claude --print "<query>" --json-schema '{...}'` parsing (OAuth-compatible; `--bare` out of scope).
 
 ## Components covered
 

@@ -34,7 +34,9 @@ headers (`--betas`, `managed-agents-*`, `dreaming-*`), `--max-budget-usd`,
 out of scope. Если practice требует API-key — её нет в harness'е, точка.
 Концепции из API-only фич переносятся только при условии полной
 реализации на CLI-примитивах (hooks, skills, subagents, slash commands,
-`claude --bare --print --add-dir --agents` для CI-mode).
+`claude --print --add-dir --agents` для headless CI на OAuth-подписке).
+`--bare` strictly требует `ANTHROPIC_API_KEY` (per `claude --help`) —
+out of scope.
 
 ## Built-ins first (КРИТИЧНО)
 

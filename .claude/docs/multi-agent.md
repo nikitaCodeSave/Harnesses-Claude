@@ -23,7 +23,7 @@
 | Main agent  | session main thread                    | session                | reasoning, integration, delivery |
 | Skills      | `Skill` tool, `.claude/skills/`        | per-call в same window | reusable workflows               |
 | Subagents   | `Agent` tool, `.claude/agents/`        | one-way return         | isolated / parallel work         |
-| Teams       | `claude --bare --print --add-dir`      | separate processes     | bidirectional cross-agent (CI)   |
+| Teams       | `claude --print --add-dir`             | separate processes     | bidirectional cross-agent (CI)   |
 
 **Главный failure mode** (Anthropic 2026): «using the right tool in the wrong layer».
 - Behavioural constraint → **hook** (deterministic), не system prompt (interpretive).
