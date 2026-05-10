@@ -94,7 +94,7 @@ status: complete
 | `security` | Уязвимость, улучшение безопасности |
 | `test` | Добавление/изменение тестов |
 | `cleanup` | Удаление мёртвого кода |
-| `adr` | Архитектурное решение (см. также `docs/HARNESS-DECISIONS.md`) |
+| `adr` | Архитектурное решение (контекст / motivation / consequences / alternatives) |
 
 Область — свободная (например: `api`, `db`, `frontend`, `cli`, `prompts`, `harness`).
 
@@ -127,5 +127,5 @@ Index: <N> записей
 
 ## Связь с другими артефактами
 
-- **`docs/HARNESS-DECISIONS.md`** (ADR log harness'а) — крупные архитектурные решения. Devlog-запись с tag `adr` может ссылаться: `См. ADR-XXX в docs/HARNESS-DECISIONS.md`.
+- **`.claude/docs/principles.md`** — harness principles (current state, evidence-based). Devlog-запись с tag `adr` ссылается на принципы по name (e.g., «Subagent spawn policy», «Skills frontmatter»).
 - **`.claude/devlog/README.md`** — пользовательская инструкция (для команды), читать при первом знакомстве с devlog проекта.

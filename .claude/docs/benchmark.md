@@ -27,7 +27,7 @@ Cheap, fast (<10 sec), automated. **Blocker** if fail.
 |---|---|---|---|
 | 1 | `CLAUDE.md` size budget | `wc -l .claude/CLAUDE.md` ≤ 200 | meta-CLAUDE.md anti-pattern «не лить мегарайлзы» + ADR-012 |
 | 2 | Each `SKILL.md` size budget | per skill ≤ 500 строк | skill-creator anatomy guideline |
-| 3 | ADR-018+ size budget | grep последних ADR в `HARNESS-DECISIONS.md` ≤ 30 строк | ADR-018 |
+| 3 | Active decisions size budget | `principles.md` ≤ 200 строк + каждая `### D-NNN` секция ≤ 30 | D-021 + tight format |
 | 4 | Devlog index integrity | `python3 .claude/devlog/rebuild-index.py` exit 0 | ADR-004 |
 | 5 | Skill frontmatter present | every `.claude/skills/*/SKILL.md` has `name` + `description` YAML | Claude Code skill spec |
 | 6 | Rules frontmatter (если есть) | `paths:` valid если frontmatter присутствует | docs-discipline rule 4 |
@@ -35,11 +35,11 @@ Cheap, fast (<10 sec), automated. **Blocker** if fail.
 | 8 | Agent inventory | `claude agents` lists expected (`deliverable-planner`, `meta-creator`, built-ins) | ADR-007 |
 | 9 | Hook smoke tests | каждый hook на stdin типичного input → exit 0 | ADR-016 (session-context.sh bugfix lesson) |
 | 10 | No retired components | grep `.claude/` against retired list (per ADR-007/010/011/016) | append-only history + retire ADR'ы |
-| 11 | Compact index synchronized | ADR list в `HARNESS-DECISIONS.md` Compact index = `## ADR-` headers | ADR-018 |
+| 11 | Active+archive doc paths | `principles.md` + `.claude/docs/archive/decisions-2026Q2.md` оба существуют | D-021 |
 
 ### Implementation
 
-`.claude/benchmark/static-checks.sh` (TBD — implementation на следующем sprint'е). Скрипт выводит таблицу check / pass-fail / actual value, exit 1 при любом fail. Текущая версия — manual run по checklist.
+`.claude/benchmark/static-checks.sh` — implemented; запускается из harness root, выводит таблицу check / pass-fail / actual value, exit 1 при любом fail.
 
 ### Когда ослабить
 
@@ -152,18 +152,46 @@ Report storage: либо section в ADR, либо separate `.claude/benchmark/re
 
 ---
 
+## Current implementation state
+
+- **Tier 0**: fully automated (`.claude/benchmark/static-checks.sh`, 14 checks, 44ms runtime).
+- **Tier 1**: scaffolding ready (`.claude/benchmark/tier1/`) — task definitions validated, fixture present (`.claude/benchmark/fixtures/sample-py-app/`). Actual Claude invocation остаётся manual.
+- **Tier 2**: scaffolding ready (`.claude/benchmark/tier2/`) — eval sets для skill trigger accuracy. Manual evaluation.
+- **Stop-hook validation**: `.claude/hooks/stop-validation.sh` — independent test re-run на session end (two-gate validation pattern, community evidence false-completion 35%→4%).
+
+## Infrastructure layout
+
+```
+.claude/benchmark/
+├── README.md              — quick start + overview
+├── static-checks.sh       — Tier 0 (automated)
+├── run-all.sh             — orchestrate all tiers
+├── tier1/
+│   ├── README.md
+│   ├── run-tier1.sh
+│   └── tasks/             — T01-T02 sample tasks (yaml), extend по необходимости
+├── tier2/
+│   ├── README.md
+│   ├── run-tier2.sh
+│   └── eval-sets/         — <skill>-should-trigger.txt + <skill>-should-not-trigger.txt
+├── fixtures/
+│   ├── README.md
+│   └── sample-py-app/     — self-contained Python fixture с known bugs T01/T02
+└── reports/
+    └── README.md          — report template
+```
+
 ## Roadmap
 
-- **v1 (now)**: manual Tier 0 procedures, ad-hoc Tier 1 при критичных ADR. Без automation.
-- **v2** (trigger: ≥3 harness changes accumulated): `static-checks.sh` script. Tier 0 automated.
-
-Дальнейшая automation (scripted Tier 1, pre-commit hooks, CI mode) — рассматривать только при empirical evidence что v1+v2 не покрывают reality. Не date-based.
+- **Done**: Tier 0 automation, Tier 1/2 scaffolding, self-contained fixture, Stop-hook validation.
+- **Next**: Tier 1 full automation через `claude --bare --print --add-dir <fixture>` orchestrator с output parsing для tokens/turns/files metrics.
+- **Future**: cross-harness comparison fixtures (clone everything-claude-code / claude-code-harness / Superpowers для quantitative benchmark на same task suite).
 
 ---
 
 ## Связь с harness
 
-- `docs/HARNESS-DECISIONS.md` ADR-019 — обоснование methodology.
 - `.claude/skills/skill-creator:skill-creator` (marketplace plugin) — Tier 2 implementation для skills.
 - `.claude/devlog/rebuild-index.py` — Tier 0 check #4.
-- `.claude/benchmark/static-checks.sh` (TBD) — Tier 0 implementation.
+- `.claude/benchmark/static-checks.sh` — Tier 0 implementation.
+- `.claude/hooks/stop-validation.sh` — Stop-hook two-gate validation.

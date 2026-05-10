@@ -309,4 +309,4 @@ status: active
 
 - `.claude/rules/docs-discipline.md` — always-loaded ongoing rules (6 invariants).
 - `.claude/skills/devlog/` — после bootstrap создать devlog entry с tag `docs`.
-- `docs/HARNESS-DECISIONS.md` ADR-017 — обоснование добавления skill + rule в harness.
+- `.claude/docs/principles.md` ADR-017 — обоснование добавления skill + rule в harness.

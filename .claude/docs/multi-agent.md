@@ -1,8 +1,8 @@
 # Multi-agent baseline (Opus 4.7 + наш harness)
 
-> Baseline для построения multi-agent workflows **в проектах**, использующих этот harness. **Не** про baseline самого harness'а — это `HARNESS-DECISIONS.md`. Evidence-based: цифры и паттерны взяты из canonical Anthropic статей + наших ADR'ов. Дата компиляции: **2026-05-10**.
+> Baseline для построения multi-agent workflows **в проектах**, использующих этот harness. **Не** про baseline самого harness'а — это `principles.md` (active) + `.claude/docs/archive/decisions-2026Q2.md` (frozen). Evidence-based: цифры и паттерны взяты из canonical Anthropic статей + наших ADR'ов. Дата компиляции: **2026-05-10**.
 >
-> Источники: PRACTICES-FROM-PROJECTS.md §12.1 (Anthropic official) и §12.7-12.8 (community 2026 essays). Re-evaluate при major-релизе модели или N≥3 промахах в одном classes-of-tasks (см. meta-CLAUDE.md «Re-evaluation triggers»).
+> Источники: archive/practices-from-projects.md §12.1 (Anthropic official) и §12.7-12.8 (community 2026 essays). Re-evaluate при major-релизе модели или N≥3 промахах в одном classes-of-tasks (см. meta-CLAUDE.md «Re-evaluation triggers»).
 
 ## TL;DR
 
@@ -219,7 +219,7 @@ Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents =
 - **N≥3 эмпирических промаха** одного типа (наблюдаемый telephone-game / token-overhead inefficiency / failure mode не в §9).
 - **Breaking change в built-in каталоге** Claude Code (новый built-in agent заменяет custom-паттерн baseline'а).
 
-См. также `docs/HARNESS-DECISIONS.md` ADR-002 (запрет TDD-тройки), ADR-007 (built-ins-first revisited), ADR-011 (retire code-reviewer).
+См. также `.claude/docs/archive/decisions-2026Q2.md` ADR-002 (запрет TDD-тройки), ADR-007 (built-ins-first revisited), ADR-011 (retire code-reviewer); active rules — `.claude/docs/principles.md`.
 
 ---
 
@@ -235,4 +235,4 @@ Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents =
 - [blakecrosley.com — Agent Architecture](https://blakecrosley.com/guides/agent-architecture)
 - [mcp.directory — Best Practices 2026](https://mcp.directory/blog/claude-code-best-practices)
 - [developersdigest 2026 playbook](https://www.developersdigest.tech/blog/claude-code-agent-teams-subagents-2026)
-- Полный список — `PRACTICES-FROM-PROJECTS.md` §12.1, §12.7-12.8
+- Полный список — `archive/practices-from-projects.md` §12.1, §12.7-12.8

@@ -31,8 +31,9 @@ if command -v jq >/dev/null 2>&1; then
 fi
 
 # Skip allowed paths: .env.example, tests with placeholder secrets, docs about secrets.
+# *archive/* covers frozen historical docs allowed to mention legacy credential patterns.
 case "$file_path" in
-    *.env.example|*test*|*spec*|*fixture*|*docs/*|*.md|*HARNESS-DECISIONS*|*RESEARCH-*|*PRACTICES-*)
+    *.env.example|*test*|*spec*|*fixture*|*docs/*|*.md|*archive/*)
         printf '{"ts":"%s","decision":"allowed","reason":"path allowlisted","file":"%s"}\n' \
             "$ts" "$file_path" >> "$LOG_FILE"
         exit 0

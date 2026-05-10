@@ -115,4 +115,4 @@ Skeleton'ы (минимальная структура секций) — в `ref
 - `.claude/rules/docs-discipline.md` — always-loaded invariant: doc-with-code, append-only history, owner-of-record, glossary first-use, cold-start test. Этот skill = bootstrap (одноразовая операция); rule = ongoing discipline.
 - `references/CONTRACT.md` — full per-doc charter с skeletons. Skill читает on-demand при Phase 3 generate (не auto-loaded в системный prompt).
 - Skill `devlog` — после bootstrap создай entry с tag `docs`.
-- `docs/HARNESS-DECISIONS.md` ADR-017 — обоснование добавления этого skill в harness.
+- `.claude/docs/archive/decisions-2026Q2.md` ADR-017 — обоснование добавления этого skill в harness (frozen).

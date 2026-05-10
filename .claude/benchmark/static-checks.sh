@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tier 0 static checks for harness — per docs/HARNESS-BENCHMARK.md
+# Tier 0 static checks for harness — per .claude/docs/benchmark.md
 # Runs from harness root. Exits 0 if all pass, 1 on any failure.
 # Manual checks (claude --print, claude agents) — not automated; run separately.
 
@@ -48,17 +48,26 @@ for skill in .claude/skills/*/SKILL.md; do
     fi
 done
 
-# Check 3: ADR-018+ size budget ≤ 30 строк (ADR-018 tight format)
-# Extracts each ADR-018+ section from header to next ## or --- separator.
-for adr_num in 018 019 020 021 022 023 024 025; do
-    if grep -q "^## ADR-$adr_num " docs/HARNESS-DECISIONS.md; then
-        lines=$(awk "/^## ADR-$adr_num /{flag=1; next} flag && /^## ADR-/{exit} flag && /^---$/{exit} flag" docs/HARNESS-DECISIONS.md | wc -l)
-        # +1 for the header line itself
+# Check 3: principles.md size budget ≤ 200 строк (active layer compact)
+# Per D-021 two-tier split: archive frozen (no size check), active layer must stay short.
+if [[ -f .claude/docs/principles.md ]]; then
+    lines=$(wc -l < .claude/docs/principles.md)
+    if [[ $lines -le 200 ]]; then
+        check "principles.md ≤ 200 строк" "$lines" pass
+    else
+        check "principles.md ≤ 200 строк" "$lines" fail
+    fi
+fi
+# D-021+ decision sections в principles.md tight (≤ 30 строк per decision).
+# Derive D-### IDs dynamically — добавляешь decision, check picks up автоматически.
+for d_num in $(grep -oE '^### D-[0-9]+' .claude/docs/principles.md 2>/dev/null | grep -oE '[0-9]+'); do
+    if grep -q "^### D-$d_num " .claude/docs/principles.md 2>/dev/null; then
+        lines=$(awk "/^### D-$d_num /{flag=1; next} flag && /^### D-/{exit} flag && /^---$/{exit} flag && /^## /{exit} flag" .claude/docs/principles.md | wc -l)
         lines=$((lines + 1))
         if [[ $lines -le 30 ]]; then
-            check "ADR-$adr_num ≤ 30 строк (tight format)" "$lines" pass
+            check "D-$d_num ≤ 30 строк (tight)" "$lines" pass
         else
-            check "ADR-$adr_num ≤ 30 строк (tight format)" "$lines" fail
+            check "D-$d_num ≤ 30 строк (tight)" "$lines" fail
         fi
     fi
 done
@@ -100,13 +109,16 @@ if [[ $RETIRED_OK -eq 1 ]]; then
     check "Retired components guard" "all clean (8 skills + 3 agents checked)" pass
 fi
 
-# Check 7: Compact index synchronized with ADR headers (ADR-018)
-ADR_HEADERS=$(grep -c "^## ADR-" docs/HARNESS-DECISIONS.md)
-INDEX_ROWS=$(grep -cE '^\| 0?[0-9]+ ' docs/HARNESS-DECISIONS.md)
-if [[ $ADR_HEADERS -eq $INDEX_ROWS ]]; then
-    check "Compact index sync с ADR headers" "$ADR_HEADERS = $INDEX_ROWS" pass
-else
-    check "Compact index sync с ADR headers" "$ADR_HEADERS ADRs vs $INDEX_ROWS index rows" fail
+# Check 7: Active docs paths exist (D-021 two-tier split)
+PATHS_OK=1
+for required in .claude/docs/principles.md .claude/docs/archive/decisions-2026Q2.md; do
+    if [[ ! -f "$required" ]]; then
+        check "Required active/archive doc" "$required missing!" fail
+        PATHS_OK=0
+    fi
+done
+if [[ $PATHS_OK -eq 1 ]]; then
+    check "Active+archive doc paths" "PRINCIPLES + archived DECISIONS present" pass
 fi
 
 # Check 8: Hooks exist + executable (basic smoke; full input-test = manual)
@@ -142,7 +154,7 @@ echo
 echo "Manual checks (run separately):"
 echo "  - claude --print : skill discovery runtime"
 echo "  - claude agents  : agent inventory check"
-echo "  - hook stdin smoke tests (см. HARNESS-BENCHMARK.md Tier 0 #9)"
+echo "  - hook stdin smoke tests (см. .claude/docs/benchmark.md Tier 0 #9)"
 echo
 
 if [[ $FAIL -eq 0 ]]; then
