@@ -639,7 +639,7 @@ paths:
 ### 10.11 Открытые вопросы (вынести на согласование)
 
 1. **Формат devlog**: JSON-монолит (HH_parser, AI_analyst_migration — оба «рабочих» проекта) vs `index.json + entries/*.md` (dialog_analyzer — один проект). Возможно стоит дать оба шаблона на выбор, а не выбирать заочно.
-2. **Path-scoped rules**: подтверждена ли поддержка `paths:` frontmatter в актуальном Claude Code или это **самопридуманный паттерн**? Нужно сверить с research-документом `Harnesses_gude.md`.
+2. **Path-scoped rules**: ~~подтверждена ли поддержка `paths:` frontmatter в актуальном Claude Code или это **самопридуманный паттерн**?~~ **Закрыто 2026-05-10**: подтверждена нативно в Claude Code 2.0.64+. Источники зафиксированы в §12 (claudefa.st, paddo.dev, codewithmukesh). Известен баг GitHub Issue #16853 — paths-scoped rules в подкаталогах могут не загружаться. В нашем harness'е `.claude/rules/testing.md` без `paths:` (загружается всегда) — bug не релевантен. Re-evaluation как кандидат на расширение — см. §13.
 3. **TDD-агенты в дефолтном шаблоне**: 3 субагента + skill `/implement` — это +400 строк markdown. Может быть отдельным «расширением», подключаемым через `/onboard`-вопрос «нужна ли TDD-обвязка?».
 4. **Crypto-style логи vs hooks**: пересекается ли с уже существующим в Harness `.claude/hooks/denied-log.sh` (тот пишет в `.claude/memory/denied.jsonl`)? Возможно стоит унифицировать формат.
 
@@ -889,5 +889,97 @@ motivation: "Зачем (1 предложение)"
 > **Под Opus 4.7 минимум обвязки даёт максимум продуктивности.** Каждый дополнительный субагент / skill / hook должен оправдывать себя реальным выигрышем, а не «потому что красиво». Симптом «трудности в разработке, проблемы в росте проекта» — почти всегда признак того, что обвязка переросла полезность.
 
 Это перекликается с уже зафиксированным в `.claude/CLAUDE.md` принципом: «Уже покрыто defaults Claude Code? → DO NOTHING». Раздел 11 — конкретное приложение этого принципа к трём вопросам.
+
+---
+
+## 12. External references (brainstorm 2026-05-10)
+
+Собрано при разборе двух примеров (`AI_analyst_migration/.claude/skills/sync-docs/`, `dialog_analyzer/.claude/rules/`) на предмет переносимости в harness. Используется как evidence-база для:
+- закрытия открытых вопросов §10.11 (paths-scoped frontmatter — §12.4),
+- стресс-теста новых ADR-кандидатов на «built-ins-first» (§12.1, §12.3),
+- N-counter в §13.
+
+Дата сбора: 2026-05-10. **Не источник истины** — фиксирует состояние экосистемы на дату; сверять с актуальным состоянием перед действиями.
+
+### 12.1 Anthropic official
+
+- [Claude Code Skills docs](https://code.claude.com/docs/en/skills) — канонический skill API, включая frontmatter и `disable-model-invocation`.
+- [Claude Code GitHub Actions docs](https://code.claude.com/docs/en/github-actions) — CI-mode.
+- [Best practices for Opus 4.7 with Claude Code](https://claude.com/blog/best-practices-for-using-claude-opus-4-7-with-claude-code) — уже цитируется в meta-CLAUDE.md.
+- [github.com/anthropics/claude-code](https://github.com/anthropics/claude-code) — issue tracker; релевантен [#16853](https://github.com/anthropics/claude-code/issues/16853) о баге paths-scoped rules в подкаталогах.
+- [github.com/anthropics/skills](https://github.com/anthropics/skills) — официальный marketplace skills.
+
+### 12.2 Curated lists
+
+- [hesreallyhim/awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) — флагманский curated list.
+- [rohitg00/awesome-claude-code-toolkit](https://github.com/rohitg00/awesome-claude-code-toolkit) — 135 agents, 35 skills, 15 rules, 20 hooks (масштабная подборка).
+- [jqueryscript/awesome-claude-code](https://github.com/jqueryscript/awesome-claude-code) — отдельная подборка с популярными skill-репами.
+- [awesomeclaude.ai/awesome-claude-code](https://awesomeclaude.ai/awesome-claude-code) — визуальный каталог.
+
+### 12.3 Reference implementations / showcases
+
+- [shanraisshan/claude-code-best-practice](https://github.com/shanraisshan/claude-code-best-practice) — reference impl с патернами skills/subagents/hooks/commands. Notable: **«rules без frontmatter грузятся в каждую сессию как CLAUDE.md; с `paths:` — лениво по матчам»**.
+- [ChrisWiles/claude-code-showcase](https://github.com/ChrisWiles/claude-code-showcase) — полный setup с GitHub Actions.
+- [FlorianBruniaux/claude-code-ultimate-guide](https://github.com/FlorianBruniaux/claude-code-ultimate-guide) — production-ready templates.
+- [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) — agent harness performance optimization (skills/instincts/memory/security).
+
+### 12.4 Глубокие разборы paths-scoped rules
+
+Источники, которые **закрывают вопрос §10.11.2** о статусе `paths:` frontmatter в Claude Code:
+
+- [How Claude Code rules actually work — Jose Parreño García](https://joseparreogarcia.substack.com/p/how-claude-code-rules-actually-work)
+- [Claude Code Rules Directory: Modular Instructions That Scale — claudefa.st](https://claudefa.st/blog/guide/mechanics/rules-directory)
+- [Claude Code Gets Path-Specific Rules — paddo.dev](https://paddo.dev/blog/claude-rules-path-specific-native/) — статья про native path-specific rules.
+- [Anatomy of the .claude Folder — codewithmukesh](https://codewithmukesh.com/blog/anatomy-of-the-claude-folder/)
+- [Anatomy of the .claude/ Folder — Avi Chawla / Daily Dose of DS](https://blog.dailydoseofds.com/p/anatomy-of-the-claude-folder)
+- [The CLAUDE.md Configuration Hierarchy — agentfactory.panaversity.org](https://agentfactory.panaversity.org/docs/General-Agents-Foundations/claude-code-teams-cicd/claude-md-configuration-hierarchy)
+
+**Вывод**: paths-scoped — **поддерживается нативно** в Claude Code 2.0.64+. `/memory` диагностирует загруженные файлы. Известен баг #16853 (subdirectory rules могут не подгружаться).
+
+### 12.5 Конкурентный контекст (Cursor / Copilot / AGENTS.md)
+
+- [Cursor Rules vs CLAUDE.md vs Copilot Instructions — agentrulegen.com](https://www.agentrulegen.com/guides/cursorrules-vs-claude-md) — кросс-инструментальный AGENTS.md, symlink-стратегии. Ключевое: «Claude игнорирует frontmatter Cursor, Cursor использует — пишите в Cursor-формате, оба читают».
+
+### 12.6 Tooling для harness-гигиены
+
+- **agnix** by agent-sh — линтер для CLAUDE.md / AGENTS.md / SKILL.md / hooks / MCP.
+- **claude-rules-doctor** by nulone — детектит мёртвые `paths:` globs (когда переименовали папку и rule не матчит ничего). Релевантно, если введём paths-scoping.
+
+### 12.7 Концептуальные эссе
+
+- [Claude Code: Hooks, Subagents & Skills Complete Guide 2026 — ofox.ai](https://ofox.ai/blog/claude-code-hooks-subagents-skills-complete-guide-2026/) — четырёхуровневая модель Harness ← Main Agent ← Skills/Subagents/Teams.
+- [Claude Code: Skills, Subagents, Hooks, Plugins, and Harnesses — boringbot.substack](https://boringbot.substack.com/p/claude-code-skills-subagents-hooks)
+- [Agent Architecture: Building AI-Powered Development Harnesses — blakecrosley.com](https://blakecrosley.com/guides/agent-architecture)
+- [Claude Code Best Practices: From Vibe Coding to Agentic Engineering 2026 — mcp.directory](https://mcp.directory/blog/claude-code-best-practices)
+- [My Claude Code Setup — psantanna.com](https://psantanna.com/claude-code-my-workflow/workflow-guide.html) — личный workflow.
+
+### 12.8 Multi-agent / orchestration (для контраста с harness anti-pattern)
+
+- [Claude Code Agent Teams, Subagents, and MCP: 2026 Playbook — developersdigest.tech](https://www.developersdigest.tech/blog/claude-code-agent-teams-subagents-2026)
+- [Claude Code Skills, Subagents, Hooks and Plugins — Shashank Mishra / Medium](https://medium.com/@mishra.shashank35/claude-code-skills-subagents-hooks-and-plugins-a-practical-overview-572de7cedb20)
+- Anthropic engineering blog — [multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system) (90.2% over single-Opus, 4×/15× tokens, 80% variance объясняется token usage).
+
+**→ Compiled baseline** (2026-05-10): `docs/MULTI-AGENT-BASELINE.md` — дисциплина multi-agent в проектах, использующих этот harness. 4-layer mental model, spawn triggers, subagent contract, anti-patterns, Anthropic empirical numbers. Применяется когда в проекте возникает вопрос «нужен ли тут multi-agent?».
+
+---
+
+## 13. Re-evaluation candidates — N-counter для symmetric rule
+
+Per meta-CLAUDE.md «Симметричное правило»: компонент **добавляется** только при **N≥3** эмпирических промахах в одном classes-of-tasks, не покрытых built-in/CLAUDE.md. Этот раздел — счётчик, чтобы не пропустить момент, когда наблюдение из чужого проекта пора превратить в ADR.
+
+Дата ведения: с 2026-05-10. Обновляется при появлении новых evidence-точек.
+
+| Кандидат                                                                            | Источники evidence (наблюдения, не промахи)                                             | N (промахи в нашем harness'е) | Решение сейчас                                                                                                              |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **paths-scoped rules** (`paths:` frontmatter в `.claude/rules/*.md`)                | dialog_analyzer (§10 ссылки + 4 path-scoped rule из 6); AI_analyst_migration (§10.1)    | 0                             | Не добавляем. `testing.md` без paths загружается, потерь контекст-бюджета не зафиксировано. Re-evaluate при росте rules ≥3. |
+| **`docs-sync` agent / `sync-docs` skill**                                           | AI_analyst_migration (§10.4)                                                            | 0                             | Не добавляем. Под Opus 4.7 синхронизация docs делается по запросу из main thread без агент-spawn. Re-evaluate при N≥3.      |
+| **`disable-model-invocation: true` skill для heavy fork-context** (паттерн sync-docs frontmatter) | AI_analyst_migration sync-docs SKILL.md (`context: fork`)                               | 0                             | Не добавляем. У нас `devlog` skill уже один — fork-context там не нужен. Кандидат на будущий шаблон, не на baseline.        |
+| **Anti-pattern фиксация** (execution.md-style правил «как реализовывать»)           | dialog_analyzer execution.md (4.7KB про gather→act→verify)                              | 0                             | Не добавляем явный anti-pattern в meta-CLAUDE.md — anti-patterns там уже есть. Используем при code-review проектных CLAUDE. |
+
+**Правила использования счётчика**:
+- Промах = эмпирически наблюдаемая ситуация в **нашем** harness'е, где Opus 4.7 не справляется без компонента (transcript / repro).
+- Наблюдения из чужих проектов (PRACTICES-FROM-PROJECTS.md §10) — это **не промахи**, а evidence того, что компонент работает где-то ещё. Они не инкрементируют N.
+- При N≥3 — ADR с empirical evidence (transcript, repro), per «Re-evaluation triggers» из meta-CLAUDE.md.
+- Счётчик обнуляется при major-релизе модели.
 
 

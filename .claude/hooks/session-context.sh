@@ -11,7 +11,7 @@ cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || exit 0
 devlog_entries_dir=".claude/devlog/entries"
 [ -d "$devlog_entries_dir" ] || exit 0
 
-last_entry="$(ls "$devlog_entries_dir"/[0-9]*.md 2>/dev/null | sort | tail -1)"
+last_entry="$(ls "$devlog_entries_dir"/[0-9]*.md 2>/dev/null | sort | tail -1)" || true
 [ -n "$last_entry" ] || exit 0
 
 last_devlog="$(basename "$last_entry")"

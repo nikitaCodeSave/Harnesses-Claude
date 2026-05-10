@@ -19,7 +19,7 @@
 - **Agents** (`.claude/agents/`): `deliverable-planner`, `meta-creator` (2).
 - **Hooks** (`.claude/hooks/`): `secret-scan`, `dangerous-cmd-block`, `auto-format` (passive opt-in), `session-context` (slim devlog-ref) (4).
 - **Rules** (`.claude/rules/`): `testing.md` (1).
-- **Out of scope** (явно отвергнуто ADR'ами): managed-agents API (ADR-005), sandbox baseline (ADR-009), TDD-тройка субагентов (ADR-002), TDD/BDD как мета-обвязка (ADR-003), decision-tree в meta-CLAUDE.md (ADR-012), `code-reviewer` agent (ADR-011), `block-shallow-agent-spawn`/`stop-recovery`/`env-reload`/`denied-log`/`config-audit` hooks (ADR-010), 6 dup skills + 2 dup agents (ADR-007), `claude-mem`/MCP memory в baseline (ADR-013).
+- **Out of scope** (явно отвергнуто ADR'ами): managed-agents API + локальный port-over (ADR-005/ADR-15), skill/command «warm-context» прогрева сессии (ADR-15), sandbox baseline (ADR-009), TDD-тройка субагентов (ADR-002), TDD/BDD как мета-обвязка (ADR-003), decision-tree в meta-CLAUDE.md (ADR-012), `code-reviewer` agent (ADR-011), `block-shallow-agent-spawn`/`stop-recovery`/`env-reload`/`denied-log`/`config-audit` hooks (ADR-010), 6 dup skills + 2 dup agents (ADR-007), `claude-mem`/MCP memory в baseline (ADR-013), self-описывающие skills + `meta-orchestrator` skill (ADR-016).
 
 ---
 
@@ -53,7 +53,11 @@
   3. Мета-фреймворк с фазами «specify → tests-first → implement → green» — это repackage BMAD/SpecKit anti-pattern, который уже отвергнут в research'е (раздел 9 Harnesses_gude.md).
 - **Альтернатива**: `.claude/rules/testing.md` — короткий инвариант, читается перед каждой code-сессией (через Skill auto-invoke по контексту или просто как часть проектного CLAUDE.md).
 
-## ADR-005 — Managed Memory/Dreams концепции: что берём, что нет
+## ADR-005 — Managed Memory/Dreams концепции: что берём, что нет (SUPERSEDED in part by ADR-15)
+
+> **Status**: implementation-часть («берём три») superseded 2026-05-10 by ADR-15 — port-over оказался редундантным после ADR-013/014 + built-in auto-load `.claude/rules/`. Out-of-scope-часть (managed-agents API локально не воссоздаём) — **в силе**. Сохранён как исторический контекст.
+
+
 
 - **Дата**: 2026-05-09
 - **Контекст**: Anthropic в апреле–мае 2026 анонсировал Memory stores и Dreams в составе Managed Agents — это **API-only** капабилити, в нашем CLI-харнессе на подписке нерелевантны (см. инвариант "API constraint" в `.claude/CLAUDE.md`). Однако концептуально (RO/RW scope, audit trail, mounted reference материал) идеи полезны и переносимы на CLI-примитивы. Прогон mapping-проекта на полигоне `/tmp/memory-poc/` с реальным `claude --print` показал: переносимы только три капабилити, конкретные реализации mapping'а к тому же сломаны (env vars `CLAUDE_TOOL_PATH/NAME/AGENT_NAME` не существуют — payload идёт через stdin JSON; settings.json требует обёртку `hooks: [{type:"command", ...}]`; `--print-paths` не существует; `yq` и `git filter-repo` отсутствуют в системе).
@@ -301,6 +305,75 @@
 - **Урок процесса** (двойной):
   1. Расширение правила ADR-007 «WebFetch built-in catalog ДО» — проверять не только existence, но и behavior через POC. Любой аргумент формы «built-in покрывает X» требует transcript-доказательства.
   2. **Empirical fact ≠ необходимость в invariant'е**. Симметричное правило foundational principle (N≥3 + не покрыто built-in/CLAUDE.md) обязательно к применению при превращении observation в prescriptive rule. Промежуточная реакция этого ADR (mandatory AskUserQuestion) нарушила это правило — N=1, и пользователь сразу указал на ошибку. Документирую как методологический guard для будущих сессий.
+
+## ADR-15 — Retire ADR-005 implementation: managed-memory port-over распределён по built-in примитивам
+
+- **Дата**: 2026-05-10
+- **Контекст**: ADR-005 (2026-05-09) фиксировал «берём три» из managed Memory/Dreams: `_manifest.yml` per-store, PreToolUse exit 2 на RO-store, SessionStart hook со списком stores. Через сутки code-review harness'а другим агентом обнаружил: ни одна из трёх капабилити не материализована. `_manifest.yml` отсутствует, `secret-scan.sh` блокирует write по pattern'ам секретов (а не по store ACL), `session-context.sh` отдаёт только last devlog filename. За эти же сутки приняты ADR-013 (auto-memory canonical) и ADR-014 (built-in `/init` не интервьюирует — by design), а в обсуждении возникло предложение skill/command «warm-context» для прогрева контекста на старте сессии. Stress-test предложения через foundational principle показал, что три капабилити ADR-005 уже распределены по built-in механизмам, а warm-context — компонент с N=0 эмпирических промахов.
+- **Решение**: ADR-005 в части implementation **retire**. ADR-15 фиксирует mapping капабилити на существующие built-in примитивы и двойной запрет на возврат.
+- **Mapping**:
+  | ADR-005 capability                  | Покрытие в текущем harness'е                                                                                                |
+  | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+  | `_manifest.yml` + RO/RW scope       | `.claude/rules/*.md` auto-loaded built-in'ом как project instructions (verified: `testing.md` в системном prompt'е этой сессии без явного `Read`) + auto-memory типизация (user/feedback/project/reference) — type-segmentation уже даётся механизмом |
+  | PreToolUse exit 2 на RO-store       | Не нужен: `rules/` редактирует человек, не задачи модели; sensitive paths закрыты `permissions.deny` (`.env`, `.ssh`, `credentials.json`, `*.pem`, `*.key`) + `secret-scan.sh` |
+  | SessionStart hook со списком stores | Active inventory section в HARNESS-DECISIONS.md + Reference materials в meta-CLAUDE.md (документированный pattern); `session-context.sh` инжектит harness-уникальное (last devlog), `gitStatus` Claude Code инжектит сам (verified в этой сессии) |
+- **Обоснование**:
+  1. **Foundational principle direct (ADR-005 implementation)**: компонент кодировал assumption «нужен централизованный store registry с ACL»; в single-user harness'е без параллельных subagent-writes — assumption ложна. Type-segmentation auto-memory + auto-load `.claude/rules/` покрывают use-case дешевле, без `_manifest.yml` для одного store.
+  2. **Foundational principle симметричное правило (warm-context)**: skill/command для прогрева кодирует assumption «модель не знает где найти контекст». Под Opus 4.7 — false: 5 источников auto-loaded в системный prompt (CLAUDE.md, `.claude/rules/*.md`, `MEMORY.md`, `gitStatus`, last devlog filename), модель «calls tools less often and reasons more», читает on demand. N=0 эмпирических промахов → не добавляется. Slash command как prompt-template — допустим **после** N≥3.
+  3. **Single source of truth (per ADR-013)**: дублирование memory-путей создаёт drift; managed-memory port-over конкурирует с auto-memory.
+- **Запрет на возврат (двойной)**:
+  1. Воссоздавать локальную имплементацию managed Memory/Dreams (`_manifest.yml`, store-ACL hooks, dreamer pipelines) — **запрещено** без empirical evidence что built-in auto-load + auto-memory + `permissions.deny` **недостаточны** для конкретного класса задач (не «было бы аккуратнее»).
+  2. Создавать skill/command типа `warm-context` / `recall` / `prime-session` — **запрещено** без N≥3 эмпирических случаев, где (а) auto-loaded источники недостаточны и (б) prompt «дай overview» не покрывает потребность. Slash command как тонкий prompt-template (`.claude/commands/<name>.md` без allowed-tools и описания) — допустим после N≥3.
+- **Supersedes**: ADR-005 в части implementation («берём три»). Out-of-scope managed-agents API остаётся (ADR-005 был корректен в этой части).
+- **Урок процесса**: ADR-005 принят на основании POC mapping'а в `/tmp/memory-poc/` — концепции прогнаны end-to-end и эмпирически валидны как технические решения. Но переход от «работает» к baseline harness'а пропустил вопрос «**нужно ли в свете уже работающих built-in примитивов?**». Через сутки два встречных ADR (013 + 014) сделали implementation редундантной. Урок для будущих расширений: stress-test «что уже покрывает это в стеке?» обязателен **до** фиксации «берём». ADR-15 — пример ретроактивного применения этого правила.
+
+---
+
+## ADR-016 — Self-описывающие skills как anti-pattern + higher-order orchestration refinement + pilot validation pattern
+
+- **Дата**: 2026-05-10
+- **Контекст**: Сессия 2026-05-10 расширяла harness компонентами для multi-agent дисциплины. Среди созданного был `.claude/skills/meta-orchestrator/SKILL.md` — позиционировался как «active environment-configurator» с триггер-словами для auto-discovery. Skill auto-loaded в main thread context и описывал... самого main thread'а («Main thread = meta-orchestrator. Owns задачу end-to-end…»). Пользователь explicitly указал: **«meta-orchestrator — это ты, с кем я общаюсь»** — main thread **является** meta-orchestrator'ом нативно через CLAUDE.md + system prompt + conversation context. Skill дублировал meta-CLAUDE.md о собственной роли модели; это попытка configure self вместо configure environment for inner executors.
+
+  В той же сессии: создан `docs/MULTI-AGENT-BASELINE.md` (legitimate external on-demand reference), 4 правки meta-CLAUDE.md (Foundational principle higher-order refinement + Sub-agent spawn policy + Self-evolution + Reference materials), pilot test на `~/PROJECTS/FastApi-Base` нашёл existing harness bug в `session-context.sh` (`set -euo pipefail` + empty glob = exit 2 на проектах с пустым `devlog/entries/`).
+
+- **Решение**:
+  1. **Retire** `.claude/skills/meta-orchestrator/SKILL.md` (создан и удалён в той же сессии). Зафиксировать **self-описывающий skill** как anti-pattern.
+  2. **Закрепить higher-order orchestration refinement** в `.claude/CLAUDE.md` Foundational principle: skill / agent / hook как **environment configurator для inner executors** (subagents, Claude Code daemon) — допустимы; как **duplicate-of-built-in capability** или **self-description main thread'а** — anti-pattern.
+  3. Сохранить `docs/MULTI-AGENT-BASELINE.md` как on-demand reference (read-by-main-thread по необходимости, не auto-loaded в системный prompt).
+  4. **Bugfix** `session-context.sh`: добавить `|| true` после command substitution с pipeline для безопасности под `set -euo pipefail` на empty-glob `ls`.
+  5. **Pilot validation pattern** установлен как методологический guard: backup → remove retired components → sync new state → validate static (syntax, scripts) → validate runtime (`claude --print` skill/agent discovery, `claude agents` inventory check, hook smoke tests).
+
+- **Обоснование**:
+  1. **Foundational principle direct**: компонент кодировал assumption «модель забудет свою роль без skill-напоминания» — assumption ложна. Opus 4.7 нативно держит role identification из CLAUDE.md + system prompt + conversation context. Skill дублировал meta-CLAUDE.md и был frozen — drift гарантирован.
+  2. **Mental model boundary** (новое, эта сессия): main thread = meta-orchestrator (это я, кто общается с пользователем). Skills / agents / hooks конфигурируют **окружение для inner executors**, не для самого main thread'а. **Action-skills** (`devlog` — конкретная операция записи) легитимны; **self-description-skills** (повторяют CLAUDE.md о роли main thread'а) — anti-pattern с тем же статусом, что duplicate-of-built-in (ADR-007).
+  3. **Symmetric rule violation**: skill создан без N≥3 эмпирических промахов (N=0). В момент создания обоснование было процессное («active discipline через progressive disclosure»), но pilot test + user observation выявили что обоснование ложно — skill не configure environment, а self-mirror.
+  4. **Pilot validation value**: migration path обнаружил real bug в `session-context.sh`, не показавшийся бы в harness self-tests (где devlog непустой). Эмпирическое доказательство что harness components, влияющие на runtime, нужно тестировать на pilot deployments с разной project state.
+
+- **Что НЕ делается / Что НЕ меняется**:
+  - НЕ retire `docs/MULTI-AGENT-BASELINE.md` — legitimate external reference, читается main thread'ом on-demand, не self-loaded в системный prompt.
+  - НЕ retire higher-order orchestration refinement в Foundational principle — это правило про **создание components для inner executors**, не self-description.
+  - НЕ retire `docs/PRACTICES-FROM-PROJECTS.md` §12 brainstorm + §13 N-counter — evidence-collection и tracking механизм для будущих ADR-кандидатов.
+  - НЕ retire `Sub-agent spawn policy` (compact form в meta-CLAUDE.md) — kernel-level invariant.
+
+- **Альтернатива (отвергнута)**: оставить skill, repurpose как «pre-delegation checklist» (auto-trigger перед `Agent` tool call). Отвергнута: (а) Opus 4.7 нативно делает pre-delegation thinking когда задача — кандидат на multi-agent (Anthropic «calls tools less often and reasons more», «devises ways to verify own outputs»); (б) checklist дублировал бы `docs/MULTI-AGENT-BASELINE.md` §10; (в) даже как pre-delegation checklist это всё равно self-описание (skill говорит main thread'у как делать main thread thing).
+
+- **Запрет на возврат**:
+  1. Воссоздавать `.claude/skills/meta-orchestrator/` или любой self-описывающий skill (повторяющий CLAUDE.md о роли main thread'а) — **запрещено** без empirical evidence что Opus 4.7 регрессировал на role identification (transcript, repro, не «было бы аккуратнее»).
+  2. Перед созданием любого нового skill — обязательная проверка boundary: компонент конфигурирует **окружение для inner executors** (action-skill, например `/devlog` → конкретная операция записи) или **описывает main thread сам себе** (self-description, anti-pattern)? Только первое допустимо.
+  3. `.claude/hooks/session-context.sh` `|| true` fix не откатывать без замены на эквивалентную защиту от empty-glob exit 2.
+
+- **Эвидентс-точки** (сессия 2026-05-10):
+  - `claude --print` в pilot context (FastApi-Base, до удаления skill): `meta-orchestrator` listed первым в available skills response — auto-loaded работал, дубликат подтверждён.
+  - `claude agents` в pilot после migration: 6 active agents (2 project: `deliverable-planner`, `meta-creator` + 4 built-in: `Explore`, `Plan`, `general-purpose`, `statusline-setup`); `code-reviewer` correctly absent (ADR-011 retire validated).
+  - Hook bugfix smoke test (3/3 cases pass): harness with entries → JSON output, pilot empty → silent exit 0, pilot 1 entry → JSON output.
+  - User observation: «meta-orchestrator — это ты, с кем я общаюсь. На основе диалога со мной ты формируешь "задания" и необходимые harness обвязки, чтоб твои агенты смогли выполнить все работы… Сейчас кажется, что ты немного продублировал Skill meta-orchestrator и .claude/CLAUDE.md» — выявил duplication.
+  - Pilot backup: `/tmp/FastApi-Base.claude.bak.20260510-121448` (172K) — pre-migration snapshot для possible rollback.
+
+- **Урок процесса** (двойной):
+  1. **Boundary check для нового skill / agent / hook**: «environment configurator для inner executors» vs «self-description main thread'а». Этот вопрос обязателен перед любым новым harness-компонентом, наравне с «дубликат built-in?» (ADR-007).
+  2. **Pilot test = evidence engine, не sanity check**. Нашёл два значимых finding'а: (а) real hook bug в production-like контексте (empty-glob), (б) косвенно (через user observation в migrated state) — self-описывающий skill anti-pattern. Pilot test обязателен для любого harness расширения, влияющего на runtime (skills, hooks, settings, CLAUDE.md invariants).
+
+- **Supersedes**: ничего. Дополняет ADR-007 (built-ins-first) и ADR-010 (anti-spam observability hooks) новой категорией anti-pattern boundary.
 
 ---
 
