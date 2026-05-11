@@ -43,6 +43,9 @@ protected_match=0
 case "$abs_path" in
     */.claude/CLAUDE.md)                 protected_match=1 ;;
     */.claude/rules/*)                   protected_match=1 ;;
+    */.claude/docs/*.md)                 protected_match=1 ;;  # principles, workflow, multi-agent, benchmark
+    */.claude/settings.json)             protected_match=1 ;;
+    */.claude/settings.local.json)       protected_match=1 ;;
     */.claude/loop/run.sh)               protected_match=1 ;;
     */.claude/loop/PROMPT.md)            protected_match=1 ;;
     */.claude/loop/corpus.yml)           protected_match=1 ;;

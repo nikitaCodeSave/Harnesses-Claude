@@ -67,15 +67,66 @@ def mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def _extract_metric(r: dict, *path_options) -> float:
+    """Extract metric from report tolerating multiple schema shapes (flat or nested)."""
+    for path in path_options:
+        node = r
+        ok = True
+        for key in path:
+            if isinstance(node, dict) and key in node:
+                node = node[key]
+            else:
+                ok = False
+                break
+        if ok and isinstance(node, (int, float, str)):
+            try:
+                return float(node)
+            except (TypeError, ValueError):
+                continue
+    return 0.0
+
+
 def compute_task_metrics(reports: list[dict]) -> dict[str, float]:
-    """Aggregate per-fixture reports for one task → mean tokens/turns/files/success."""
+    """Aggregate per-fixture reports for one task → mean tokens/turns/files/success.
+
+    Tolerates both flat (synthetic test) and headless-runner nested schemas:
+      tokens: r.tokens_total | r.tokens | r.claude.tokens.{input+output}
+      turns:  r.turns | r.claude.num_turns
+      files:  r.files_touched | r.files | r.verification.files_changed
+      success: r.success | r.verification.pytest.status == "pass"
+    """
     if not reports:
         return {"tokens": 0, "turns": 0, "files": 0, "success_rate": 0.0}
-    tokens = mean([r.get("tokens_total", r.get("tokens", 0)) for r in reports])
-    turns = mean([r.get("turns", 0) for r in reports])
-    files = mean([r.get("files_touched", r.get("files", 0)) for r in reports])
-    success_vals = [1.0 if r.get("success") else 0.0 for r in reports]
-    success_rate = mean(success_vals)
+
+    def tokens_from(r):
+        # Flat fallback first
+        v = _extract_metric(r, ("tokens_total",), ("tokens",))
+        if v:
+            return v
+        # Nested headless-runner: claude.tokens.input + output
+        ci = _extract_metric(r, ("claude", "tokens", "input"))
+        co = _extract_metric(r, ("claude", "tokens", "output"))
+        return ci + co
+
+    def turns_from(r):
+        return _extract_metric(r, ("turns",), ("claude", "num_turns"))
+
+    def files_from(r):
+        return _extract_metric(r, ("files_touched",), ("files",), ("verification", "files_changed"))
+
+    def success_from(r):
+        if "success" in r:
+            return 1.0 if r["success"] else 0.0
+        # Nested headless-runner
+        node = r.get("verification", {}).get("pytest", {})
+        if isinstance(node, dict) and node.get("status") == "pass":
+            return 1.0
+        return 0.0
+
+    tokens = mean([tokens_from(r) for r in reports])
+    turns = mean([turns_from(r) for r in reports])
+    files = mean([files_from(r) for r in reports])
+    success_rate = mean([success_from(r) for r in reports])
     return {"tokens": tokens, "turns": turns, "files": files, "success_rate": success_rate}
 
 

@@ -92,6 +92,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 - **Single-incident NOT invariant**. Pattern требует multi-source evidence или повторяющейся empirics перед фиксацией как rule.
 - **Pilot validation для harness changes**: Tier 0 (static, <10s, blocker) → Tier 1 (pilot project task suite) → Tier 2 (per-component evals). Methodology — `.claude/docs/benchmark.md`.
 - **Empirical cost envelope** (2026-05-11, devlog #24): на T01/T02 simple tasks our harness даёт +24-27% cost vs no-harness baseline под Opus 4.7 при идентичном quality. ECC raw inject ≈ neutral, но ломает pytest discovery через 90+ parasitic tests. cwc-long-running-agents +46% cost — opt-in для long-running fixed-spec scenarios. Re-measure при major model upgrade или ±10% baseline drift.
+- **Self-improvement Ralph-loop** (2026-05-11, devlog #26/#27): empirical evolution цикл harness'а через variance-checked fitness function + retire-bias + protected-files guard. Pattern adapted from [Mishra-Sharma «Long-running Claude» (Mar 2026)](https://www.anthropic.com/research/long-running-Claude) + Huntley ralph-wiggum. Scaffolding `.claude/loop/`; protected files routed через proposal-only mode чтобы избежать recursive failure. Cost envelope per loop iter: \$1.30-2.50 benchmark-dominated. Smoke validation pending Bug 3 fix (external fixtures + worktrees).
 
 ## Anti-patterns
 

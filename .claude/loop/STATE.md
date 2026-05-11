@@ -1,7 +1,7 @@
 ---
-iteration: 0
-started: null
-mode: pre-smoke
+iteration: 1
+started: 2026-05-11T00:15:00Z
+mode: smoke
 baseline_source: "extracted from .claude/benchmark/reports/T0{1,2,3}-B-ourharness*.json (devlog #24, #25)"
 baseline_snapshot:
   T01:

@@ -27,7 +27,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: neutral on benchmark (operator-facing tool)
 - source: brainstorm
 - retired_check: pass
-- status: pending
+- status: pending  # iter-0001 ERRORed before completion (T03 fixture missing); H-001 not yet tested
 
 ### H-002 Metrics aggregator across iterations
 - type: add
