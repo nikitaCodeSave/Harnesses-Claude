@@ -1,0 +1,90 @@
+# Task corpus for self-improvement loop
+# Frozen — modified only by human review (protected by loop-protected-guard.sh).
+#
+# Current scope: T01-T04 only (measured baseline в STATE.md).
+# T05-T15 — followup expansion после first variance baseline run.
+
+version: 0.1
+
+fixtures:
+  primary:
+    name: sample-py-app
+    path: .claude/benchmark/fixtures/sample-py-app
+  external:
+    - name: full-stack-fastapi-template
+      url: https://github.com/tiangolo/full-stack-fastapi-template
+      path: .claude/benchmark/fixtures/external/full-stack-fastapi-template
+      commit: 13652b51ea0acca7dfe243ac25e2bbdc066f3c4f
+    - name: click
+      url: https://github.com/pallets/click
+      path: .claude/benchmark/fixtures/external/click
+      commit: fc6c7c47edd6110b6bd5a1a5297b2035214b0cd1
+
+# Train/holdout split: ⅔ train, ⅓ holdout (current 3 train / 1 holdout)
+# Train tasks drive accept/reject. Holdout tasks — overfit-detect every K iter.
+tasks:
+  T01:
+    split: train
+    type: feature
+    yaml: .claude/benchmark/tier1/tasks/T01-add-health-endpoint.yaml
+    fixture_filter: [sample-py-app]
+  T02:
+    split: train
+    type: bugfix
+    yaml: .claude/benchmark/tier1/tasks/T02-bugfix-duplicate-email.yaml
+    fixture_filter: [sample-py-app]
+  T03:
+    split: train
+    type: feature
+    yaml: .claude/benchmark/tier1/tasks/T03-fastapi-health-endpoint.yaml
+    fixture_filter: [external/full-stack-fastapi-template]
+  T04:
+    split: holdout
+    type: schema_migration
+    yaml: .claude/benchmark/tier1/tasks/T04-fastapi-add-column-migration.yaml
+    fixture_filter: [external/full-stack-fastapi-template]
+  # T05-T15 — Milestone-2-followup. Стуббы для будущего расширения:
+  # T05 (ops/lint), T06 (research/PII), T07 (test coverage gap),
+  # T08 (bootstrap CLAUDE.md на click), T09 (CLI feature на click),
+  # T10 (refactor extract), T11 (security audit на fastapi),
+  # T12 (perf measure без fix), T13 (unicode edge), T14 (changelog admin),
+  # T15 (placeholder)
+
+variance:
+  replicas: 3            # per task per fixture (target; current data partial)
+  sigma_multiplier: 2    # delta must exceed 2σ to count as signal
+
+holdout_cadence: 5       # every 5th iteration run holdout-only
+
+fitness:
+  weights:
+    tokens: 0.5
+    turns: 0.3
+    files: 0.2
+  thresholds:
+    success_rate_min: 1.0       # hard: any drop = reject
+    weighted_score_delta_max: 0.20  # ±20% weighted cost delta allowed
+
+retire_bias:
+  enabled: true
+  every_k_iter: 5        # every 5th iter prefer retire-type hypotheses
+
+subagent_cap: 3          # max subagent spawns per iteration
+
+protected_files:
+  - .claude/CLAUDE.md
+  - .claude/rules/testing.md
+  - .claude/rules/docs-discipline.md
+  - .claude/loop/run.sh
+  - .claude/loop/PROMPT.md
+  - .claude/loop/corpus.yml
+  - .claude/loop/fitness.sh
+  - .claude/loop/fitness.py
+
+scope_boundary:
+  allowed_paths:
+    - .claude/
+  forbidden_paths:
+    - ~/.claude/         # user-level config, never touch
+    - /tmp/              # cleaned by headless-runner
+    - .git/              # never modify history directly
