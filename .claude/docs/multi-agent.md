@@ -154,6 +154,20 @@ Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents =
 - ✅ **Worktree parallelism**: independent feature branches via `isolation: "worktree"` (требует stable layered architecture).
 - ❌ **Workflow-phase split** (Plan→Code→Test→Review) — anti-pattern (см. §8).
 
+### 7.2 Opt-in subagent isolation для high-stakes coding (D-022)
+
+`.claude/docs/principles.md` D-022 разрешает opt-in subagent-isolation patterns когда измеримо повышает quality. Default остаётся single-thread main (см. §2 + §10). **Применять когда**: production-critical / public API / data migration / payment flow; security-sensitive PR; multi-day autonomous work с tricky invariants; previous single-thread attempt empirically failed quality criteria.
+
+**Pattern 1 — Planner → Generator → Evaluator** (Anthropic canonical для long tasks; [Rajasekaran Mar 2026](https://www.anthropic.com/engineering/harness-design-long-running-apps), validated via leaked Claude Code internals: [generativeprogrammer.com](https://generativeprogrammer.com/p/12-agentic-harness-patterns-from)): Planner expand 1-4 sentence prompt → spec; Generator implement + self-eval; Evaluator independent QA, 5-15 critique-refine cycles. **Negotiated sprint contracts** — Generator+Evaluator agree on «done» before code. Cost-justified когда «task sits beyond what current model does reliably solo» (Rajasekaran).
+
+**Pattern 2 — TDD triad** (test-writer / impl / refactorer): community evidence (AgentCoder 87.8% accuracy vs 61% single-agent — [alexop.dev](https://alexop.dev/posts/custom-tdd-workflow-claude-code-vue/); AgentShield Anthropic Hackathon winner — red/blue/auditor pipeline на 3 Opus агентах). **Banned в нашем harness'е per ADR-002** (см. §8) — single context + `rules/testing.md` invariants заменяют. Documented здесь только для cross-reference на community claims.
+
+**Pattern 3 — Driver-Navigator** (Opus+Sonnet pair): Navigator (Opus 4.7, strategic) — PLAN/RED/REVIEW, никогда impl; Driver (Sonnet 4.6, tactical) — GREEN/REFACTOR, никогда не пишет/модифицирует тесты. Source: [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009).
+
+Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Chachamaru127/claude-code-harness) — formal Plan→Work→Review с worker/reviewer/scaffolder + Go-native guardrails + breezing mode для parallel + опциональная harness-mem.
+
+**API constraint**: [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) (cloud P/G/E через `managed-agents-2026-04-01` beta) — API-only, out of scope. Pattern-level знание переносится на CLI primitives (Task tool + `.claude/agents/` + hooks).
+
 ---
 
 ## 8. Anti-patterns (запрещены ADR'ами нашего harness'а)

@@ -100,29 +100,7 @@ Implement по плану в одной голове. Single main thread, sequen
 
 ### Subagents on demand (НЕ default)
 
-Spawn оправдан только в трёх случаях:
-
-| Trigger | Пример | Agent |
-|---------|--------|-------|
-| (a) Изоляция контекста | broad codebase scan, 50+ files, log dive | `Explore` (read-only, Haiku) |
-| (b) Параллельность | независимые verifications (build + test + lint), parallel research | `general-purpose` × N |
-| (c) Auto-compact rescue | редко при 1M context | `general-purpose` |
-
-Не spawn'ить когда:
-- Most coding (Anthropic explicit: «multi-agent ill-suited for most coding»)
-- Sequential dependency chain (A→B→C — последовательные tokens, ноль изоляции)
-- Subagent wrapper над single tool call
-- Trivial task — main thread с полным проектным контекстом быстрее
-
-### Model assignment matrix
-
-| Role | Model | Когда |
-|------|-------|-------|
-| Main / lead | Opus 4.7 | reasoning, integration, decisions |
-| Subagent — reasoning | Sonnet 4.6 | research, exploration с thinking |
-| Subagent — grunt | Haiku 4.5 | file scans, log filtering, read-only exploration |
-
-Override per spawn: `Agent({model: "haiku"})`.
+Spawn только при (a) изоляции контекста, (b) параллельности независимых задач, (c) auto-compact rescue. Most coding — single main thread (Anthropic explicit «ill-suited»). Полный baseline (triggers, brief contract, model assignment matrix Opus/Sonnet/Haiku, effort scaling, token economics 4×/15×, failure modes, verification checklist) — `.claude/docs/multi-agent.md` §1-10.
 
 ### Evidence
 
@@ -133,48 +111,7 @@ Override per spawn: `Agent({model: "haiku"})`.
 
 ### Опциональное расширение: subagent isolation для high-stakes coding
 
-Allow per **D-022** в `.claude/docs/principles.md`. Применять когда измеримо повышает quality — high-stakes production features, security-sensitive PRs, multi-day autonomous work с tricky invariants. Default остаётся single-thread main.
-
-#### Pattern 1 — Planner → Generator → Evaluator (Anthropic canonical для long tasks)
-
-Канонический Anthropic pattern документирован в [Rajasekaran, «Harness design for long-running application development», Mar 24 2026](https://www.anthropic.com/engineering/harness-design-long-running-apps). Validated by leaked Claude Code internals (Mar 2026): [generativeprogrammer.com — 12 agentic harness patterns](https://generativeprogrammer.com/p/12-agentic-harness-patterns-from).
-
-- **Planner** — expand 1-4 sentence prompt в full product spec; intentionally high-level technical details чтобы prevent cascading errors.
-- **Generator** — implement против spec; self-evaluation per criteria; commit artifacts.
-- **Evaluator** — independent QA против hard thresholds; 5-15 critique-refine cycles при необходимости.
-
-**Negotiated sprint contracts**: Generator + Evaluator agree on what «done» looks like **before** any code written. Quote Rajasekaran: *«[Evaluator] is worth the cost когда task sits beyond what current model does reliably solo»* — hard cost-justification threshold, не default.
-
-#### Pattern 2 — TDD triad (test-writer / implementer / refactorer)
-
-Community evidence: AgentCoder paper 87.8% accuracy с TDD subagent isolation vs 61% single-agent. Sources: [alexop.dev](https://alexop.dev/posts/custom-tdd-workflow-claude-code-vue/), [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009).
-
-- `tdd-test-writer` (RED) — sees only requirement, не impl plans → tests не могут «cheat» encoding implementation.
-- `tdd-implementer` (GREEN) — sees only failing test → forced минимальная impl.
-- `tdd-refactorer` (REFACTOR) — clean isolated evaluation.
-
-Real-world: **AgentShield в everything-claude-code** (Anthropic Hackathon winner) — red-team / blue-team / auditor pipeline на трёх Opus агентах для security-sensitive TDD.
-
-#### Pattern 3 — Driver-Navigator (Opus + Sonnet)
-
-- **Navigator** (Opus 4.7, strategic): PLAN/RED/REVIEW — никогда не пишет impl.
-- **Driver** (Sonnet 4.6, tactical): GREEN/REFACTOR — никогда не пишет/модифицирует тесты.
-
-Source: [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009).
-
-#### Default vs opt-in criteria
-
-**Default (single-thread main)** для: bugfixes / prototyping / CRUD / small features. 1M context window достаточен; subagent isolation overhead не оправдан.
-
-**Opt-in subagent isolation** оправдан когда:
-- Production-critical / public API / data migration / payment flow
-- Security-sensitive PR (adversarial review pattern: attacker / defender / auditor)
-- Multi-day autonomous work с риском telephone-game между phases
-- Empirically measured: previous single-thread attempt failed quality criteria
-
-Reference implementation для opt-in: [claude-code-harness (Chachamaru127)](https://github.com/Chachamaru127/claude-code-harness) — formal Plan→Work→Review с worker/reviewer/scaffolder agents + Go-native guardrail engine + breezing mode для parallel + опциональная harness-mem (persistent memory).
-
-**API constraint**: [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) (cloud-hosted Planner/Generator/Evaluator через `managed-agents-2026-04-01` beta) — API-only, out of scope. **Архитектурные паттерны переносятся** на CLI primitives (Task tool + `.claude/agents/` + hooks).
+Per **D-022** (`.claude/docs/principles.md`), opt-in для production-critical / security-sensitive / multi-day autonomous work; default остаётся single-thread main. Канонические patterns (Planner→Generator→Evaluator, Driver-Navigator Opus+Sonnet), opt-in criteria и anti-patterns (TDD-тройка banned per ADR-002) — `.claude/docs/multi-agent.md` §7.2 + §8. **API constraint**: managed-agents API out of scope; pattern-level знание переносится на CLI primitives.
 
 ---
 
