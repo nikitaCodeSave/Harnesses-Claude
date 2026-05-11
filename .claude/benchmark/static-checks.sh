@@ -150,6 +150,21 @@ for rule in .claude/rules/*.md; do
     fi
 done
 
+# Check 10: Tool-gating (H-027) — flag harness extension-surface sprawl.
+# Threshold 20 per OpenHarness pattern. Excess tools = context cost + selection noise.
+# Counts agents/*.md + hooks/*.sh + skills/*/SKILL.md + commands/*.md.
+AGENTS_N=$(ls .claude/agents/*.md 2>/dev/null | wc -l)
+HOOKS_N=$(ls .claude/hooks/*.sh 2>/dev/null | wc -l)
+SKILLS_N=$(ls .claude/skills/*/SKILL.md 2>/dev/null | wc -l)
+COMMANDS_N=$(ls .claude/commands/*.md 2>/dev/null | wc -l)
+TOOLS_TOTAL=$((AGENTS_N + HOOKS_N + SKILLS_N + COMMANDS_N))
+TOOLS_DETAIL="$AGENTS_N agents + $HOOKS_N hooks + $SKILLS_N skills + $COMMANDS_N commands"
+if [[ $TOOLS_TOTAL -le 20 ]]; then
+    check "Tool-gating ≤ 20 (extension surface)" "$TOOLS_TOTAL ($TOOLS_DETAIL)" pass
+else
+    check "Tool-gating ≤ 20 (extension surface)" "$TOOLS_TOTAL ($TOOLS_DETAIL) — sprawl!" fail
+fi
+
 echo
 echo "Manual checks (run separately):"
 echo "  - claude --print : skill discovery runtime"
