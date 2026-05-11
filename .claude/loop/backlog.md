@@ -119,7 +119,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: cost -3% (hook overhead removed); success unchanged
 - source: brainstorm + permission-deny inspection
 - retired_check: pass (not in retired list)
-- status: pending
+- status: proposed  # iter-0013 PROPOSAL — diff at .claude/loop/proposals/iter-0013-retire-dangerous-cmd-block.diff (109 lines, git apply --check OK); awaiting human review
 
 ### H-012 Retire secret-scan.sh
 - type: retire
@@ -128,7 +128,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: cost -3%
 - source: brainstorm
 - retired_check: pass
-- status: pending
+- status: proposed  # iter-0014 PROPOSAL — diff at .claude/loop/proposals/iter-0014-retire-secret-scan.diff (98 lines, git apply --check OK); awaiting human review
 
 ### H-013 Retire deliverable-planner agent
 - type: retire
@@ -137,7 +137,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: cost neutral (agent rarely invoked); CLAUDE.md cleanup
 - source: ADR-014 + CLAUDE.md soft-guidance note
 - retired_check: pass
-- status: pending
+- status: accepted  # iter-0016 ACCEPTED (avg_score=+0.000, T01/T02 measured, T03 excluded — PYTEST_TARGETS infra blocker; all deltas within 2σ; first non-PROPOSAL retire; CLAUDE.md reference to deliverable-planner now stale — followup PROPOSAL candidate)
 
 ### H-014 Retire auto-format.sh PostToolUse hook
 - type: retire
@@ -313,6 +313,6 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 
 ## Notes
 
-- Status legend: `pending` → не пробовал; `in_flight` → текущая итерация; `accepted` → merged; `rejected` → пробовал, fitness reject; `dead` → multiple rejects of same idea, не возвращаемся.
+- Status legend: `pending` → не пробовал; `in_flight` → текущая итерация; `proposed` → diff в proposals/ awaiting human review (PROTECTED target — picker skips); `accepted` → merged; `rejected` → пробовал, fitness reject; `dead` → multiple rejects of same idea, не возвращаемся.
 - Proposal-only entries (against protected) — loop writes diff в `proposals/`, человек ревьюит batch'ем.
 - Backlog reorder возможен между итерациями (loop может deprioritize при низком ROI).
