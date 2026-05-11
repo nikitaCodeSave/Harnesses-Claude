@@ -19,8 +19,9 @@ Rules (first match wins):
 
 1. **Resume in-flight**: If STATE.md `in_flight_hypothesis != null` → resume that hypothesis (don't pick new).
 2. **Holdout cadence**: If N is multiple of `corpus.holdout_cadence` (default 5) → no new hypothesis; instead run hold-out validation on current baseline, compare against last holdout run for overfit-detect, print `RESULT:HOLDOUT pass|fail`, exit.
-3. **Retire-bias**: If N is multiple of `corpus.retire_bias.every_k_iter` (default 5) → filter backlog to `type: retire` first; if none, fall through.
-4. **Normal**: Top of backlog where `status == pending` AND `target` not in retired-components list AND not already in journal as rejected/dead.
+3. **Retire-bias**: If N is multiple of `corpus.retire_bias.every_k_iter` (default 3) → filter backlog to `type: retire` first; if none, fall through.
+4. **Stale-backlog breaker**: If the last 3 entries in `journal.md` are all `REJECTED` (any H-id), do not pick — emit `RESULT:NOOP backlog-stale-3-consecutive-rejects` and exit. Forces operator review of backlog rationale quality before continuing.
+5. **Normal**: Top of backlog where `status == pending` AND `target` not in retired-components list AND not already in journal as rejected/dead.
 
 If no candidate → `RESULT:NOOP empty-backlog`, exit.
 
