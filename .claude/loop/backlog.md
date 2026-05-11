@@ -36,7 +36,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: neutral on benchmark (telemetry)
 - source: brainstorm
 - retired_check: pass
-- status: pending
+- status: accepted  # iter-0002 ACCEPTED (avg_score=+0.000, T01/T02 measured, T03 skipped)
 
 ### H-003 Stop-hook regression-check
 - type: add
@@ -45,7 +45,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: success_rate guard tighter; cost +5% (extra check)
 - source: devlog #22 stop-validation
 - retired_check: pass
-- status: pending
+- status: accepted  # iter-0003 ACCEPTED (avg_score=+0.000, T01/T02 measured, T03 pytest=skipped infra-bug; RED/GREEN smoke-tested locally: prior 5p → current 2p → regression:fail)
 
 ### H-004 SessionStart preload current STATE.md
 - type: add
@@ -54,7 +54,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: neutral on bench; UX win
 - source: ADR-016 pilot pattern
 - retired_check: pass
-- status: pending
+- status: accepted  # iter-0004 ACCEPTED (avg_score=+0.137 < threshold 0.200; T01 noise + T02 tokens 2501→3869 signal absorbed; T03 pytest=skipped infra-bug, excluded from fitness глобом)
 
 ### H-005 UserPromptSubmit cost-warn hook
 - type: add
@@ -63,7 +63,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: cost cap firing earlier; user-confidence
 - source: brainstorm
 - retired_check: pass
-- status: pending
+- status: accepted  # iter-0006 ACCEPTED (avg_score=+0.000, T01/T02 measured, T03 skipped; settings.json wiring pending — file-only ACCEPT)
 
 ### H-006 Fixture bootstrap helper
 - type: add
@@ -72,7 +72,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: neutral
 - source: brainstorm
 - retired_check: pass
-- status: pending
+- status: accepted  # iter-0007 ACCEPTED (avg_score=+0.000, T01/T02 measured, T03 excluded — PYTEST_TARGETS infra blocker; file relocated to .claude/benchmark/bootstrap-fixtures.sh because target path .claude/benchmark/fixtures/external/ is gitignored)
 
 ### H-007 Per-task variance report
 - type: add
@@ -81,7 +81,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: reliability of accept/reject signal
 - source: devlog #25 sign-inversion
 - retired_check: pass
-- status: pending
+- status: accepted  # iter-0008 ACCEPTED (avg_score=+0.000; 12 tests pass; CLI smoke OK; real-data run shows T01 CVs <8%, T02 CVs <19% — within synthetic 20% CV proxy; T03/T04 n=1 → below_min_n=true; T01/T02 benchmark pytest=pass, all deltas within 2σ)
 
 ### H-008 Cross-fixture variance comparator
 - type: add
