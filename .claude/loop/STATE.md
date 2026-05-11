@@ -1,21 +1,21 @@
 ---
-iteration: 12
+iteration: 13
 started: 2026-05-11T03:30:00Z
 mode: smoke-v2-running
-baseline_source: "extracted from .claude/benchmark/reports/T0{1,2,3}-B-ourharness*.json (devlog #24, #25); T01/T02 refreshed iter-0011; T04 second holdout iter-0010"
+baseline_source: "extracted from .claude/benchmark/reports/T0{1,2,3}-B-ourharness*.json (devlog #24, #25); T01/T02 refreshed iter-0012; T04 second holdout iter-0010"
 baseline_snapshot:
   T01:
-    tokens: {mean: 1756, sigma: 482, n: 10, synthetic_sigma: true, note: "iter-0011 12in+1744out=1756 (delta -10 vs prev 1766 trivial noise); baseline updated on accept"}
-    turns:  {mean: 7, sigma: 1.8, n: 10, synthetic_sigma: true}
-    files:  {mean: 9, sigma: 2.0, n: 10, synthetic_sigma: true, note: "iter-0011 files=9 (delta -1 vs prev 10 within 2σ=4); excludes .claude inject artifacts"}
-    cost_usd: {mean: 0.238, sigma: 0.06, n: 10, synthetic_sigma: true}
+    tokens: {mean: 1698, sigma: 482, n: 11, synthetic_sigma: true, note: "iter-0012 12in+1686out=1698 (delta -58 vs prev 1756 trivial noise within 2σ=964); baseline rolled on accept"}
+    turns:  {mean: 7, sigma: 1.8, n: 11, synthetic_sigma: true}
+    files:  {mean: 10, sigma: 2.0, n: 11, synthetic_sigma: true, note: "iter-0012 files=10 (delta +1 vs prev 9 within 2σ=4); excludes .claude inject artifacts"}
+    cost_usd: {mean: 0.335, sigma: 0.06, n: 11, synthetic_sigma: true, note: "iter-0012 cost=0.335 (delta +0.097 vs prev 0.238 within 2σ=0.12 borderline — wider cache_create=32264 vs prev iter; cache-warmup variance, not signal)"}
     success_rate: 1.0
     fixtures: [sample-py-app]
   T02:
-    tokens: {mean: 2659, sigma: 600, n: 10, synthetic_sigma: true, note: "iter-0011 17in+2642out=2659 (delta +315 vs prev 2344 within 2σ=1200 noise — T02 drifts back toward iter-0008 levels)"}
-    turns:  {mean: 12, sigma: 2.6, n: 10, synthetic_sigma: true, note: "iter-0011 turns=12 (delta +2 vs prev 10 within 2σ=5.2)"}
-    files:  {mean: 11, sigma: 2.2, n: 10, synthetic_sigma: true}
-    cost_usd: {mean: 0.364, sigma: 0.08, n: 10, synthetic_sigma: true, note: "iter-0011 cost=0.364 (delta +0.042 vs prev 0.322 within 2σ=0.16)"}
+    tokens: {mean: 2585, sigma: 600, n: 11, synthetic_sigma: true, note: "iter-0012 16in+2569out=2585 (delta -74 vs prev 2659 within 2σ=1200 noise; T02 still drifts within band)"}
+    turns:  {mean: 11, sigma: 2.6, n: 11, synthetic_sigma: true, note: "iter-0012 turns=11 (delta -1 vs prev 12 within 2σ=5.2)"}
+    files:  {mean: 11, sigma: 2.2, n: 11, synthetic_sigma: true}
+    cost_usd: {mean: 0.344, sigma: 0.08, n: 11, synthetic_sigma: true, note: "iter-0012 cost=0.344 (delta -0.020 vs prev 0.364 within 2σ=0.16)"}
     success_rate: 1.0
     fixtures: [sample-py-app]
   T03:
@@ -33,8 +33,8 @@ baseline_snapshot:
     success_rate: 1.0
     fixtures: [FastApi-Base]
 in_flight_hypothesis: null
-last_accept_iteration: 11
-total_accepted: 9
+last_accept_iteration: 12
+total_accepted: 10
 total_rejected: 0
 total_proposals: 0
 total_holdout_runs: 2
@@ -49,7 +49,7 @@ last_holdout:
 
 # Loop state
 
-**Status**: 9 consecutive ACCEPTs (iter-0001 H-001 loop-status, iter-0002 H-002 aggregate-metrics, iter-0003 H-003 stop-hook regression gate, iter-0004 H-004 session-context STATE inject, iter-0006 H-005 cost-warn hook, iter-0007 H-006 bootstrap-fixtures.sh, iter-0008 H-007 variance-report.py, iter-0009 H-008 cross-fixture-check.py, iter-0011 H-009 proposals-review.py) + iter-0005 first HOLDOUT pass + iter-0010 second HOLDOUT pass (overfit-detect: ALL metrics improved vs iter-0005 — tokens -15.5%, turns -17%, cost -14.7%, no regression direction). T03/T04 both pytest=skipped (headless-runner.sh PYTEST_TARGETS scope bug since iter-0003). iter-0011 H-009 added `.claude/loop/proposals-review.py` (191 LOC) + `test_proposals_review.py` (236 LOC, 19 tests all pass): scans `.claude/loop/proposals/iter-NNNN-<basename>.diff`, cross-refs `journal.md` PROPOSAL lines for H-XXX/target/timestamp, generates `.claude/loop/proposals/REVIEW.md` index grouped by status with diff stats (+added/-removed) per pending; supports `--stdout` (no-write), `--check` (exit 1 if any pending → CI gating). Currently `total_proposals=0` so REVIEW.md regenerates as "_No proposals awaiting review._" — tool will populate when first protected-file hypothesis fires (e.g., H-018/H-020/H-021/H-022/H-023/H-024/H-025/H-028/H-029 in backlog all target protected files). Synthetic smoke: synth diff `iter-0011-run.sh.diff` (+1/-0) + synth journal PROPOSAL line → REVIEW.md correctly lists `iter-0011 — H-018 .claude/loop/run.sh` with diff stats and journal timestamp; `--check` exits 1 when pending. Benchmark T01 (7 turns, $0.238, tokens=1756, files=9, pytest=pass) + T02 (12 turns, $0.364, tokens=2659, files=11, pytest=pass) on sample-py-app; T03 excluded from fitness glob (PYTEST_TARGETS infra blocker since iter-0003). Fitness ACCEPT avg_score=+0.000 (T01 tokens delta -10 vs μ=1766 trivial; files delta -1 within 2σ=4; T02 tokens delta +315 vs μ=2344 within 2σ=1200; turns delta +2 within 2σ=5.2; cost delta +0.042 within 2σ=0.16; all noise). Tier 0 PASS (12/12). git merge --ff-only 3ac0cc5. Open infra debt unchanged: (a) PYTEST_TARGETS recursive scan; (b) T04 fixture_filter↔baseline mismatch; (c) PROMPT.md inject-from path semantic mismatch; (d) corpus has zero task observed on ≥2 fixtures, so cross-fixture-check.py is currently a tripwire-only tool; (e) proposals-review.py is a tripwire-only tool until first protected-file hypothesis runs (will become active when H-018/H-020/H-021..H-025/H-028/H-029 fire — top of those is H-018 git stash). Next iter candidate: H-010 security-reviewer agent (top remaining add), or first protected-file proposal-only hypothesis (H-018) which would activate proposals-review.py for the first time.
+**Status**: 10 consecutive ACCEPTs (iter-0001 H-001 loop-status, iter-0002 H-002 aggregate-metrics, iter-0003 H-003 stop-hook regression gate, iter-0004 H-004 session-context STATE inject, iter-0006 H-005 cost-warn hook, iter-0007 H-006 bootstrap-fixtures.sh, iter-0008 H-007 variance-report.py, iter-0009 H-008 cross-fixture-check.py, iter-0011 H-009 proposals-review.py, iter-0012 H-010 security-reviewer agent) + iter-0005 first HOLDOUT pass + iter-0010 second HOLDOUT pass (overfit-detect: ALL metrics improved vs iter-0005 — tokens -15.5%, turns -17%, cost -14.7%, no regression direction). T03/T04 both pytest=skipped (headless-runner.sh PYTEST_TARGETS scope bug since iter-0003). iter-0012 H-010 added `.claude/agents/security-reviewer.md` (66 lines): opt-in subagent для diff-level security review (PROPOSAL diffs в `.claude/loop/proposals/`, hook changes, settings.json delta). frontmatter: tools=Read,Glob,Grep,Bash, model=opus; description явно ограничивает scope diff-level (не PR-wide — built-in `/security-review` skill держит ту нишу). 7-item checklist: permissions delta, hook script safety, secret leakage, exec paths, network egress, dangerous-cmd bypass, scope creep. Verdict format: pass | pass-with-notes | block. Tripwire-only до первого invocation main thread'ом против реальной H-018+ PROPOSAL diff'ы. Anti-duplicate rationale vs ADR-011 retired code-reviewer: agent vs skill дисциплина — `/security-review` skill = guidance string для main thread; agent = isolated subprocess для контекст-heavy diff анализа (spawn policy (a) context-isolation). Не мешает: skill не дублируется, agent invoked явно когда main thread решает изолировать. Benchmark T01 (7 turns, $0.335, tokens=1698, files=10, pytest=pass) + T02 (11 turns, $0.344, tokens=2585, files=11, pytest=pass) on sample-py-app; T03 excluded from fitness glob (PYTEST_TARGETS infra blocker since iter-0003). Fitness ACCEPT avg_score=+0.000 (T01 tokens delta -58 vs μ=1756 within 2σ=964 noise; T01 files delta +1 within 2σ=4; T01 cost delta +0.097 within 2σ=0.12 borderline cache-warmup variance; T02 tokens delta -74 within 2σ=1200; T02 turns delta -1 within 2σ=5.2; T02 cost delta -0.020 within 2σ=0.16; all noise). Tier 0 PASS (12/12). git merge --ff-only 9a63821. Open infra debt unchanged: (a) PYTEST_TARGETS recursive scan; (b) T04 fixture_filter↔baseline mismatch; (c) PROMPT.md inject-from path semantic mismatch; (d) corpus has zero task observed on ≥2 fixtures, so cross-fixture-check.py is currently a tripwire-only tool; (e) proposals-review.py is a tripwire-only tool until first protected-file hypothesis runs; (f) NEW — security-reviewer agent is a tripwire-only tool until first PROPOSAL diff fires (H-018 git stash is top pending protected; would activate both proposals-review.py AND security-reviewer in one shot). Next iter candidate: H-018 (git stash before each iteration, PROTECTED → proposal-only path, would write first diff to proposals/ and end-to-end exercise both tripwire tools), or H-011 retire dangerous-cmd-block.sh (retire-bias still 3 iters away — iter-0015 holdout cadence).
 
 ## Baseline caveats
 

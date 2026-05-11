@@ -108,7 +108,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: cost +20% когда invoked; success rate ↑ для security tasks
 - source: community:everything-claude-code (Anthropic Hackathon winner)
 - retired_check: pass (opt-in, not mandatory; spawn policy (a) — context isolation)
-- status: pending
+- status: accepted  # iter-0012 ACCEPTED (avg_score=+0.000; 66-line agent file: tools=Read/Glob/Grep/Bash, model=opus, 7-item checklist; T01/T02 benchmark pytest=pass, all deltas within 2σ; tripwire-only until first PROPOSAL diff fires)
 
 ## RETIRE candidates (5)
 
