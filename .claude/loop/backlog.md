@@ -99,7 +99,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: governance, neutral on bench
 - source: brainstorm
 - retired_check: pass
-- status: pending
+- status: accepted  # iter-0011 ACCEPTED (avg_score=+0.000; 19 tests pass; CLI smoke OK — synth diff + journal PROPOSAL → REVIEW.md correctly indexes; --check exit 1 when pending; tripwire-only until first H-018/H-020/H-021..H-025/H-028/H-029 fires; T01/T02 benchmark pytest=pass, all deltas within 2σ)
 
 ### H-010 ECC AgentShield-style security review (opt-in)
 - type: add

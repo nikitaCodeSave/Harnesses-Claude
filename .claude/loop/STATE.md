@@ -1,21 +1,21 @@
 ---
-iteration: 10
+iteration: 12
 started: 2026-05-11T03:30:00Z
 mode: smoke-v2-running
-baseline_source: "extracted from .claude/benchmark/reports/T0{1,2,3}-B-ourharness*.json (devlog #24, #25); T01/T02 refreshed iter-0009; T04 first holdout iter-0005"
+baseline_source: "extracted from .claude/benchmark/reports/T0{1,2,3}-B-ourharness*.json (devlog #24, #25); T01/T02 refreshed iter-0011; T04 second holdout iter-0010"
 baseline_snapshot:
   T01:
-    tokens: {mean: 1766, sigma: 482, n: 9, synthetic_sigma: true, note: "iter-0009 12in+1754out=1766; baseline updated on accept"}
-    turns:  {mean: 7, sigma: 1.8, n: 9, synthetic_sigma: true}
-    files:  {mean: 10, sigma: 2.0, n: 9, synthetic_sigma: true, note: "iter-0001 accept — fallback find-newer count, excludes .claude inject artifacts"}
-    cost_usd: {mean: 0.238, sigma: 0.06, n: 9, synthetic_sigma: true}
+    tokens: {mean: 1756, sigma: 482, n: 10, synthetic_sigma: true, note: "iter-0011 12in+1744out=1756 (delta -10 vs prev 1766 trivial noise); baseline updated on accept"}
+    turns:  {mean: 7, sigma: 1.8, n: 10, synthetic_sigma: true}
+    files:  {mean: 9, sigma: 2.0, n: 10, synthetic_sigma: true, note: "iter-0011 files=9 (delta -1 vs prev 10 within 2σ=4); excludes .claude inject artifacts"}
+    cost_usd: {mean: 0.238, sigma: 0.06, n: 10, synthetic_sigma: true}
     success_rate: 1.0
     fixtures: [sample-py-app]
   T02:
-    tokens: {mean: 2344, sigma: 600, n: 9, synthetic_sigma: true, note: "iter-0009 15in+2329out=2344 (delta -462 vs prev 2806 within 2σ=1200 noise — T02 drift further toward low end of window)"}
-    turns:  {mean: 10, sigma: 2.6, n: 9, synthetic_sigma: true}
-    files:  {mean: 11, sigma: 2.2, n: 9, synthetic_sigma: true}
-    cost_usd: {mean: 0.322, sigma: 0.08, n: 9, synthetic_sigma: true}
+    tokens: {mean: 2659, sigma: 600, n: 10, synthetic_sigma: true, note: "iter-0011 17in+2642out=2659 (delta +315 vs prev 2344 within 2σ=1200 noise — T02 drifts back toward iter-0008 levels)"}
+    turns:  {mean: 12, sigma: 2.6, n: 10, synthetic_sigma: true, note: "iter-0011 turns=12 (delta +2 vs prev 10 within 2σ=5.2)"}
+    files:  {mean: 11, sigma: 2.2, n: 10, synthetic_sigma: true}
+    cost_usd: {mean: 0.364, sigma: 0.08, n: 10, synthetic_sigma: true, note: "iter-0011 cost=0.364 (delta +0.042 vs prev 0.322 within 2σ=0.16)"}
     success_rate: 1.0
     fixtures: [sample-py-app]
   T03:
@@ -33,22 +33,23 @@ baseline_snapshot:
     success_rate: 1.0
     fixtures: [FastApi-Base]
 in_flight_hypothesis: null
-last_accept_iteration: 9
-total_accepted: 8
+last_accept_iteration: 11
+total_accepted: 9
 total_rejected: 0
 total_proposals: 0
-total_holdout_runs: 1
+total_holdout_runs: 2
 last_holdout:
-  iteration: 5
+  iteration: 10
   task: T04
   fixture: full-stack-fastapi-template
   result: pass
-  notes: "first holdout — no prior to compare for overfit-detect. Tier0=pass; Claude exit=0, 24 turns, $0.91, files=4 (correctly placed in backend/app/* and backend/tests/* per fixture conventions, not src/users/* per task literal); pytest=skipped (PYTEST_TARGETS scope bug — same infra issue blocking T03 since iter-0003). Tokens 11721 (in+out), turns 24, cost $0.91 establish first holdout reading; future holdouts compare against these absolute values for overfit signal. Caveat: T04 baseline_snapshot.T04 (n=1, mean tokens=2832) was historically from removed FastApi-Base fixture (different layout) — corpus.yml T04 fixture_filter mismatch; absolute holdout↔train comparison not meaningful until either (a) T04 task rewritten for full-stack-fastapi-template layout or (b) FastApi-Base re-added as fixture inside .claude/."
+  notes: "second holdout — first overfit-detect comparison available. Tier0=pass; Claude exit=0, 20 turns, $0.776, files=4 (same correct adaptation as iter-0005: backend/app/models.py, backend/app/alembic/versions/0001_add_user_phone.py, backend/tests/test_user_phone.py — adapted T04 literal src/users/* to fixture convention). Tokens in+out=9904 (in=25, out=9879; cache_create=28630, cache_read=699722), wall=127s. pytest=skipped (PYTEST_TARGETS scope bug — same infra debt since iter-0003). Overfit-detect vs iter-0005: ALL 4 main metrics IMPROVED (tokens 11721→9904 -15.5%, turns 24→20 -17%, cost $0.91→$0.776 -14.7%, files 4→4 same, wall 153s→127s -17%) — direction clearly NOT toward overfit. With n=2 holdout samples no σ band yet (synthetic σ would be 20% CV); next holdout iter-0015 provides 3-point series. Note: most accepted hypotheses since iter-0005 were telemetry/operator tools (H-005..H-008 + H-001..H-003), only H-004 (session-context STATE inject) touches runtime context — present in both holdouts. Improvement likely natural variance dominated. Caveat unchanged: baseline_snapshot.T04 (n=1, mean tokens=2832) historically from removed FastApi-Base — absolute holdout↔train comparison not meaningful until task rewrite or FastApi-Base re-add. iter-0005→iter-0010 absolute holdout comparison IS meaningful (same task, same fixture)."
+  prior_holdout: {iteration: 5, tokens: 11721, turns: 24, cost: 0.91, files: 4, wall: 153}
 ---
 
 # Loop state
 
-**Status**: 8 consecutive ACCEPTs (iter-0001 H-001 loop-status, iter-0002 H-002 aggregate-metrics, iter-0003 H-003 stop-hook regression gate, iter-0004 H-004 session-context STATE inject, iter-0006 H-005 cost-warn hook, iter-0007 H-006 bootstrap-fixtures.sh, iter-0008 H-007 variance-report.py, iter-0009 H-008 cross-fixture-check.py) + iter-0005 first HOLDOUT pass. T03/T04 both pytest=skipped (headless-runner.sh PYTEST_TARGETS scope bug since iter-0003). iter-0009 H-008 added `.claude/loop/cross-fixture-check.py` (272 LOC) + `test_cross_fixture_check.py` (211 LOC, 17 tests all pass): groups reports by task→fixture→[metrics], for tasks with ≥2 fixtures computes (a) cross-fixture spread = max/min - 1 per metric (flag when > 30% AND each fixture has n ≥ min_n=2 reports); (b) sign-inversion vs baseline_snapshot — when ≥2 fixtures' baseline-relative deltas have OPPOSITE signs AND each |delta| > noise threshold (10%) → flag. Direct #25 lesson: T03 had flipped sign between FastApi-Base and full-stack-fastapi-template causing false ACCEPT. Real-data run against current iter-0002..iter-0009 reports: T01/T02 only on sample-py-app, T03/T04 only on full-stack-fastapi-template — no task has ≥2 fixtures yet → tool correctly reports "(no tasks with ≥2 fixtures observed)". Synthetic CLI smoke: 1000 vs 3000 tokens across two fixtures → spread=200% flagged; with synthetic baseline=2000 fxA=-50%/fxB=+50% → SIGN_INVERSION flagged; --fail-on-flag → exit 1. yaml import gracefully falls back when not available (same pattern as aggregate-metrics.py / variance-report.py — sign_inversion needs yaml for STATE.md parse; spread doesn't). Benchmark T01 (7 turns, $0.238, tokens=1766, files=10, pytest=pass) + T02 (10 turns, $0.322, tokens=2344, files=11, pytest=pass) on sample-py-app; T03 excluded from fitness glob (PYTEST_TARGETS infra blocker since iter-0003). Fitness ACCEPT avg_score=+0.000 (T01 tokens delta +160 vs μ=1606 within 2σ=964; T02 tokens delta -462 vs μ=2806 within 2σ=1200; turns/files/cost all within noise). Open infra debt unchanged: (a) PYTEST_TARGETS recursive scan; (b) T04 fixture_filter↔baseline mismatch; (c) PROMPT.md inject-from path semantic mismatch; (d) NEW — corpus has zero task observed on ≥2 fixtures, so cross-fixture-check.py is currently a tripwire-only tool (active value emerges when same task ran on multi-fixture).
+**Status**: 9 consecutive ACCEPTs (iter-0001 H-001 loop-status, iter-0002 H-002 aggregate-metrics, iter-0003 H-003 stop-hook regression gate, iter-0004 H-004 session-context STATE inject, iter-0006 H-005 cost-warn hook, iter-0007 H-006 bootstrap-fixtures.sh, iter-0008 H-007 variance-report.py, iter-0009 H-008 cross-fixture-check.py, iter-0011 H-009 proposals-review.py) + iter-0005 first HOLDOUT pass + iter-0010 second HOLDOUT pass (overfit-detect: ALL metrics improved vs iter-0005 — tokens -15.5%, turns -17%, cost -14.7%, no regression direction). T03/T04 both pytest=skipped (headless-runner.sh PYTEST_TARGETS scope bug since iter-0003). iter-0011 H-009 added `.claude/loop/proposals-review.py` (191 LOC) + `test_proposals_review.py` (236 LOC, 19 tests all pass): scans `.claude/loop/proposals/iter-NNNN-<basename>.diff`, cross-refs `journal.md` PROPOSAL lines for H-XXX/target/timestamp, generates `.claude/loop/proposals/REVIEW.md` index grouped by status with diff stats (+added/-removed) per pending; supports `--stdout` (no-write), `--check` (exit 1 if any pending → CI gating). Currently `total_proposals=0` so REVIEW.md regenerates as "_No proposals awaiting review._" — tool will populate when first protected-file hypothesis fires (e.g., H-018/H-020/H-021/H-022/H-023/H-024/H-025/H-028/H-029 in backlog all target protected files). Synthetic smoke: synth diff `iter-0011-run.sh.diff` (+1/-0) + synth journal PROPOSAL line → REVIEW.md correctly lists `iter-0011 — H-018 .claude/loop/run.sh` with diff stats and journal timestamp; `--check` exits 1 when pending. Benchmark T01 (7 turns, $0.238, tokens=1756, files=9, pytest=pass) + T02 (12 turns, $0.364, tokens=2659, files=11, pytest=pass) on sample-py-app; T03 excluded from fitness glob (PYTEST_TARGETS infra blocker since iter-0003). Fitness ACCEPT avg_score=+0.000 (T01 tokens delta -10 vs μ=1766 trivial; files delta -1 within 2σ=4; T02 tokens delta +315 vs μ=2344 within 2σ=1200; turns delta +2 within 2σ=5.2; cost delta +0.042 within 2σ=0.16; all noise). Tier 0 PASS (12/12). git merge --ff-only 3ac0cc5. Open infra debt unchanged: (a) PYTEST_TARGETS recursive scan; (b) T04 fixture_filter↔baseline mismatch; (c) PROMPT.md inject-from path semantic mismatch; (d) corpus has zero task observed on ≥2 fixtures, so cross-fixture-check.py is currently a tripwire-only tool; (e) proposals-review.py is a tripwire-only tool until first protected-file hypothesis runs (will become active when H-018/H-020/H-021..H-025/H-028/H-029 fire — top of those is H-018 git stash). Next iter candidate: H-010 security-reviewer agent (top remaining add), or first protected-file proposal-only hypothesis (H-018) which would activate proposals-review.py for the first time.
 
 ## Baseline caveats
 
