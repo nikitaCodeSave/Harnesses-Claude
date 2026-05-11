@@ -90,7 +90,7 @@ list from CLAUDE.md, principles.md anti-patterns, decisions-2026Q2.md archive.
 - expected_delta: reduces false-positive accepts
 - source: devlog #25
 - retired_check: pass
-- status: pending
+- status: accepted  # iter-0009 ACCEPTED (avg_score=+0.000; 17 tests pass; CLI smoke OK — spread 200% + SIGN_INVERSION detected on synthetic; real data has no task on ≥2 fixtures yet, tool acts as tripwire until corpus expands; T01/T02 benchmark pytest=pass, all deltas within 2σ)
 
 ### H-009 Proposals review index
 - type: add
