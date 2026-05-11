@@ -1,21 +1,21 @@
 ---
-iteration: 1
-started: 2026-05-11T00:15:00Z
-mode: smoke
+iteration: 2
+started: 2026-05-11T03:30:00Z
+mode: smoke-v2-running
 baseline_source: "extracted from .claude/benchmark/reports/T0{1,2,3}-B-ourharness*.json (devlog #24, #25)"
 baseline_snapshot:
   T01:
-    tokens: {mean: 2114, sigma: 423, n: 1, synthetic_sigma: true}
-    turns:  {mean: 9, sigma: 1.8, n: 1, synthetic_sigma: true}
-    files:  {mean: 90, sigma: 18, n: 1, synthetic_sigma: true, note: "includes harness inject artifacts"}
-    cost_usd: {mean: 0.28, sigma: 0.06, n: 1, synthetic_sigma: true}
+    tokens: {mean: 2528, sigma: 423, n: 2, synthetic_sigma: true}
+    turns:  {mean: 10, sigma: 1.8, n: 2, synthetic_sigma: true}
+    files:  {mean: 10, sigma: 2.0, n: 2, synthetic_sigma: true, note: "iter-0001 accept — fallback find-newer count, excludes .claude inject artifacts"}
+    cost_usd: {mean: 0.308, sigma: 0.06, n: 2, synthetic_sigma: true}
     success_rate: 1.0
     fixtures: [sample-py-app]
   T02:
-    tokens: {mean: 3002, sigma: 600, n: 1, synthetic_sigma: true}
-    turns:  {mean: 13, sigma: 2.6, n: 1, synthetic_sigma: true}
-    files:  {mean: 11, sigma: 2.2, n: 1, synthetic_sigma: true}
-    cost_usd: {mean: 0.39, sigma: 0.08, n: 1, synthetic_sigma: true}
+    tokens: {mean: 2415, sigma: 600, n: 2, synthetic_sigma: true}
+    turns:  {mean: 10, sigma: 2.6, n: 2, synthetic_sigma: true}
+    files:  {mean: 11, sigma: 2.2, n: 2, synthetic_sigma: true}
+    cost_usd: {mean: 0.319, sigma: 0.08, n: 2, synthetic_sigma: true}
     success_rate: 1.0
     fixtures: [sample-py-app]
   T03:
@@ -33,8 +33,8 @@ baseline_snapshot:
     success_rate: 1.0
     fixtures: [FastApi-Base]
 in_flight_hypothesis: null
-last_accept_iteration: 0
-total_accepted: 0
+last_accept_iteration: 1
+total_accepted: 1
 total_rejected: 0
 total_proposals: 0
 total_holdout_runs: 0
@@ -42,7 +42,7 @@ total_holdout_runs: 0
 
 # Loop state
 
-**Status**: pre-smoke. Baseline populated from existing reports. Ready for smoke loop.
+**Status**: first ACCEPT (iter-0001, H-001). T03 skipped (external fixture gitignored, requires separate fix). Baseline T01/T02 updated from candidate measurements.
 
 ## Baseline caveats
 

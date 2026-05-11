@@ -41,17 +41,46 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ -z "$TASK_FILE"    || ! -f "$TASK_FILE"    ]] && { echo "FAIL: --task <yaml> required (found: '$TASK_FILE')" >&2; exit 2; }
-[[ -z "$FIXTURE_PATH" || ! -d "$FIXTURE_PATH" ]] && { echo "FAIL: --fixture <dir> required (found: '$FIXTURE_PATH')" >&2; exit 2; }
 command -v claude >/dev/null 2>&1 || { echo "FAIL: 'claude' CLI not found in PATH" >&2; exit 2; }
 command -v jq     >/dev/null 2>&1 || { echo "FAIL: 'jq' required for metrics parsing" >&2; exit 2; }
+
+# HARNESS_ROOT: prefer $CLAUDE_PROJECT_DIR (set by Claude Code session) — это main harness root
+# даже когда script invoked из worktree. Fallback to script location for standalone use
+# (cross-harness benchmarks per devlog #24/25, manual invocations).
+HARNESS_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+
+# Path resolution: try as-is first; if missing, fall back to $HARNESS_ROOT/<path>.
+# This makes the runner cwd-agnostic — callers (loop iter from worktree, manual
+# benchmark from any pwd) get consistent path resolution. Absolute paths pass
+# through unchanged. Smoke iter-0001 lesson: relative path from worktree pwd
+# missed external/ fixtures (gitignored, not in worktree checkout).
+resolve_path() {
+    local p="$1" kind="$2"  # kind: file|dir
+    [[ -z "$p" ]] && { echo ""; return; }
+    case "$kind" in
+        file)
+            [[ -f "$p" ]]                && { echo "$p"; return; }
+            [[ -f "$HARNESS_ROOT/$p" ]]  && { echo "$HARNESS_ROOT/$p"; return; }
+            ;;
+        dir)
+            [[ -d "$p" ]]                && { echo "$p"; return; }
+            [[ -d "$HARNESS_ROOT/$p" ]]  && { echo "$HARNESS_ROOT/$p"; return; }
+            ;;
+    esac
+    echo "$p"  # let validation below produce clear error
+}
+
+TASK_FILE="$(resolve_path "$TASK_FILE" file)"
+FIXTURE_PATH="$(resolve_path "$FIXTURE_PATH" dir)"
+[[ -n "$INJECT_FROM" ]] && INJECT_FROM="$(resolve_path "$INJECT_FROM" dir)"
+
+[[ -z "$TASK_FILE"    || ! -f "$TASK_FILE"    ]] && { echo "FAIL: --task <yaml> required (found: '$TASK_FILE'; tried as-is + \$HARNESS_ROOT prefix)" >&2; exit 2; }
+[[ -z "$FIXTURE_PATH" || ! -d "$FIXTURE_PATH" ]] && { echo "FAIL: --fixture <dir> required (found: '$FIXTURE_PATH'; tried as-is + \$HARNESS_ROOT prefix)" >&2; exit 2; }
 
 TASK_ID=$(grep -E '^id:' "$TASK_FILE" | head -1 | sed -E 's/^id:[[:space:]]*//;s/^"//;s/"$//' || true)
 PROMPT=$(grep -E '^prompt:' "$TASK_FILE" | head -1 | sed -E 's/^prompt:[[:space:]]*//;s/^"//;s/"$//' || true)
 [[ -z "$TASK_ID" ]] && { echo "FAIL: task missing 'id' field" >&2; exit 2; }
 [[ -z "$PROMPT"  ]] && { echo "FAIL: task missing single-line 'prompt' field" >&2; exit 2; }
-
-HARNESS_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 FIXTURE_NAME=$(basename "$FIXTURE_PATH")
 CLONE_DIR="/tmp/bench-${TASK_ID}-${FIXTURE_NAME}-${TS}"
