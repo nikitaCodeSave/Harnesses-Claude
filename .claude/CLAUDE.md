@@ -27,16 +27,9 @@ built-in'ами, и потребность повторяется. **Single-inci
 
 ## API constraint (КРИТИЧНО)
 
-Harness работает строго на подписке Claude Code в CLI. **Anthropic API
-не используется**: managed-agents (Memory stores, Dreams, Outcomes), beta
-headers (`--betas`, `managed-agents-*`, `dreaming-*`), `--max-budget-usd`,
-`ANTHROPIC_API_KEY`, prompt caching / batch / files / citations API —
-out of scope. Если practice требует API-key — её нет в harness'е, точка.
-Концепции из API-only фич переносятся только при условии полной
-реализации на CLI-примитивах (hooks, skills, subagents, slash commands,
-`claude --print --add-dir --agents` для headless CI на OAuth-подписке).
-`--bare` strictly требует `ANTHROPIC_API_KEY` (per `claude --help`) —
-out of scope.
+Harness строго на CLI-подписке Claude Code. Anthropic API, managed-agents,
+beta headers, `--bare`, `--max-budget-usd` — **out of scope**. Полные
+invariants и допустимые переносы концепций — `.claude/rules/api-constraint.md`.
 
 ## Built-ins first (КРИТИЧНО)
 
@@ -110,9 +103,10 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 - `.claude/docs/archive/decisions-2026Q2.md` — full historical ADR log (frozen 2026-05-10), для контекстуальных «почему так» вопросов.
 - `.claude/docs/multi-agent.md` — multi-agent дисциплина, on-demand при делегировании.
 - `.claude/docs/benchmark.md` — 3-tier benchmark methodology.
+- `.claude/rules/api-constraint.md` — API/CLI constraint invariants (no Anthropic API).
 - `.claude/rules/testing.md` — testing invariants.
 - `.claude/rules/docs-discipline.md` — documentation invariants.
 - `.claude/skills/project-docs-bootstrap/` — action-skill для bootstrap canonical project docs.
 - `.claude/devlog/entries/` — recent entries (live); архив `entries/archive/`. Index via `python3 .claude/devlog/rebuild-index.py`.
-- `.claude/agents/` — `deliverable-planner`, `meta-creator`.
-- `.claude/hooks/` — `secret-scan`, `dangerous-cmd-block`, `auto-format`, `session-context`.
+- `.claude/agents/` — `meta-creator`, `security-reviewer`.
+- `.claude/hooks/` — `session-context`, `stop-validation`, `loop-protected-guard`, `cost-warn`.
