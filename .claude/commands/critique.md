@@ -137,41 +137,65 @@ When the critic returns, read `CRITIC.json`. **Counts come from arrays, not scal
 
 #### Step 3a — Schema conformance check (BEFORE rubric)
 
-The rubric below queries specific field paths and enum values. If the critic improvised the schema — renamed `overall_grade` → `grade`, invented a `FALSE_PREMISE` verdict, omitted `severity`, dropped the `context` block — every rubric query silently falls back to its default (`0` / empty string) and a flawed deliverable passes as "all clear". Verify shape before parsing:
+The rubric below queries specific field paths and enum values. If the critic improvised the schema — renamed `overall_grade` → `grade`, invented a `FALSE_PREMISE` verdict, omitted `severity`, dropped the `context` block, returned an empty `premortem_verification[]`, or flagged inputs broken via `blocking_issue` — every rubric query silently falls back to its default (`0` / empty string) and a flawed deliverable passes as "all clear". Verify shape and coverage before parsing:
 
 ```bash
+PV_LEN=$(jq '.premortem_verification | length' CRITIC.json 2>/dev/null)
+PM_LEN=$(jq '.failure_modes | length' PREMORTEM.json 2>/dev/null)
+LEN_OK="ok"
+if ! [[ "$PV_LEN" =~ ^[0-9]+$ ]] || ! [[ "$PM_LEN" =~ ^[0-9]+$ ]] || (( PV_LEN < PM_LEN )); then
+    LEN_OK="fail"
+fi
+
 SCHEMA_OK=$(jq -e '
     (.critic_version == "2.0")
     and (.context.git_head | type == "string")
     and (.context.iter_round | type == "number")
     and (.premortem_verification | type == "array")
     and (.new_findings | type == "array")
+    and (.verdict.blocking_issue == null)
     and (.evidence_quality.overall_grade | IN("high","medium","low"))
     and (.evidence_quality.reexecution_coverage | IN("yes_at_least_one","none_all_side_effects","no_runs_real"))
     and ([.premortem_verification[].severity] | all(. as $s | ["critical","major","minor"] | index($s) != null))
     and ([.premortem_verification[].verdict] | all(. as $v | ["addressed","documented_only","unclear","accept_risk"] | index($v) != null))
     and ([.premortem_verification[].accept_risk_quality] | all(. as $q | ["justified","weak","unjustified","n/a"] | index($q) != null))
+    and ([.new_findings[].severity] | all(. as $s | ["critical","major","minor"] | index($s) != null))
+    and ([.new_findings[].category] | all(. as $c | ["state","precondition","boundary","resource","concurrency","security","semantics","other"] | index($c) != null))
+    and ([.new_findings[].demonstrability] | all(. as $d | ["verified","reasoned"] | index($d) != null))
 ' CRITIC.json >/dev/null 2>&1 && echo ok || echo fail)
 
-if [[ "$SCHEMA_OK" != "ok" ]]; then
+if [[ "$SCHEMA_OK" != "ok" || "$LEN_OK" != "ok" ]]; then
+    SCHEMA_OK=fail  # collapse both signals into one for downstream branches
     echo "CRITIC.json does not conform to v2.0 schema — rubric cannot be applied safely."
     echo "Common drifts: renamed fields (grade vs overall_grade), invented verdicts (FALSE_PREMISE),"
-    echo "missing severity/accept_risk_quality, missing context block, nested reexecution object."
+    echo "missing severity/category/demonstrability, missing context block, nested reexecution object,"
+    echo "empty premortem_verification[] (silently bypasses per-item filters), non-null blocking_issue."
     # Diagnostic: show which checks fail
+    if [[ "$LEN_OK" != "ok" ]]; then
+        echo "  FAIL: premortem_verification has ${PV_LEN:-?} entries; PREMORTEM has ${PM_LEN:-?} failure_modes (critic must verify every one)"
+    fi
     for path in \
         '.critic_version == "2.0"' \
         '.context.git_head | type == "string"' \
         '.context.iter_round | type == "number"' \
+        '.premortem_verification | type == "array"' \
+        '.new_findings | type == "array"' \
+        '.verdict.blocking_issue == null' \
         '.evidence_quality.overall_grade | IN("high","medium","low")' \
         '.evidence_quality.reexecution_coverage | IN("yes_at_least_one","none_all_side_effects","no_runs_real")' \
         '[.premortem_verification[].severity] | all(. as $s | ["critical","major","minor"] | index($s) != null)' \
         '[.premortem_verification[].verdict] | all(. as $v | ["addressed","documented_only","unclear","accept_risk"] | index($v) != null)' \
-        '[.premortem_verification[].accept_risk_quality] | all(. as $q | ["justified","weak","unjustified","n/a"] | index($q) != null)'
+        '[.premortem_verification[].accept_risk_quality] | all(. as $q | ["justified","weak","unjustified","n/a"] | index($q) != null)' \
+        '[.new_findings[].severity] | all(. as $s | ["critical","major","minor"] | index($s) != null)' \
+        '[.new_findings[].category] | all(. as $c | ["state","precondition","boundary","resource","concurrency","security","semantics","other"] | index($c) != null)' \
+        '[.new_findings[].demonstrability] | all(. as $d | ["verified","reasoned"] | index($d) != null)'
     do
         jq -e "$path" CRITIC.json >/dev/null 2>&1 || echo "  FAIL: $path"
     done
 fi
 ```
+
+Note on the cross-length check: an empty or truncated `premortem_verification[]` is the most insidious drift — every per-item jq filter (`CRITICAL_UNADDRESSED`, `MAJOR_RATIO`, `ARISK_WEAK`) returns 0 on an empty array, so the rubric passes vacuously. Verifying `PV_LEN ≥ PM_LEN` against the actual `PREMORTEM.json` forces the critic to address every documented failure mode. `PV_LEN > PM_LEN` (duplicates/extras) does not fail this check by itself — the enum and value checks above catch malformed entries.
 
 **On schema fail** — do **not** proceed to the rubric below. The deliverable status is *unverified*, not "clean". Two options:
 

@@ -188,7 +188,7 @@ Write `CRITIC.json` in cwd. Single file. No other modifications.
 }
 ```
 
-**Source of truth — arrays, not scalars.** The `verdict.*` counters are derived from `premortem_verification[]` and `new_findings[]` for human readability. Downstream consumers (slash command rubric, optional hook) compute counts directly from arrays, not from scalars — so a miscounted scalar cannot bypass the gate. Fill scalars honestly anyway: inconsistency between scalar and array length is itself a signal that the verdict block is malformed.
+**Source of truth — arrays, not scalars.** The `verdict.*` counters are derived from `premortem_verification[]` and `new_findings[]` for human readability. The downstream consumer (the `/critique` slash command rubric) computes counts directly from arrays, not from scalars — so a miscounted scalar cannot bypass the gate. Fill scalars honestly anyway: inconsistency between scalar and array length is itself a signal that the verdict block is malformed.
 
 `evidence_quality` lives at `.evidence_quality.*` only — do not duplicate inside `.verdict`.
 
@@ -207,25 +207,37 @@ The downstream `/critique` rubric parses **only the exact field names and enum v
 - Adding a custom `severity` value. Allowed severities are exactly **`critical | major | minor`** — case-sensitive lowercase.
 - Adding a custom `accept_risk_quality` value. Allowed values are exactly **`justified | weak | unjustified | n/a`**. For non-`accept_risk` entries the value MUST be `"n/a"` (a string, not the JSON null).
 - Omitting `severity`, `verdict`, or `accept_risk_quality` from any `premortem_verification[]` entry. All three are required for every entry.
+- Omitting `severity`, `category`, or `demonstrability` from any `new_findings[]` entry. All three are required and pre-rubric strict-enum-checked the same way as PREMORTEM enums.
+- **Truncating `premortem_verification[]`**. The array must contain exactly one entry for every `failure_modes[]` entry in `PREMORTEM.json` — cross-length is checked in Step 3a. Skipping items because they "look fine" is not allowed; every PREMORTEM item must be verified.
+- Setting `verdict.blocking_issue` to a non-null string and exiting normally. `blocking_issue` is a hard signal that inputs are malformed — Step 3a will reject any CRITIC.json with a non-null `blocking_issue`. Use it only when you actually cannot review (missing PREMORTEM, schema violations), and report that condition to the user; do not paper over it.
 - Omitting the top-level `context` block. Provenance is mandatory — without it, re-spawn detection breaks.
 - Replacing arrays with objects (e.g. `premortem_verification` keyed by title). It is a flat array of entries; rubric iterates it.
-- Re-casing enum values. All severities and verdicts are lowercase. UPPER_CASE will fail the rubric's case-folded comparison only if combined with whitespace mangling; do not rely on it.
+- Re-casing enum values. All severities, verdicts, categories, and `demonstrability` values are **lowercase**. UPPER_CASE values fail the strict enum match in pre-rubric schema check (Step 3a) and never reach the rubric. Use `critical` not `Critical`/`CRITICAL`; `addressed` not `ADDRESSED`; etc.
 
-**Mandatory self-validation before exit.** After writing `CRITIC.json`, run this exact Bash snippet. If it does not print `schema_ok` on the last line, rewrite `CRITIC.json` to fix the violation and re-run until it does. Do NOT exit with a non-conforming file:
+**Mandatory self-validation before exit.** After writing `CRITIC.json`, run this exact Bash snippet from the cwd that contains `PREMORTEM.json` and `CRITIC.json`. If it does not print `schema_ok` on the last line, rewrite `CRITIC.json` to fix the violation and re-run until it does. Do NOT exit with a non-conforming file:
 
 ```bash
+PV_LEN=$(jq '.premortem_verification | length' CRITIC.json)
+PM_LEN=$(jq '.failure_modes | length' PREMORTEM.json)
 jq -e '.critic_version == "2.0"' CRITIC.json >/dev/null \
   && jq -e '.context.git_head | type == "string"' CRITIC.json >/dev/null \
   && jq -e '.context.iter_round | type == "number"' CRITIC.json >/dev/null \
   && jq -e '.premortem_verification | type == "array"' CRITIC.json >/dev/null \
   && jq -e '.new_findings | type == "array"' CRITIC.json >/dev/null \
+  && jq -e '.verdict.blocking_issue == null' CRITIC.json >/dev/null \
+  && [[ "$PV_LEN" -ge "$PM_LEN" ]] \
   && jq -e '.evidence_quality.overall_grade | IN("high","medium","low")' CRITIC.json >/dev/null \
   && jq -e '.evidence_quality.reexecution_coverage | IN("yes_at_least_one","none_all_side_effects","no_runs_real")' CRITIC.json >/dev/null \
   && jq -e '[.premortem_verification[].severity] | all(. as $s | ["critical","major","minor"] | index($s) != null)' CRITIC.json >/dev/null \
   && jq -e '[.premortem_verification[].verdict] | all(. as $v | ["addressed","documented_only","unclear","accept_risk"] | index($v) != null)' CRITIC.json >/dev/null \
   && jq -e '[.premortem_verification[].accept_risk_quality] | all(. as $q | ["justified","weak","unjustified","n/a"] | index($q) != null)' CRITIC.json >/dev/null \
+  && jq -e '[.new_findings[].severity] | all(. as $s | ["critical","major","minor"] | index($s) != null)' CRITIC.json >/dev/null \
+  && jq -e '[.new_findings[].category] | all(. as $c | ["state","precondition","boundary","resource","concurrency","security","semantics","other"] | index($c) != null)' CRITIC.json >/dev/null \
+  && jq -e '[.new_findings[].demonstrability] | all(. as $d | ["verified","reasoned"] | index($d) != null)' CRITIC.json >/dev/null \
   && echo "schema_ok"
 ```
+
+Note: the cross-length check `PV_LEN ≥ PM_LEN` ensures you produced a verdict for **every** failure mode in PREMORTEM — empty or truncated `premortem_verification[]` is a silent way to bypass the rubric (per-item filters return 0 on empty array, deliverable passes vacuously). If `PV_LEN > PM_LEN` you have duplicated/extra entries — recheck.
 
 If you find a structural reason the schema cannot capture your finding (e.g. a PREMORTEM entry that is genuinely false-premised), use the existing fields creatively rather than inventing new ones: pick the closest allowed `verdict`, then put the nuance in `note` and in `new_findings[]` as a separate `category: "semantics"` entry. The schema is the contract with the rubric; deviating from it disables the gate.
 
