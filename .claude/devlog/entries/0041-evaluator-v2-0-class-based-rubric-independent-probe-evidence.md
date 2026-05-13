@@ -130,6 +130,49 @@ Safe set для critical-severity entry = {`addressed`, `accept_risk` + `justifi
 4. **Severity dominates verdict — единый rule для critical class**. {addressed, accept_risk+justified} — safe set. Это закрывает not только known cases (documented_only, weak), но и unknown future verdicts (unclear, n/a, typos) by failing closed. Анти-паттерн: enumerate каждый unsafe label by name.
 5. **Provenance hash через context block работает как visible diff between rounds**. iter_round=1/2/3 + git_head делает self-respawn-on-identical-state visible. В R2 critic явно cross-checked vs R1 CRITIC.json (`Previous CRITIC.json` upload).
 
+## Post-convergence simplification (R4 cleanup, no further critic spawn)
+
+Operator review после R3 convergence выявил dead-code surface:
+
+- **ENFORCE path никогда не используется** — operator явно подтвердил «не буду включать в продовых проектах». Весь `EVALUATOR_GATE_ENFORCE=1` branch (decision="block", exit 2, blocking error messages) — dead code.
+- **REQUIRE_CRITIC дублирует /critique** — slash command сама пишет и парсит CRITIC.json через jq. Hook validating CRITIC schema, applying class-based filter, tracking iteration cap — это всё работает только когда `EVALUATOR_GATE_REQUIRE_CRITIC=1`, но эта валидация уже происходит inline в slash command Step 3.
+- **iteration cap в advisory mode — no-op** — `critic_iter_count` фильтрует `decision=="block"` log rows; в advisory mode `decision="advisory"`, никогда не накапливается.
+- **Legacy aliases без deprecation timeline** — `HARNESS_BENCH_MODE`, `.claude/.benchmark-active`, `DISCOVERY_GATE_REQUIRE_CRITIC`, `DISCOVERY_GATE_MAX_CRITIC_ITER`. Сохранялись для совместимости с benchmark/battle-test-runner, но если в продовых проектах они не нужны — мёртвый surface.
+
+**Решение**: hook simplified to reminder-only (328 → 146 строк). Делает три вещи:
+
+1. Активен только через `EVALUATOR_GATE_ACTIVE=1` env var или `.claude/.evaluator-active` marker file.
+2. Проверяет PREMORTEM (≥4 entries, ≥3 distinct categories) и EVIDENCE (≥3 runs).
+3. Если чего-то нет — stderr reminder + log row, **всегда exit 0**.
+
+**Cross-project portability — финальный layout**:
+
+- `~/.claude/hooks/discovery-gate.sh` — лежит везде, noop по default
+- `~/.claude/agents/discovery-critic.md` + `~/.claude/commands/critique.md` — portable, доступны из любого проекта
+- В `~/.claude/settings.json` (user-level) — registration Stop hook one-time
+- В новом проекте: ничего не делаешь. Хочешь активировать reminder — `touch .claude/.evaluator-active`. Хочешь вызвать критика — `/critique`.
+
+Cleanup также адресует другие feedback'и operator review:
+- **Silent `cd` failure** — теперь explicit stderr message перед exit 0
+- **Destructive deliverables case** — добавлен явный workaround в slash command Step 1 EVIDENCE schema description: «add one read-only post-state verification run (SELECT against new schema, ls created files, curl GET after POST, deploy health endpoint) — mark `safe-to-rerun` in notes»
+- **bash 4+ `${var,,}` dependency** — gone (вместе с CRITIC handling logic, единственным caller'ом)
+- **Case normalization в двух местах (jq + bash)** — gone, теперь только jq normalize в шапке проверок
+
+**Что осталось как «не сделано» из operator review**:
+- **`context.iter_round` not validated by hook** — moot: hook больше не validates CRITIC, только PREMORTEM/EVIDENCE artifact presence; slash command validates context block.
+- **`clamp MAX_CRITIC_ITER ≥ 2`** — moot: iteration cap полностью убран.
+- **Re-execution blocking на legitimate destructive deliverables** — workaround documented (см. выше); не code change.
+
+**Smoke test simplified hook** (8 сценариев, все pass):
+- pass-through when not active
+- active + missing PREMORTEM → reminder, exit 0
+- marker file activates
+- active + clean → no stderr, log=clean
+- category-spread fail → reminder, exit 0
+- old `EVALUATOR_GATE_ENFORCE=1`/`EVALUATOR_GATE_REQUIRE_CRITIC=1` ignored (advisory only)
+- legacy `HARNESS_BENCH_MODE=1` не активирует hook (alias gone, no log row)
+- cd failure visible через stderr
+
 ## Чего НЕ сделано (и почему)
 
 - **Hard time cap через Stop hook с wall-clock kill** — пользователь explicit'но отказался: «Opus 4.7 сам разберётся с контролем процессов». Soft target в prompt'е («prefer 5 sharp findings»). Deferred — если эмпирически runaway случится, добавим Stop hook с timeout. Сейчас вред от false positives превышает hypothetical benefit.

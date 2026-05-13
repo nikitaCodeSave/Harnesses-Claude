@@ -12,7 +12,7 @@ You are running an opt-in **Evaluator** pass on a high-stakes deliverable. This 
 
 ## Standalone operation
 
-This command + the `discovery-critic` agent are **self-sufficient**. `/critique` spawns the critic, parses the verdict via jq, and decides next steps directly — no hook or external infrastructure required. Hooks (e.g. `.claude/hooks/discovery-gate.sh`) are *optional* enforce layers for headless/automated contexts where no human is available to read surfaced findings. For interactive use the rubric in Step 3 is sufficient.
+This command + the `discovery-critic` agent are **self-sufficient**. `/critique` spawns the critic, parses the verdict via jq, and decides next steps directly — no hook or external infrastructure required. The optional Stop hook (`.claude/hooks/discovery-gate.sh`, opt-in via `EVALUATOR_GATE_ACTIVE=1` or `.claude/.evaluator-active` marker) is a **pre-/critique reminder**, not a gate — it nags about missing/incomplete PREMORTEM and EVIDENCE before agent stops, but never blocks (always exit 0). The actual verdict logic lives in this slash command's Step 3 rubric.
 
 ## Workflow
 
@@ -96,7 +96,16 @@ Think adversarially: ≥4 entries spanning ≥3 distinct categories. Don't pile 
 }
 ```
 
-At least 3 entries with `real_or_mock: "real"`. At least one of those entries should be **safe-to-rerun** (read-only, no side effects) — the critic re-executes one to verify the log is not a fake-real fabrication. If all real runs are side-effect-bearing, add one read-only verification run.
+At least 3 entries with `real_or_mock: "real"`. At least one of those entries should be **safe-to-rerun** (read-only, no side effects) — the critic re-executes one to verify the log is not a fake-real fabrication.
+
+**For inherently-destructive deliverables** (DB migrations, deploy scripts, mutation-only endpoints, file-system writes without dry-run mode) — every "interesting" run is side-effect-bearing by nature. The critic will record `reexecution_coverage: none_all_side_effects` and the rubric will block. **Workaround**: add one read-only **post-state verification** run alongside the destructive run. Examples:
+
+- migration applied → SELECT against the new schema (`psql -c "\\d new_table"` or `sqlite3 .schema`)
+- file written → `ls -la created/file` or `head -5 output.csv`
+- API POST → subsequent GET against the affected resource
+- deploy → curl health endpoint, grep deployed version
+
+Mark the verification run `safe-to-rerun` in the notes field. This satisfies re-execution coverage without forcing the original destructive run to be re-runnable.
 
 ### Step 2 — Spawn the critic
 
