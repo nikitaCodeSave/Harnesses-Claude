@@ -135,6 +135,53 @@ The agent reads `PREMORTEM.json`, `EVIDENCE.json`, the code in cwd, and the scop
 
 When the critic returns, read `CRITIC.json`. **Counts come from arrays, not scalars.** Use case-folded comparison so capitalized variants are not silently missed — matches what the optional gate hook does.
 
+#### Step 3a — Schema conformance check (BEFORE rubric)
+
+The rubric below queries specific field paths and enum values. If the critic improvised the schema — renamed `overall_grade` → `grade`, invented a `FALSE_PREMISE` verdict, omitted `severity`, dropped the `context` block — every rubric query silently falls back to its default (`0` / empty string) and a flawed deliverable passes as "all clear". Verify shape before parsing:
+
+```bash
+SCHEMA_OK=$(jq -e '
+    (.critic_version == "2.0")
+    and (.context.git_head | type == "string")
+    and (.context.iter_round | type == "number")
+    and (.premortem_verification | type == "array")
+    and (.new_findings | type == "array")
+    and (.evidence_quality.overall_grade | IN("high","medium","low"))
+    and (.evidence_quality.reexecution_coverage | IN("yes_at_least_one","none_all_side_effects","no_runs_real"))
+    and ([.premortem_verification[].severity] | all(. as $s | ["critical","major","minor"] | index($s) != null))
+    and ([.premortem_verification[].verdict] | all(. as $v | ["addressed","documented_only","unclear","accept_risk"] | index($v) != null))
+    and ([.premortem_verification[].accept_risk_quality] | all(. as $q | ["justified","weak","unjustified","n/a"] | index($q) != null))
+' CRITIC.json >/dev/null 2>&1 && echo ok || echo fail)
+
+if [[ "$SCHEMA_OK" != "ok" ]]; then
+    echo "CRITIC.json does not conform to v2.0 schema — rubric cannot be applied safely."
+    echo "Common drifts: renamed fields (grade vs overall_grade), invented verdicts (FALSE_PREMISE),"
+    echo "missing severity/accept_risk_quality, missing context block, nested reexecution object."
+    # Diagnostic: show which checks fail
+    for path in \
+        '.critic_version == "2.0"' \
+        '.context.git_head | type == "string"' \
+        '.context.iter_round | type == "number"' \
+        '.evidence_quality.overall_grade | IN("high","medium","low")' \
+        '.evidence_quality.reexecution_coverage | IN("yes_at_least_one","none_all_side_effects","no_runs_real")' \
+        '[.premortem_verification[].severity] | all(. as $s | ["critical","major","minor"] | index($s) != null)' \
+        '[.premortem_verification[].verdict] | all(. as $v | ["addressed","documented_only","unclear","accept_risk"] | index($v) != null)' \
+        '[.premortem_verification[].accept_risk_quality] | all(. as $q | ["justified","weak","unjustified","n/a"] | index($q) != null)'
+    do
+        jq -e "$path" CRITIC.json >/dev/null 2>&1 || echo "  FAIL: $path"
+    done
+fi
+```
+
+**On schema fail** — do **not** proceed to the rubric below. The deliverable status is *unverified*, not "clean". Two options:
+
+1. **Re-spawn the critic once** with an explicit reminder: «`CRITIC.json` violated the v2.0 schema (cite the failing paths). Fix it without modifying findings — use the exact field names, enum values, and `context` block as declared in your agent definition. Run the self-validation snippet from your prompt before exiting.»
+2. **If a second pass still fails** — surface the schema drift to the user and stop. Do not paper over it with a "all clear" verdict; the gate is non-functional under drift.
+
+Schema-conformance is a deliverable from the critic, on par with the findings themselves.
+
+#### Step 3b — Rubric (only after Step 3a passes)
+
 ```bash
 # Critical findings in new_findings[]
 NEW_CRITICAL=$(jq '[.new_findings[]

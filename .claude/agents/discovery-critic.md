@@ -196,7 +196,40 @@ Write `CRITIC.json` in cwd. Single file. No other modifications.
 
 `blocking_issue` is non-null only when inputs are malformed (missing PREMORTEM, schema violation, fewer than 4 failure_modes / 3 runs, category-spread < 3, missing `context` block). In normal operation it stays `null` regardless of findings.
 
-Validate your output: `jq empty CRITIC.json` must succeed. Downstream parses via `jq`, not regex.
+### Schema enforcement (CRITICAL — read before writing)
+
+The downstream `/critique` rubric parses **only the exact field names and enum values declared above**. Improvising the structure breaks the rubric silently — invented `verdict` values like `FALSE_PREMISE`, renamed fields like `grade` instead of `overall_grade`, or a top-level `schema_version` instead of `critic_version` cause every rubric check to return `0` / empty, and a flawed deliverable slips through marked "all clear". This is not stylistic; it is a safety failure.
+
+**Forbidden variations** (each one will fail the pre-rubric schema check and force a re-spawn):
+
+- Renaming a field. Use **`critic_version`** (not `schema_version`); **`evidence_quality.overall_grade`** (not `grade`); **`evidence_quality.reexecution_coverage`** (not nested `reexecution.performed`).
+- Adding a custom `verdict` value. Allowed verdicts are exactly **`addressed | documented_only | unclear | accept_risk`** — nothing else. If a PREMORTEM entry is factually wrong (premise contradicts the code), record it as `addressed` with `note: "premortem premise wrong — actually mitigated at file:line"` and cite the code, or `unclear` if the disagreement is unresolved. Never invent labels like `FALSE_PREMISE`, `WRONG`, `n/a`.
+- Adding a custom `severity` value. Allowed severities are exactly **`critical | major | minor`** — case-sensitive lowercase.
+- Adding a custom `accept_risk_quality` value. Allowed values are exactly **`justified | weak | unjustified | n/a`**. For non-`accept_risk` entries the value MUST be `"n/a"` (a string, not the JSON null).
+- Omitting `severity`, `verdict`, or `accept_risk_quality` from any `premortem_verification[]` entry. All three are required for every entry.
+- Omitting the top-level `context` block. Provenance is mandatory — without it, re-spawn detection breaks.
+- Replacing arrays with objects (e.g. `premortem_verification` keyed by title). It is a flat array of entries; rubric iterates it.
+- Re-casing enum values. All severities and verdicts are lowercase. UPPER_CASE will fail the rubric's case-folded comparison only if combined with whitespace mangling; do not rely on it.
+
+**Mandatory self-validation before exit.** After writing `CRITIC.json`, run this exact Bash snippet. If it does not print `schema_ok` on the last line, rewrite `CRITIC.json` to fix the violation and re-run until it does. Do NOT exit with a non-conforming file:
+
+```bash
+jq -e '.critic_version == "2.0"' CRITIC.json >/dev/null \
+  && jq -e '.context.git_head | type == "string"' CRITIC.json >/dev/null \
+  && jq -e '.context.iter_round | type == "number"' CRITIC.json >/dev/null \
+  && jq -e '.premortem_verification | type == "array"' CRITIC.json >/dev/null \
+  && jq -e '.new_findings | type == "array"' CRITIC.json >/dev/null \
+  && jq -e '.evidence_quality.overall_grade | IN("high","medium","low")' CRITIC.json >/dev/null \
+  && jq -e '.evidence_quality.reexecution_coverage | IN("yes_at_least_one","none_all_side_effects","no_runs_real")' CRITIC.json >/dev/null \
+  && jq -e '[.premortem_verification[].severity] | all(. as $s | ["critical","major","minor"] | index($s) != null)' CRITIC.json >/dev/null \
+  && jq -e '[.premortem_verification[].verdict] | all(. as $v | ["addressed","documented_only","unclear","accept_risk"] | index($v) != null)' CRITIC.json >/dev/null \
+  && jq -e '[.premortem_verification[].accept_risk_quality] | all(. as $q | ["justified","weak","unjustified","n/a"] | index($q) != null)' CRITIC.json >/dev/null \
+  && echo "schema_ok"
+```
+
+If you find a structural reason the schema cannot capture your finding (e.g. a PREMORTEM entry that is genuinely false-premised), use the existing fields creatively rather than inventing new ones: pick the closest allowed `verdict`, then put the nuance in `note` and in `new_findings[]` as a separate `category: "semantics"` entry. The schema is the contract with the rubric; deviating from it disables the gate.
+
+Downstream parses via `jq`, not regex — every field above is path-addressable.
 
 ## Constraints
 
