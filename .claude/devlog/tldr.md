@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #43 · 2026-05-16 · harness-setup → team-ready Python-only (Windows-native, settings split, idempotent)
+
+**Tags:** skill, harness-setup, refactor, testing
+
+User-level skill ~/.claude/skills/harness-setup был в pre-release состоянии (создан 2026-05-15), e2e empirically tested только на Python с 4 stack-skeleton'ами (Python / Node / Rust / Go), bash-only hooks (stop-verify.sh, format.sh), single-file settings.json без team/personal…
+
+[→ entries/0043-harness-setup-team-ready-python-only-windows-native-settings.md](entries/0043-harness-setup-team-ready-python-only-windows-native-settings.md)
+
+---
+
 ## #42 · 2026-05-13 · Evaluator v2.0: schema enforcement — prompt + rubric layer guards
 
 **Tags:** refactor, harness, agents, testing
