@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #55 · 2026-05-29 · Guardrails pillar — system-guard hardening
+
+**Tags:** feature, harness, hooks, security
+
+Третий столб practice-слоя (после methodology #53, continuity #54): guardrails. Открытие при разведке: глобальный baseline уже существует — ~/.claude/hooks/system-guard.sh (PreToolUse, 3 tier: DENY катастрофика / ASK рискованное-обратимое / LOG sudo-audit). Значит «полная…
+
+[→ entries/0055-guardrails-pillar-system-guard-hardening.md](entries/0055-guardrails-pillar-system-guard-hardening.md)
+
+---
+
 ## #54 · 2026-05-29 · Continuity pillar — global SessionStart context hook
 
 **Tags:** feature, harness, hooks

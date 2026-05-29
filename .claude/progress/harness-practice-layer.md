@@ -1,8 +1,9 @@
 # Progress: harness as development-practice layer
 
 **Quick state (2026-05-29):** Harness переосмыслен как **standing development-practice
-layer** (не bootstrap). Из 3 столбов: **methodology — ✅ сделан**, **continuity — ✅ сделан**
-(devlog #54), **guardrails — следующий**. Изменения этой сессии **не закоммичены** (см. `git status`).
+layer** (не bootstrap). Все 3 столба ✅: **methodology** (#53), **continuity** (#54),
+**guardrails** (#55). Каждый = mechanical hook + standing-инструкция (CLAUDE.md §5/§6/§7).
+Коммиты #50–#54 закоммичены (committer-агент, 6 коммитов); #55 коммитится этой сессией.
 
 ## Большая картина
 Эмпирика (devlog #52): на single-shot greenfield harness = overhead (×2.6 cost, ×2 turns,
@@ -27,12 +28,18 @@ quality-tie). Значит ценность — в дельте, которой 
   mutation-test (`.claude/benchmark/audit/test-session-context-hook.sh`, 10/10, оракул кусается).
   Дизайн-решение: devlog=episodic/git-tracked, progress=in-flight, авто-память=atemporal — не дубль.
 
-## Следующая задача: столб 3 — guardrails
-Цель: per-project «чего НЕ делать» (sensitive paths/команды → DENY, what-not-to-do constraints).
-В отличие от continuity/methodology (глобальные), guardrails **per-project** по природе (зависят
-от стека/секретов/инфры). Открытый вопрос: сколько кодировать глобально (baseline DENY: rm -rf,
-git push --force, secret-файлы) vs оставлять проектному CLAUDE.md/settings. Empirical: не вводить
-по теории — проверить, что Opus 4.8 не делает нативно (он уже осторожен с деструктивом).
+## ✅ Столб 3 — guardrails (devlog #55, сделан)
+Открытие: глобальный baseline уже был — `~/.claude/hooks/system-guard.sh` (DENY/ASK/LOG). «Полная
+реализация» = НЕ новый хук (теория), а hardening существующего: тест (`.claude/benchmark/audit/
+test-system-guard.sh`, 29/29) + фикс реального false-positive (`-guard` в `system-guard` матчил
+рекурсивный флаг) + закрытие HIGH-дыры (capital `-R`) по итогам security-reviewer subagent'а.
+§7 в `~/.claude/CLAUDE.md`: project-danger кодируется реактивно (permissions.deny), не upfront.
+
+## Следующая задача: мульти-сессийный бенчмарк practice-слоя
+Все 3 столба готовы → нужен «правильный» замер ценности. Single-shot battle-test-runner зануляет
+continuity/methodology (devlog #52). Нужен сценарий: сессия N опирается на devlog 1..N-1 + судить
+КАЧЕСТВО (тестов/решений), не pass/fail. Инфра: `.claude/benchmark/` (Oracle, Ollama).
+Опц. follow-up: пред-существующие дыры system-guard (`find -delete`, `truncate`, `chmod -R /`).
 **Сначала предложи план, дождись апрува, потом исполняй.**
 
 ## Ограничения
@@ -47,4 +54,4 @@ git push --force, secret-файлы) vs оставлять проектному 
 судить КАЧЕСТВО тестов, не pass/fail. Single-shot зануляет ценность слоя. Инфра: `.claude/benchmark/`
 (Oracle `ai-analyst-oracle`, Ollama). Полный handoff-промпт — в этом файле выше + devlog #50–53.
 
-NEXT: столб 3 (guardrails) — предложить план (что DENY-baseline глобально vs per-project), решить дельту относительно нативной осторожности Opus 4.8, получить апрув, исполнить.
+NEXT: мульти-сессийный бенчмарк practice-слоя (3 столба готовы — нужен замер ценности; single-shot её зануляет). Предложить сценарий (сессия N ← devlog 1..N-1, судить качество), получить апрув, исполнить.
