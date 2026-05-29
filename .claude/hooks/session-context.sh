@@ -1,23 +1,16 @@
 #!/usr/bin/env bash
-# SessionStart hook — injects harness-unique signal as additionalContext.
-# Sends: last devlog entry filename + (if present) compact loop STATE summary.
-# Git context (branch, status, log) is injected by Claude Code built-in system
-# prompt; this hook adds only what built-ins don't cover.
-# Per ADR-010: stays minimal (≤ 40 lines). H-004: loop STATE summary added.
+# SessionStart hook (LAB-ONLY) — surfaces the R&D loop STATE summary.
+# Devlog + active-progress surfacing moved to the GLOBAL continuity hook
+# (~/.claude/hooks/session-context.sh, devlog #54); kept here is only the
+# lab-unique part: the self-improvement loop STATE, which has no meaning
+# outside this repo. Both hooks fire here — no overlap by design.
+# Per ADR-010: stays minimal. Advisory, exit 0 always.
 set -euo pipefail
 
 cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || exit 0
 
 context=""
 append() { context="${context:+$context$'\n'}$1"; }
-
-devlog_entries_dir=".claude/devlog/entries"
-if [ -d "$devlog_entries_dir" ]; then
-    last_entry="$(ls "$devlog_entries_dir"/[0-9]*.md 2>/dev/null | sort | tail -1)" || true
-    if [ -n "${last_entry:-}" ]; then
-        append "Last devlog entry: $(basename "$last_entry")"
-    fi
-fi
 
 state_file=".claude/loop/STATE.md"
 if [ -f "$state_file" ]; then
