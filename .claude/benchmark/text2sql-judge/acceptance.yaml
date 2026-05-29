@@ -1,0 +1,230 @@
+# Acceptance rubric for text2sql-Oracle battle-test.
+# Total 100 pts. Categorized: 40 technical / 30 functional / 30 business.
+#
+# Каждый item scoring: full / half / zero. Operator (или LLM-judge) проставляет.
+
+categories:
+
+  technical:
+    weight: 40
+    items:
+
+      - id: T1
+        name: Project structure
+        max: 6
+        criteria:
+          full_6: |
+            Clear separation: src/ (or pkg name) для кода + tests/ + pyproject.toml.
+            Logical module split (агент / tools / SQL / LLM client / config).
+          half_3: |
+            Code structured но monolithic (1-2 файла), нет tests/ или pyproject.
+          zero: |
+            Everything в одном файле без модулей, или missing структура полностью.
+
+      - id: T2
+        name: Dependency management
+        max: 4
+        criteria:
+          full_4: |
+            pyproject.toml (или requirements.txt) присутствует. oracledb>=2.5.0 + openai
+            (или совместимый) в зависимостях. Pinned versions OR semver constraints.
+            Virtual env hint в README или Makefile.
+          half_2: |
+            Зависимости перечислены но не versioned, ИЛИ только requirements.txt без semver.
+          zero: |
+            Dependencies не documented, pip install adhoc в README.
+
+      - id: T3
+        name: Error handling
+        max: 6
+        criteria:
+          full_6: |
+            Oracle connect errors caught (auth fail, no schema, query syntax error).
+            LLM API errors caught (network, model not found, malformed response).
+            SQL execution returns пустоту → ассистент признаёт это, не выдумывает ответ.
+          half_3: |
+            Hardcoded try/except wrapping main but без graceful messages.
+          zero: |
+            Crash on any error, no try/except.
+
+      - id: T4
+        name: Code quality
+        max: 6
+        criteria:
+          full_6: |
+            Type hints на public functions. Readable naming. Нет deadcode / mock copypasta.
+            ≤500 lines per module (modular). Docstrings на key classes/functions.
+          half_3: |
+            Type hints на 30-60% function signatures, comments adequate.
+          zero: |
+            No type hints, magic numbers, copy-paste everywhere.
+
+      - id: T5
+        name: Tests
+        max: 8
+        criteria:
+          full_8: |
+            ≥3 unit-tests (например: schema parsing, SQL validation, response formatting).
+            ≥1 integration-test (mock Oracle и/или mock LLM). Pytest passes locally.
+          half_4: |
+            ≥1 test exists, pytest passes BUT coverage thin.
+          zero: |
+            No tests OR tests fail.
+
+      - id: T6
+        name: Documentation
+        max: 4
+        criteria:
+          full_4: |
+            README.md describes: что делает, как запустить, env vars, architecture overview, examples.
+            metadata.py не дублируется в коде, used as single source.
+          half_2: |
+            README существует но incomplete (нет usage examples или architecture).
+          zero: |
+            No README, undocumented entry points.
+
+      - id: T7
+        name: Robust SQL generation
+        max: 6
+        criteria:
+          full_6: |
+            SQL safe by construction: parameterized queries OR safe interpolation (whitelisted
+            field names from metadata.py). Не уязвимо к SQL injection через user input.
+            Использует DATE 'YYYY-MM-DD' литералы для дат (Oracle-specific), не американский формат.
+          half_3: |
+            String interpolation без whitelist guard, но базовые escape присутствуют.
+          zero: |
+            Naive string concat, SQL injection vector present.
+
+  functional:
+    weight: 30
+    items:
+
+      - id: F-Q1
+        name: Q1 simple count
+        max: 6
+        criteria:
+          full_6: PASS per questions.yaml Q1 grading
+          half_3: PARTIAL per Q1 grading
+          zero: FAIL
+
+      - id: F-Q2
+        name: Q2 top-N aggregation
+        max: 6
+        criteria:
+          full_6: PASS per Q2 grading
+          half_3: PARTIAL (4 of 5 orgs)
+          zero: FAIL
+
+      - id: F-Q3
+        name: Q3 trend comparison
+        max: 6
+        criteria:
+          full_6: PASS per Q3 grading
+          half_3: PARTIAL per Q3
+          zero: FAIL
+
+      - id: F-Q4
+        name: Q4 cross-table join
+        max: 6
+        criteria:
+          full_6: PASS per Q4 grading
+          half_3: PARTIAL per Q4
+          zero: FAIL
+
+      - id: F-Q5
+        name: Q5 filtered group-by
+        max: 6
+        criteria:
+          full_6: PASS per Q5 grading
+          half_3: PARTIAL per Q5
+          zero: FAIL
+
+  business:
+    weight: 30
+    items:
+
+      - id: B1
+        name: Answer formatting / readability
+        max: 6
+        criteria:
+          full_6: |
+            NL-ответ читается как краткое сообщение аналитика: число + единица + контекст.
+            Длинные таблицы → markdown table; одиночное число → inline-цитата с подписью.
+            Без сырого SQL output (выдаёт только итог, не «вот колонки и rows»).
+          half_3: |
+            Ответ корректный но raw (просто число без контекста, ИЛИ excessive verbose).
+          zero: |
+            Сырая выдача БД или несвязное предложение.
+
+      - id: B2
+        name: Validation / sanity check
+        max: 5
+        criteria:
+          full_5: |
+            Ассистент проверяет диапазон, ненулевые поля, размер результата перед формированием
+            ответа. Если результат подозрителен ("0 rows" вместо ожидаемой агрегации) — flag'ит.
+          half_2: |
+            Минимальный sanity check (только not-None).
+          zero: |
+            Никакой валидации, прямой проброс БД-результата в ответ.
+
+      - id: B3
+        name: Robustness on edge cases
+        max: 6
+        criteria:
+          full_6: |
+            Если NL-запрос ambiguous (например, «активные» — это act_1m или act_3m?) — assistant
+            делает разумное default OR clarifies. Если поле не существует — graceful failure.
+            Не зависает / не петлит на простых запросах.
+          half_3: |
+            Handles 1-2 edge cases (например, missing field), но не всё.
+          zero: |
+            Crashes / refuses / loops на 1 из 5 questions.
+
+      - id: B4
+        name: Latency / cost
+        max: 5
+        criteria:
+          full_5: |
+            Single question end-to-end: ≤30s wall, ≤5 LLM calls (tool-use rounds).
+            Не делает full table scan на 1.2k rows — использует индексы / агрегаты.
+          half_2: |
+            30-60s wall ИЛИ >5 LLM calls per question.
+          zero: |
+            >60s или >10 LLM calls.
+
+      - id: B5
+        name: Production-readiness signal
+        max: 8
+        criteria:
+          full_8: |
+            Logging (структурированное предпочтительно). Config через env vars (не hardcoded
+            креды). Готовый Dockerfile или CI workflow.
+            Graceful shutdown / connection pool / retry на Oracle.
+          half_4: |
+            Logging есть но print-based; config частично через env.
+          zero: |
+            Hardcoded paths/creds, no logging, no retry.
+
+scoring:
+  pass_threshold: 70
+  partial_threshold: 50
+  notes: |
+    ≥70 — deliverable accepted (harness validated на F-deliverable task type).
+    50-69 — partial; investigate which category dropped.
+    <50 — failure; battle-test reveals harness не помог на real task.
+
+  comparison_protocol:
+    - Run на N harness variants (минимум 2: no-harness, our-harness)
+    - Score independently per rubric выше
+    - Compare totals + per-category breakdown
+    - Sign-inversion: harness variant's total ≥ baseline total + 10pt → "harness helps measurably"
+    - Within ±10pt → "noise band" (battle-test is high-variance)
+
+judge_method:
+  preferred: human (operator review of deliverable)
+  fallback: LLM-judge (Claude Opus 4.7 или sonnet 4.6) with this rubric
+  automation:
+    - F-Q1..F-Q5: scriptable via running the deliverable on each question, parsing output
+    - T1-T7, B1-B5: require code/artifact inspection, harder to fully automate

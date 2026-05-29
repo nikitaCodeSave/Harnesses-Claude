@@ -1,0 +1,40 @@
+{
+  "T3": {
+    "score": 5,
+    "max": 6,
+    "justification": "db.py wraps oracledb in execute() and tools.py catches both UnsafeSQLError and generic Exception returning JSON error to model (tools.py tool_execute_sql). __main__.py catches RuntimeError for config and broad Exception around run_agent, printing one-line message to stderr (not stack trace). agent.py recovers from empty model replies. Missing: no try/except around LLM API calls (chat.completions.create) — Ollama timeouts/connection errors would propagate as raw traceback to main's catch-all."
+  },
+  "T4": {
+    "score": 6,
+    "max": 6,
+    "justification": "Type hints throughout public APIs (Config dataclass, run_agent signature, OracleClient.execute, tool_* functions). Modules are small and focused (db.py ~100 LoC, tools.py ~12k bytes but cohesive, agent.py ~10k). Docstrings on classes and public functions. Naming is clear (assert_select_only, tool_inspect_schema, _normalize). No obvious dead code."
+  },
+  "T7": {
+    "score": 4,
+    "max": 6,
+    "justification": "assert_select_only in db.py whitelists SELECT/WITH only, rejects `;` and DDL/DML via regex with word boundaries; tests cover this thoroughly (test_db_safety.py). Oracle DATE 'YYYY-MM-DD' literals enforced via system prompt and examples. However SQL is built by LLM as raw strings (not parameterized) — user-controlled name fragments end up concatenated; PREMORTEM #5 itself admits SQL injection via apostrophes in ORGANIZATION_NM as unresolved. Whitelisting blocks DDL but not injection within SELECT."
+  },
+  "B1": {
+    "score": 5,
+    "max": 6,
+    "justification": "EVIDENCE shows NL responses like 'Общий доход за последний доступный месяц составил 59 940 529,39 рублей' — number + unit + context, not raw DB output. final_answer tool packages text + supporting_data. README documents stdout vs stderr split. No explicit markdown table for long results, but tool returns row preview to model which then formulates prose."
+  },
+  "B2": {
+    "score": 4,
+    "max": 5,
+    "justification": "Dedicated validate_result tool (tools.py tool_validate_result) checks min/max rows, non-null columns, numeric ranges and adds notes for empty results. Test coverage in test_tools.py for each violation type. Model is instructed in system prompt to call it. Minor: validation depends on model passing reasonable expectations; PREMORTEM #2 notes it can't catch semantic over-summing."
+  },
+  "B3": {
+    "score": 4,
+    "max": 6,
+    "justification": "agent.py has _recover_from_empty_reply for PREMORTEM #1 case, max_steps limit prevents loops, empty question rejected with exit 2, config errors graceful. tool_inspect_schema returns error JSON for unknown tables. EVIDENCE Run 3 documents a real regression where model still fails on top-3 query despite having data — recovery is partial. PREMORTEM #3 (out-of-range dates) explicitly unmitigated."
+  },
+  "B5": {
+    "score": 4,
+    "max": 8,
+    "justification": "Config via env vars/.env (config.py), credentials not hardcoded. Stderr logging with [agent]/[execute_sql] prefixes (not structured/JSON). pyproject.toml with entry-point script, requirements.txt pinned minimums. oracledb call_timeout=60s set. Missing: no Dockerfile, no CI workflow, no connection pool (each execute opens fresh connection via context manager), no retry logic, no LLM client timeout (PREMORTEM #4 admits this), logging is plain print not stdlib logging module."
+  },
+  "total": 32,
+  "cost_usd": 0.22681125000000002,
+  "status": "ok"
+}

@@ -1,0 +1,236 @@
+# Battle-test: text2sql / ours
+
+**Date**: 2026-05-11T18:19:22Z
+**Build model**: claude-opus-4-7
+**Wall**: 561s (9m 21s) build only
+**Total OAuth cost**: $4.1261
+
+## Verdict: **accepted** (88 / 100)
+
+| Section | Score | Max |
+|---|---:|---:|
+| F-Questions (auto) | 27 | 30 |
+| T/B auto (scriptable) | 27 | 23 |
+| T/B LLM-judge | 34 | 47 |
+| **Grand total** | **88** | **100** |
+
+Thresholds: ≥70 accepted · 50-69 partial · <50 failure.
+
+## Build phase
+
+- exit_code: 0
+- stop_reason: end_turn
+- turns: 59
+- cost: $3.894378250000001
+- tokens: in=72 out=41398 cache_create=121555 cache_read=4198699
+
+## Trajectory (Layer C)
+
+```json
+{
+  "skills_triggered": [],
+  "subagent_dispatches": {
+    "count": 0,
+    "types": []
+  },
+  "tool_calls_summary": [
+    {
+      "name": "Write",
+      "count": 23
+    },
+    {
+      "name": "Bash",
+      "count": 18
+    },
+    {
+      "name": "Edit",
+      "count": 7
+    },
+    {
+      "name": "Read",
+      "count": 4
+    },
+    {
+      "name": "TodoWrite",
+      "count": 4
+    },
+    {
+      "name": "ToolSearch",
+      "count": 1
+    }
+  ],
+  "invariant_pings": []
+}
+```
+
+## Result excerpt
+
+```
+Артефакты gate'а готовы.
+
+**PREMORTEM.md** — 8 различимых failure mode с триггером + impact + mitigation status:
+1. Двойной учёт ИТОГОВЫХ полей и составляющих
+2. Skip `validate_result` — эмпирически подтверждено
+3. SUM средних остатков, выдаваемая за итог — эмпирически подтверждено
+4. MONTH_DT текущего месяца ≠ конец месяца
+5. LIKE по `ORGANIZATION_NM` агрегирует разные юрлица
+6. Truncation при отсутствии агрегации
+7. Поломанный JSON в tool-arguments / пустые tool_calls — частично проявилось (nudge сработал)
+8. Невалидные креды / DSN
+
+**EVIDENCE.md** — 5 реальных прогонов против живых Oracle XE и Ollama (не моки), каждый с trace тулзов, stdout, независимой SQL-сверкой и явной фиксацией: «failure surfaced» либо «clean» с обоснованием.
+```
+
+## Deliverable info
+
+```json
+{
+  "status": "ok",
+  "entry_kind": "module",
+  "entry_module": "text2sql",
+  "entry_script": null,
+  "invocation_cmd": ".venv/bin/python -m text2sql",
+  "venv_path": "/tmp/battle-text2sql-ours-20260511T181921Z/.venv",
+  "venv_status": "pyproject_install (rc=0)",
+  "install_log_tail": "Requirement already satisfied: openai>=1.0 in ./.venv/lib/python3.12/site-packages (from text2sql==0.1.0) (2.36.0)\nRequirement already satisfied: python-dotenv>=1.0.0 in ./.venv/lib/python3.12/site-packages (from text2sql==0.1.0) (1.2.2)\nRequirement already satisfied: anyio<5,>=3.5.0 in ./.venv/lib/python3.12/site-packages (from openai>=1.0->text2sql==0.1.0) (4.13.0)\nRequirement already satisfied: distro<2,>=1.7.0 in ./.venv/lib/python3.12/site-packages (from openai>=1.0->text2sql==0.1.0) (1.9.0)\nRequirement already satisfied: httpx<1,>=0.23.0 in ./.venv/lib/python3.12/site-packages (from openai>=1.0->text2sql==0.1.0) (0.28.1)\nRequirement already satisfied: jiter<1,>=0.10.0 in ./.venv/lib/python3.12/site-packages (from openai>=1.0->text2sql==0.1.0) (0.14.0)\nRequirement already satisfied: pydantic<3,>=1.9.0 in ./.venv/lib/python3.12/site-packages (from openai>=1.0->text2sql==0.1.0) (2.13.4)\nRequirement already satisfied: sniffio in ./.venv/lib/python3.12/site-packages (from openai>=1.0->text2sql==0.1.0) (1.3.1)\nRequirement already satisfied: tqdm>4 in ./.venv/lib/python3.12/site-packages (from openai>=1.0->text2sql==0.1.0) (4.67.3)\nRequirement already satisfied: typing-extensions<5,>=4.11 in ./.venv/lib/python3.12/site-packages (from openai>=1.0->text2sql==0.1.0) (4.15.0)\nRequirement already satisfied: idna>=2.8 in ./.venv/lib/python3.12/site-packages (from anyio<5,>=3.5.0->openai>=1.0->text2sql==0.1.0) (3.14)\nRequirement already satisfied: certifi in ./.venv/lib/python3.12/site-packages (from httpx<1,>=0.23.0->openai>=1.0->text2sql==0.1.0) (2026.4.22)\nRequirement already satisfied: httpcore==1.* in ./.venv/lib/python3.12/site-packages (from httpx<1,>=0.23.0->openai>=1.0->text2sql==0.1.0) (1.0.9)\nRequirement already satisfied: h11>=0.16 in ./.venv/lib/python3.12/site-packages (from httpcore==1.*->httpx<1,>=0.23.0->openai>=1.0->text2sql==0.1.0) (0.16.0)\nRequirement already satisfied: annotated-types>=0.6.0 in ./.venv/lib/python3.12/site-packages (from pydantic<3,>=1.9.0->openai>=1.0->text2sql==0.1.0) (0.7.0)\nRequirement already satisfied: pydantic-core==2.46.4 in ./.venv/lib/python3.12/site-packages (from pydantic<3,>=1.9.0->openai>=1.0->text2sql==0.1.0) (2.46.4)\nRequirement already satisfied: typing-inspection>=0.4.2 in ./.venv/lib/python3.12/site-packages (from pydantic<3,>=1.9.0->openai>=1.0->text2sql==0.1.0) (0.4.2)\nRequirement already satisfied: cryptography>=3.2.1 in ./.venv/lib/python3.12/site-packages (from oracledb>=2.5.0->text2sql==0.1.0) (48.0.0)\nRequirement already satisfied: cffi>=2.0.0 in ./.venv/lib/python3.12/site-packages (from cryptography>=3.2.1->oracledb>=2.5.0->text2sql==0.1.0) (2.0.0)\nRequirement already satisfied: pycparser in ./.venv/lib/python3.12/site-packages (from cffi>=2.0.0->cryptography>=3.2.1->oracledb>=2.5.0->text2sql==0.1.0) (3.0)\nBuilding wheels for collected packages: text2sql\n  Building editable for text2sql (pyproject.toml): started\n  Building editable for text2sql (pyproject.toml): finished with status 'done'\n  Created wheel for text2sql: filename=text2sql-0.1.0-0.editable-py3-none-any.whl size=5918 sha256=97ded514e8ea7e29d70bb6ebe868976bc7bf6c04bc1940c37199c57022924732\n  Stored in directory: /tmp/pip-ephem-wheel-cache-4yok38li/wheels/03/98/b3/79c94e191cd3fd1f1cd45e68dc328b105d503f6cb4f835571a\nSuccessfully built text2sql\nInstalling collected packages: text2sql\nSuccessfully installed text2sql-0.1.0\n\n--- /tmp/battle-text2sql-ours-20260511T181921Z/.venv/bin/pip install -e . ---"
+}
+```
+
+## F-Question scores
+
+```json
+{
+  "status": "ok",
+  "per_question": {
+    "Q1": {
+      "score": 6,
+      "max": 6,
+      "verdict": "pass",
+      "reason": "found 10 / десять"
+    },
+    "Q2": {
+      "score": 6,
+      "max": 6,
+      "verdict": "pass",
+      "reason": "all 5 orgs found"
+    },
+    "Q3": {
+      "score": 6,
+      "max": 6,
+      "verdict": "pass",
+      "reason": "Large + growth signal"
+    },
+    "Q4": {
+      "score": 3,
+      "max": 6,
+      "verdict": "partial",
+      "reason": "2 clients but без СМИРНОВ"
+    },
+    "Q5": {
+      "score": 6,
+      "max": 6,
+      "verdict": "pass",
+      "reason": "all 6 hubs within ±1"
+    }
+  },
+  "total": 27,
+  "max": 30
+}
+```
+
+## T/B auto scores
+
+```json
+{
+  "status": "ok",
+  "items": {
+    "T1": {
+      "score": 6,
+      "max": 6,
+      "verdict": "pass",
+      "reason": "22 py files, src/pkg structure, tests dir, pyproject"
+    },
+    "T2": {
+      "score": 4,
+      "max": 4,
+      "verdict": "pass",
+      "reason": "oracledb + openai with version constraints"
+    },
+    "T5": {
+      "score": 8,
+      "max": 8,
+      "verdict": "pass",
+      "reason": "6 test files, pytest passes"
+    },
+    "T6": {
+      "score": 4,
+      "max": 4,
+      "verdict": "pass",
+      "reason": "README 123 lines"
+    },
+    "B4": {
+      "score": 5,
+      "max": 5,
+      "verdict": "pass",
+      "reason": "median wall 4.3s"
+    }
+  },
+  "total": 27,
+  "max": 27
+}
+```
+
+## LLM-judge scores
+
+```json
+{
+  "T3": {
+    "score": 5,
+    "max": 6,
+    "justification": "db.py wraps oracledb.Error in SQLError with clear message; cli.py catches Config RuntimeError and broad Exception from agent (no stack-trace to user); execute_sql in tools.py returns error JSON; empty result is acknowledged via note (per EVIDENCE Run 4)."
+  },
+  "T4": {
+    "score": 6,
+    "max": 6,
+    "justification": "Type hints on all public functions (Config.from_env, run_query, validate_select, run_agent, dispatch); dataclasses with docstrings; modules well under 500 LoC; readable naming (validate_select, schema_prompt_block); no obvious dead code."
+  },
+  "T7": {
+    "score": 5,
+    "max": 6,
+    "justification": "validate_select enforces single SELECT/WITH, strips ';' and rejects DDL/DML/PLSQL keywords via regex (test_db_guard.py covers full matrix); however user NL still flows into LLM-generated SQL with inline literals — guard prevents injection effects but no parameterized binding for user-derived values."
+  },
+  "B1": {
+    "score": 5,
+    "max": 6,
+    "justification": "system_prompt mandates Russian analyst-style with thousands separators and units (rubles, operations, clients); EVIDENCE Run 1-3 show formatted answers like '103 уникальных клиента' and top-N as numbered list; no explicit markdown-table branch for long outputs."
+  },
+  "B2": {
+    "score": 5,
+    "max": 5,
+    "justification": "validate_result tool checks min/max rows, required_non_null_columns and numeric_ranges (tests/test_tools.py:test_validate_result_detects_null_and_range_issues); system prompt marks it as mandatory before final_answer; execute_sql adds note on empty results."
+  },
+  "B3": {
+    "score": 4,
+    "max": 6,
+    "justification": "Empty results handled via note + 'данных нет' (EVIDENCE Run 4); unknown table returns error with known_tables list; nudge + force final_answer on missing tool_calls prevents loops; however ambiguous NL handling relies on model judgement, no explicit clarification mechanism."
+  },
+  "B5": {
+    "score": 4,
+    "max": 8,
+    "justification": "Config via env vars + .env (no hardcoded creds); diagnostic _log to stderr with --quiet/--json flags; pyproject with entry_points; pytest with markers and skip-on-unavailable; but logging is plain print not structured, no Dockerfile, no CI workflow, no connection pool/retry logic."
+  },
+  "total": 34,
+  "cost_usd": 0.23170800000000003,
+  "status": "ok"
+}
+```
+
+## Clone preservation
+
+`/tmp/battle-text2sql-ours-20260511T181921Z` — preserved для forensics
+
+## Methodology
+
+- `.claude/docs/benchmark.md` — 4-layer framework
+- `.claude/benchmark/text2sql-judge/README.md` — battle-test specifics
+- `.claude/benchmark/text2sql-judge/acceptance.yaml` — 100-pt rubric

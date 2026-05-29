@@ -1,50 +1,79 @@
 # Harness Benchmark Infrastructure
 
-3-tier validation методология для harness changes. Closing measurement gap: structural + behavioral evidence для каждого предлагаемого обновления.
+4-layer measurement framework: проверка что harness changes делают то, ради чего harness существует — не overhead, а реальный lift качества на задачах с высокой ambient exploration cost.
+
+Full methodology — `.claude/docs/benchmark.md`. Источники evidence: Anthropic SWE-bench-Verified, Boris Cherny (howborisusesclaudecode.com), Addy Osmani (Agent Harness Engineering), Skill Creator eval (2026-03).
 
 ## Quick start
 
 ```bash
-bash .claude/benchmark/run-all.sh            # все tiers последовательно
-bash .claude/benchmark/static-checks.sh      # только Tier 0 (fast, pre-commit blocker)
-bash .claude/benchmark/tier1/run-tier1.sh    # Tier 1 task suite на fixture
-bash .claude/benchmark/tier2/run-tier2.sh    # Tier 2 skill trigger evals
+bash .claude/benchmark/run-all.sh            # все слои последовательно (placeholder)
+bash .claude/benchmark/static-checks.sh      # Layer A только — fast, pre-commit blocker
+bash .claude/benchmark/headless-runner.sh \  # Layer B+C один task на одном fixture
+    --task tier1/tasks/T01-add-health-endpoint.yaml \
+    --fixture fixtures/sample-py-app
 ```
+
+Cross-harness comparison: `--inject-from <alt-harness-dir>` подменяет наш `.claude/` на чужой.
+
+## Layers
+
+| Layer | Что | Cost | Файл |
+|---|---|---|---|
+| **A** — Structural | invariants harness'а (14 checks) | <10s | `static-checks.sh` |
+| **B** — Behavioral matrix | task pass/fail на fixture × task type | minutes-hours | `headless-runner.sh` + `tier1/` |
+| **C** — Trajectory quality | skills/subagents/invariant pings/workflow markers | parsed from B | extended `headless-runner.sh` (P2) |
+| **D** — Statistical protocol | n=3 minimum, bracket [min,med,max], sign-inversion gate | n×B multiplier | per-run reports + aggregate `reports/<change>/summary.md` |
 
 ## Структура
 
-- `static-checks.sh` — Tier 0 (fast, pre-commit blocker, <10s budget)
-- `tier1/` — pilot project task suite (T01-T07 + extensions)
-- `tier2/` — per-component evals (skill trigger accuracy, agent prompt corpus)
-- `fixtures/` — synthetic test projects, self-contained в repo
-- `reports/` — saved benchmark output, optional history
-- `run-all.sh` — orchestrate all tiers
+```
+.claude/benchmark/
+├── README.md              — этот файл
+├── static-checks.sh       — Layer A
+├── headless-runner.sh     — Layer B+C runner
+├── run-all.sh             — orchestrate all layers
+├── bootstrap-fixtures.sh  — set up external fixtures
+├── tier1/                 — task definitions (yaml), tier1-naming preserved для backward-compat
+├── tier2/                 — per-skill eval sets (Layer C для skills)
+├── fixtures/              — synthetic in-repo + external clones
+└── reports/               — per-run JSON + aggregate summaries
+```
 
-Full methodology — `.claude/docs/benchmark.md`.
+## Когда какой layer
 
-## Когда какой tier
+| Trigger | A | B | C | D |
+|---------|:------:|:------:|:------:|:------:|
+| Pre-commit любой change | ✓ | — | — | — |
+| Behavior-changing principle | ✓ | ✓ subset | ✓ | ✓ |
+| New/changed skill | ✓ | ✓ skill-relevant | ✓ | ✓ |
+| New/changed agent | ✓ | ✓ agent-relevant | ✓ | ✓ |
+| New/changed hook | ✓ | ✓ smoke | partial | — |
+| Retire/trim component | ✓ | ✓ subset | ✓ | ✓ |
+| ADR с numerical claim | ✓ | ✓ | ✓ | **required** |
 
-| Trigger | Tier 0 | Tier 1 | Tier 2 |
-|---------|:------:|:------:|:------:|
-| Pre-commit (любой harness change) | ✓ | — | — |
-| Behavior-changing principle update | ✓ | ✓ | — |
-| New/changed skill | ✓ | ✓ | ✓ |
-| New/changed agent | ✓ | ✓ | ✓ |
-| New/changed hook | ✓ | ✓ (smoke) | — |
-| Retire/trim component | ✓ | ✓ | — |
+«Subset» — sparse cell selection per scope, не full matrix. Right-sizing — за main thread'ом.
 
 ## Current automation state
 
-- Tier 0: **fully automated** (`static-checks.sh`, 14 checks, 44ms runtime)
-- Tier 1: **operational** (devlog #24) — `headless-runner.sh` runs real `claude --print` on fixture clone, captures JSON metrics, optional pytest judge. Supports `--inject-from <dir>` for cross-harness comparison.
-- Tier 2: **scaffolding ready** — eval sets defined для skills, runner validates structure; actual trigger evaluation manual
+- **Layer A**: fully automated (14 checks, 44ms).
+- **Layer B**: operational. 5 tasks (T01-T04 + T03e) × 3 fixtures. Headless runner с pytest judge.
+- **Layer C**: partial — token/turn/cost capture есть. Trajectory parsing (skills/subagents/invariant pings/workflow markers) — work-in-progress (P2, 2026-05-11).
+- **Layer D**: applied ad-hoc на T03 (4×4 confirmed −24% median harness vs baseline). Не protocol-default yet.
+- **Stop-hook two-gate**: `.claude/hooks/stop-validation.sh`.
 
 ## Reports
 
-Каждый behavior-changing change — attach benchmark report в `reports/<tier>-<name>-<date>.md`. Template — `reports/README.md`.
+Per-run: `reports/<task>-<fixture>-<harness>-runN.json` — JSON со всеми метриками.
+Aggregate: `reports/<change-name>/summary.md` — markdown с bracket table + CV + sign-inversion verdict.
+Template — `reports/README.md`.
 
 ## Roadmap
 
-- Tier 1 polyglot tasks (T04-T07): refactor, docs, ops, research — added as need arises
-- Tier 2 full automation: per-query skill discovery probe + accuracy aggregation
-- Cross-harness comparison expansion (T03+ multi-fixture): первый baseline в `reports/CROSS-HARNESS-COMPARISON.md` (T01/T02 × 4 harness variants, 2026-05-11)
+- **P1+P2 (active 2026-05-11)**: trajectory parsing + docs aligned + T01-T04 re-prog.
+- **P3**: первая legend fixture `legacy-no-tests` (modernization, expected high harness ROI).
+- **P4**: trip-wire / Neg-invariant tasks (honeypot prompts на invariants).
+- **P5**: stat protocol enforced default.
+- **P6**: F-ambiguous tasks (criteria-judge не binary pytest).
+
+См. полный rationale + axis (harness ROI ∝ exploration cost) в `.claude/docs/benchmark.md`.

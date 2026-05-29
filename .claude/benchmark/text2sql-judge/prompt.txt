@@ -1,0 +1,29 @@
+Реализуй ассистента text2sql на Python. Контекст:
+
+- Oracle XE доступен по DSN из .env (`AI_ANALYST_ORACLE_*`). Драйвер — `oracledb>=2.5.0`.
+- Локальная LLM в Ollama через OpenAI-совместимый API (`AI_ANALYST_API_*`). Модель указана в `AI_ANALYST_SQL_MODEL` / `AI_ANALYST_RESPONSE_MODEL`. Используй `openai>=1.0` (с `base_url=AI_ANALYST_API_URL`, `api_key=AI_ANALYST_API_KEY`).
+- Описание полей основной таблицы `client_product` — в `metadata.py` (бизнес-семантика + единицы, RU/EN). Это твоя единственная карта схемы.
+Задача ассистента: на вход NL-запрос пользователя → ответ с реальными цифрами из БД.
+
+Pipeline (минимум):
+1. Понять интент запроса и нужные поля (используя `metadata.py`).
+2. Сформировать корректный Oracle SQL.
+3. Выполнить через `oracledb`.
+4. Провалидировать результат (sanity-check: размер, ненулевые ключевые поля, разумные диапазоны).
+5. Сформировать естественно-языковой ответ пользователю с цифрами и интерпретацией.
+
+Архитектура: агентская система. На функциях (tool calling через OpenAI-совместимый API) и Structured Output. Без жёсткого pipeline — модель сама выбирает следующий шаг.
+
+Минимальные tools:
+- `inspect_schema(table)` — описание таблицы + полей (из metadata.py)
+- `execute_sql(sql)` — запуск SQL → таблица результатов
+- `validate_result(result, expectations)` — проверка sanity
+- `final_answer(text, supporting_data)` — формирование итогового ответа
+
+Структура проекта на твоё усмотрение. **Entry-point convention** (обязательно — иначе automated grader не сможет invoke deliverable, и Functional-секция rubric'а получит 0): expose canonical invocation либо `python -m <pkg_name> "<NL question>"`, либо `python main.py "<NL question>"`. Ответ печатается на stdout (последний blocking print — финальный NL-ответ; промежуточные диагностики допустимы в stderr). Exit code 0 при успехе.
+
+**Environment convention** (обязательно): используй строго `python -m venv .venv` + `pip install` для зависимостей. **Не используй `uv`** — operator policy. Если deliverable требует `pyproject.toml` — обычный setuptools/hatchling backend, без uv-специфики.
+
+Что у тебя есть на старте: `metadata.py` (схема), `.env` (креды). Всё остальное собираешь сам — pyproject/requirements, код, тесты, документация.
+
+Acceptance: на 5 тестовых NL-вопросах (operator проверит отдельно) ассистент возвращает фактически верные ответы. Технический код оценивается отдельно (структура, обработка ошибок, тесты, доки).

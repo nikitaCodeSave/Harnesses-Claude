@@ -1,0 +1,130 @@
+# 5 NL-вопросов для batt-test text2sql-Oracle.
+# Ground-truth снят с живой Oracle XE (ai-analyst-oracle, 1206 строк client_product,
+# 103 distinct customer_id, период 2024-07-31..2025-06-30, 8 строк desk).
+#
+# Каждый вопрос ассистент должен:
+#   1. Понять интент → выбрать поля по metadata.py
+#   2. Сформировать корректный Oracle SQL
+#   3. Выполнить, провалидировать
+#   4. Вернуть NL-ответ с конкретными цифрами
+
+questions:
+
+  - id: Q1
+    type: simple_count
+    nl: "Сколько у нас клиентов в сегменте Large по состоянию на июнь 2025?"
+    expected_sql_essence: |
+      SELECT COUNT(DISTINCT customer_id) FROM client_product
+      WHERE seg='Large' AND month_dt=DATE '2025-06-30'
+    expected_answer:
+      type: scalar
+      value: 10
+    grading:
+      pass_if: answer mentions number 10 (or "десять") AND clarifies it's a count of clients
+      partial_if: answer says number is between 9 and 11 (off-by-one tolerable)
+      fail_if: any other number, or refusal, or generic answer without a number
+
+  - id: Q2
+    type: top_n_aggregation
+    nl: "Назови 5 организаций с наибольшим суммарным депозитным портфелем за весь доступный период."
+    expected_sql_essence: |
+      SELECT organization_nm, SUM(dep_sum) AS total_dep
+      FROM client_product GROUP BY organization_nm
+      ORDER BY SUM(dep_sum) DESC NULLS LAST
+      FETCH FIRST 5 ROWS ONLY
+    expected_answer:
+      type: ordered_list
+      values:
+        - "АО \"ЛИЗИНГ КОМПАНИ\""
+        - "АО ТРАНСЛОГИСТИК"
+        - "АО НЕФТЕХИМПРОМ"
+        - "АО МЕТАЛЛИНВЕСТ"
+        - "АО \"ПЕНСИОННЫЙ ФОНД ПАРТНЕР\""
+      tolerable_swaps: "any pair within ±5% of dep_sum may swap order (4.84B vs 5.17B is 6.4% gap so МЕТАЛЛИНВЕСТ↔ПЕНСИОННЫЙ swap is FAIL, others are tight)"
+    grading:
+      pass_if: 5 named organizations include exactly the 5 above (order may shuffle for cases where dep_sum within 5%)
+      partial_if: 4 of 5 correct names
+      fail_if: 3 or fewer correct, or refusal
+
+  - id: Q3
+    type: trend_comparison
+    nl: "Какой клиентский сегмент показал наибольший рост FX-оборота с июля 2024 по июнь 2025?"
+    expected_sql_essence: |
+      WITH s AS (
+        SELECT seg,
+          SUM(CASE WHEN month_dt=DATE '2024-07-31' THEN fx_volume_rub ELSE 0 END) AS jul24,
+          SUM(CASE WHEN month_dt=DATE '2025-06-30' THEN fx_volume_rub ELSE 0 END) AS jun25
+        FROM client_product GROUP BY seg)
+      SELECT seg, (jun25-jul24) AS abs_delta,
+             (jun25-jul24)/NULLIF(jul24,0)*100 AS pct
+      FROM s ORDER BY abs_delta DESC NULLS LAST FETCH FIRST 1 ROW ONLY
+    expected_answer:
+      type: named_value
+      segment: "Large"
+      delta_abs: 544874651   # рубли
+      delta_pct: 19.1        # процент
+      note: |
+        Large — единственный сегмент со значимым положительным ростом (+544.9 млн ₽, +19.1%).
+        Остальные сегменты упали: International -213M (-9.3%), FI -107M (-14.4%), Middle -96M (-8.0%), SME -2M (-11.2%).
+        Region вырос символически (+5.4M, +6.2%).
+    grading:
+      pass_if: answer names "Large" as the leader AND mentions positive growth (~19% or ~545M)
+      partial_if: names Large but без чисел, OR указывает Region (тоже положительный рост, но мизерный)
+      fail_if: any other segment named as growth leader, or refusal
+
+  - id: Q4
+    type: cross_table_join
+    nl: "Кто возглавляет деск International и сколько клиентов у его команды в данных за весь период?"
+    expected_sql_essence: |
+      WITH heads AS (
+        SELECT DISTINCT head_rk, head_nm FROM desk WHERE desk_code='International'
+      ),
+      team AS (
+        SELECT d.manager_name, h.head_nm
+        FROM desk d JOIN heads h ON d.head_rk=h.head_rk
+      )
+      SELECT t.head_nm, COUNT(DISTINCT cp.customer_id) AS n_clients
+      FROM team t LEFT JOIN client_product cp
+        ON UPPER(TRIM(cp.manager_name))=UPPER(TRIM(t.manager_name))
+      GROUP BY t.head_nm
+    expected_answer:
+      type: named_value
+      head: "СМИРНОВ АЛЕКСАНДР ПЕТРОВИЧ"
+      n_clients_team: 2
+      note: |
+        В таблице desk International heads через head_rk=723384010 (СМИРНОВ).
+        Под ним 2 manager (Давыдова Д.В., Петрова О.А.). В client_product у этих
+        двух менеджеров суммарно 2 distinct customer_id (sparse seed data, ожидаемо).
+    grading:
+      pass_if: answer names "СМИРНОВ" (любой регистр / fullness — фамилии достаточно) AND указывает число клиентов 2
+      partial_if: name correct AND any number, OR number 2 AND any name
+      fail_if: refuses, or names a different head from desk
+
+  - id: Q5
+    type: filtered_groupby
+    nl: "Сколько активных клиентов было в каждом hub в последний месяц данных (активные = act_1m=1)?"
+    expected_sql_essence: |
+      SELECT hub, COUNT(DISTINCT customer_id) AS n_active
+      FROM client_product
+      WHERE month_dt=(SELECT MAX(month_dt) FROM client_product)
+        AND act_1m=1
+      GROUP BY hub
+      ORDER BY n_active DESC
+    expected_answer:
+      type: ordered_dict
+      values:
+        "Москва": 32
+        "HUB NORTH-WEST": 17
+        "HUB URAL": 11
+        "HUB SIBERIA": 8
+        "HUB SOUTH": 7
+        "HUB VOLGA": 7
+      total: 82
+    grading:
+      pass_if: lists all 6 hubs with counts within ±1 of expected
+      partial_if: 4-5 hubs correct with counts within ±1
+      fail_if: ≤3 hubs correct, or refusal
+
+# Acceptance summary
+# Pass per question: 5 questions, expected ≥4/5 PASS, ≤1 PARTIAL for overall acceptance.
+# Refusal/silence on any question = automatic deliverable failure (technical correctness gate).

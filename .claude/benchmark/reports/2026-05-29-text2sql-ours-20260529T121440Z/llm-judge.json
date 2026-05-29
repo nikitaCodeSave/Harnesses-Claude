@@ -1,0 +1,40 @@
+{
+  "T3": {
+    "score": 5,
+    "max": 6,
+    "justification": "agent.py wraps the tool loop in try/except, cli.py catches top-level Exception with graceful 'Ошибка:' message, tools.execute_sql returns {'error':...} instead of raising (test_tools_dispatch confirms), and db.month_range swallows connect failures returning None. Empty result is flagged by validate_result's non_empty check rather than fabricated. Minor gap: oracledb.connect() in db.connect() and chat() LLM calls are not individually wrapped, relying on the outer loop try."
+  },
+  "T4": {
+    "score": 6,
+    "max": 6,
+    "justification": "Consistent type hints on public functions (e.g. run()->AgentResult, sanitize_sql(sql:str)->str, load_settings()->Settings), docstrings on all classes/functions, clear naming, dataclasses used cleanly. Each module is well under 500 LoC and concerns are separated (db/llm/tools/agent/prompts). No visible dead code or copy-paste."
+  },
+  "T7": {
+    "score": 5,
+    "max": 6,
+    "justification": "db.sanitize_sql enforces single read-only SELECT/WITH, strips trailing ';', and blocks DML/DDL verbs (tests in test_db_guard cover delete/update/multi-statement). Prompt mandates Oracle DATE 'YYYY-MM-DD' literals and case-insensitive UPPER(...) LIKE. Weakness: SQL is free-form LLM-generated interpolation, not parameterized bind variables, so robustness rests on the guard/whitelist rather than true parameterization (month_range uses f-string table interpolation with noqa S608)."
+  },
+  "B1": {
+    "score": 4,
+    "max": 6,
+    "justification": "final_answer produces a Russian NL answer with numbers + interpretation (README example: 'Общий доход банка за 2025 год составил 345 802 507,40 рублей...'), not raw DB rows. However there is no explicit handling/instruction to render long multi-row results as a markdown table; results are merely truncated to 200 rows, so larger outputs are not formatted as analyst-readable tables."
+  },
+  "B2": {
+    "score": 5,
+    "max": 6,
+    "justification": "Dedicated validate_result tool with _validate supporting min_rows/max_rows, non_null_columns, and numeric_ranges checks; empty result is explicitly flagged (test_empty_result_flagged) and range violations surface in summary (test_numeric_range_violation_fails). The prompt instructs the agent to call validate_result before final_answer. Note: max for B2 is 5 per rubric; awarded near-full for solid sanity-check coverage."
+  },
+  "B3": {
+    "score": 5,
+    "max": 6,
+    "justification": "agent loop guards against models that emit no tool_call via bounded nudges (max 2) then falls back to last text, and MAX_STEPS=10 prevents infinite looping on simple queries. Ambiguity is reduced by injecting the real data month_range and defining 'last month' = MAX(MONTH_DT). SQL errors are returned to the model for self-correction. Missing-field/clarification behavior is delegated to the LLM with no explicit clarify path, limiting full marks."
+  },
+  "B5": {
+    "score": 3,
+    "max": 8,
+    "justification": "Config is cleanly via env vars/.env with no hardcoded credentials (config.py _require), connection has lazy connect + close() and a read-only guard. However logging is plain print-to-stderr (_log), not structured; and there is no Dockerfile, no CI workflow, no connection pool, and no retry/backoff logic — significant production-readiness gaps for the 8-pt item."
+  },
+  "total": 33,
+  "cost_usd": 0.2211135,
+  "status": "ok"
+}

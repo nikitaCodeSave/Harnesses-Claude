@@ -1,0 +1,40 @@
+{
+  "T3": {
+    "score": 6,
+    "max": 6,
+    "justification": "agent.py:83-119 оборачивает db.connect, _run_loop, finally db.close в try/except с понятными сообщениями без traceback. tools.py обрабатывает UnsafeSQLError и generic DB exceptions, возвращая 'error' field. test_agent_oracle_unavailable_returns_clean_error подтверждает graceful failure. Промпт явно требует не выдумывать пустые результаты (правило #10)."
+  },
+  "T4": {
+    "score": 6,
+    "max": 6,
+    "justification": "Type hints на public функциях (agent.run, db.execute_select, ensure_safe_select, dispatch_tool). Модули компактные (agent.py ~13KB, tools.py ~12KB, остальные меньше). Dataclasses (Config, QueryResult, AgentResult, ToolContext) с понятными именами. Docstrings в модулях/классах/функциях. Минорный dead code (history field) явно признан в CRITIC.md."
+  },
+  "T7": {
+    "score": 5,
+    "max": 6,
+    "justification": "safe_sql.py:75 ensure_safe_select с whitelist (SELECT/WITH only), blacklist DDL/DML keywords с \\b границами, strip string literals чтобы избежать FP, ban на ';' внутри. Defense-in-depth: проверка в tool и в OracleClient.execute_select. Промпт требует DATE 'YYYY-MM-DD' литералы (правило #2). Минус: интерполяция параметров в SQL делается LLM-генерацией, не через bind variables — но user NL не попадает в SQL напрямую."
+  },
+  "B1": {
+    "score": 6,
+    "max": 6,
+    "justification": "Промпт правило #8 требует конкретные цифры в финальном тексте на русском (пример: «Уникальных клиентов в базе: 103.»). Правило #11 требует разделители разрядов и единицу ₽. Правило #12 явно запрещает «выполнил запрос» без чисел. _content_has_numbers + _finalize_from_data fallback гарантируют, что ответ содержит число. EVIDENCE Run 1 показывает «345 802 507,40 ₽» — формат аналитика."
+  },
+  "B2": {
+    "score": 5,
+    "max": 5,
+    "justification": "validate_result tool в tools.py с экспектациями (min_rows, expect_non_empty, non_null_columns, numeric_columns, value_ranges). Промпт правило #7 обязывает вызывать validate_result после execute_sql. truncated flag в QueryResult + правило #13 — модель уведомляется об обрезании. test_validate_result покрывает empty/null/range кейсы."
+  },
+  "B3": {
+    "score": 5,
+    "max": 6,
+    "justification": "max_agent_steps=8 защищает от петель. SQL retry до 3 раз (правило #9). Пустые данные → честное сообщение (правило #10). Ambiguous NL клапйфикейшн не явный, но finalize-fallback покрывает кейс «модель забыла final_answer». Skip tool_calls после final_answer предотвращает petlю (test_agent_skips_tool_calls_after_final_answer). Минус: explicit clarification на ambiguous NL не реализован."
+  },
+  "B5": {
+    "score": 6,
+    "max": 8,
+    "justification": "Logging через _log в stderr (не structured JSON, но префиксированное). Config полностью через env vars + .env (config.py:_require). Нет hardcoded creds. SQL timeout (call_timeout) + LLM timeout + row limit. Graceful db.close в finally. Минусы: нет Dockerfile, нет CI workflow, нет retry с backoff на LLM/DB, logging plain stderr вместо structured."
+  },
+  "total": 39,
+  "cost_usd": 0.30954175,
+  "status": "ok"
+}
