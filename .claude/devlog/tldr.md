@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #57 · 2026-05-29 · text2sql benchmark v2 MVP
+
+**Tags:** benchmark, feature
+
+Оператор: текущий text2sql-бенчмарк примитивен (решается мгновенно), хотя просит e2e-тест против живой связки ollama+Oracle(docker); метрики надо расширить/переписать. Попросил «несколько агентов» посмотреть production-проект AI_analyst_for_work/AI_analyst_migration и…
+
+[→ entries/0057-text2sql-benchmark-v2-mvp.md](entries/0057-text2sql-benchmark-v2-mvp.md)
+
+---
+
 ## #56 · 2026-05-29 · system-guard simplified to DENY-only
 
 **Tags:** refactor, harness, hooks
