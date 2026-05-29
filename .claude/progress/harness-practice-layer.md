@@ -42,10 +42,16 @@ test-system-guard.sh`, 29/29) + фикс реального false-positive (`-gu
   → design-doc + MVP (`.claude/benchmark/text2sql-v2/`: фикстура+golden+оси 1-4, тест 18/18 «good vs
   naive»). Узкий NL→SQL + golden; судим КАЧЕСТВО результата, не pass/fail. Шаг к правильному замеру.
 
-## Следующая задача: достроить бенчмарк v2 + мульти-сессийный замер
-- Бенчмарк v2 next: live-Oracle runner (seed→docker-Oracle→агент-под-тестом→scorer); задачи
-  T2/T4/T5/T7/T9 + guardrail G1/G2; оси 5-9 (reliability/stability + LLM-judge). См.
-  `.claude/benchmark/text2sql-v2-design.md` (open questions).
+## Бенчмарк v2 — построен полностью (#57 MVP, #58 интеграция)
+3-агентная параллельная сборка (worktree, непересекающиеся файлы) + интеграция main-thread'ом:
+12 задач (T1-T10 + guardrail G1/G2), 9 осей (1-4 scorer + refusal, 5-6 runner reliability/stability,
+7-9 LLM-judge). Тесты: scorer 39/39, judge 19/19, runner 28/28; dry-run 12/12 gate_pass.
+`.claude/benchmark/text2sql-v2/`. Остаток до живого прогона: закрыть `_shape` для wide number_map с
+производными ключами (T5 delta, T6 PNL_TOTAL) + подключить реального агента через `AgentSolver`.
+
+## Следующая задача: live-прогон бенчмарка v2 + мульти-сессийный замер
+- Бенчмарк v2: закрыть live-mode `_shape` (per-task column-aliasing), поднять docker-Oracle+ollama
+  (env-креды), прогнать реального агента-под-тестом (`AgentSolver` через `claude --print`/пайплайн).
 - Practice-слой: мульти-сессийный сценарий (сессия N ← devlog 1..N-1), судить качество — single-shot
   зануляет ценность continuity/methodology (#52).
 - Опц.: пред-существующие дыры system-guard (`find -delete`, `truncate`, `chmod -R /`).
