@@ -56,9 +56,16 @@ test-system-guard.sh`, 29/29) + фикс реального false-positive (`-gu
   реальный qwen3-агент **5/12** (валит доменные traps, фабрикует G1) — бенчмарк дискриминирует качество.
 - Отчёт: `.claude/benchmark/reports/2026-05-29-text2sql-v2-ollama-baseline/`.
 
-## Следующая задача: мульти-сессийный замер practice-слоя
-- Бенчмарк v2 готов и рабочий e2e. Доп.: агент с полным доменным промптом (vs тонкий hint) — дельта;
-  оси 7-9 (judge) в живом прогоне.
+## A/B-обвязка готова к запуску (#60)
+- Дизайн (апрув): claude строит NL→SQL impl; toggle = глобальный `~/.claude` on/off; судья v2.
+- Замеры: дисперсия оракула 5/5/5 (детерминирован — стабильный инструмент, шум #52 отсутствует);
+  live reference 12/12; baseline 5/12. Toggle подтверждён механически (hooks 4 vs 0).
+- `text2sql-v2/ab/ab_runner.py` (--stub валидирован, оба arm 12/12). Триггер полного прогона:
+  `python3 ab/ab_runner.py --arms both --builds 3` (env Oracle) — дорогой (2×N claude-билдов).
+
+## Следующая задача: запустить полный A/B (по команде) + мульти-сессийный замер
+- Полный A/B даст дельту harness vs noharness на build-task. Caveat: single-shot билд не задействует
+  continuity-столб (#54) — для него нужен отдельный мульти-сессийный сценарий.
 - Practice-слой: мульти-сессийный сценарий (сессия N ← devlog 1..N-1), судить качество — single-shot
   зануляет ценность continuity/methodology (#52).
 - Опц.: пред-существующие дыры system-guard (`find -delete`, `truncate`, `chmod -R /`).
