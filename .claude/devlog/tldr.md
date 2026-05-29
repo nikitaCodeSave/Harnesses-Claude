@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #60 · 2026-05-29 · A/B harness test readiness (with vs without practice layer)
+
+**Tags:** benchmark, harness, multi-agent
+
+Оператор: «проведи все необходимые замеры и будь готов к полноценному тесту двух вариантов (с harness и без него)». Цель — измерить ценность глобального практического слоя ~/.claude на качественном оракуле v2. Дизайн зафиксирован (AskUserQuestion): агент-под-тестом = claude…
+
+[→ entries/0060-a-b-harness-test-readiness-with-vs-without-practice-layer.md](entries/0060-a-b-harness-test-readiness-with-vs-without-practice-layer.md)
+
+---
+
 ## #59 · 2026-05-29 · text2sql v2 live run ollama baseline
 
 **Tags:** benchmark, feature
