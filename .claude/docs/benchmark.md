@@ -1,197 +1,163 @@
 # Harness Benchmark Methodology
 
-3-tier подход для валидации harness changes. См. ADR-019. Цель — empirical evidence что обновления harness'а не регрессируют качество, и где возможно improve измеримо.
+**Цель**: empirical evidence что harness changes делают то, ради чего harness существует — поднимают качество inner-executor'а на задачах, которые модель сама без обвязки делает хуже. И не делают этого — на задачах, где harness просто overhead.
 
-## Когда запускать
+## Почему именно так измеряем
 
-| Trigger | Tier 0 | Tier 1 | Tier 2 |
-|---|:---:|:---:|:---:|
-| Pre-commit (любой harness change) | ✓ | — | — |
-| Новый ADR (behavior-changing) | ✓ | ✓ | — |
-| Новый/изменённый skill | ✓ | ✓ | ✓ (per skill) |
-| Новый/изменённый agent | ✓ | ✓ | ✓ (per agent) |
-| Новый/изменённый hook | ✓ | ✓ (smoke) | — |
-| Trim/retire component | ✓ | ✓ | — |
+Anthropic SWE-bench-Verified отделяет вклад модели от вклада scaffold'а: минимальный bash+edit harness, real-world Python tasks, fail-to-pass / pass-to-pass criteria. Addy Osmani (Agent Harness Engineering, 2026): «the gap between what today's models can do and what you see them doing is largely a harness gap» — но конкретной методики не предлагает; пробел закрываем сами. Boris Cherny (howborisusesclaudecode.com): «give Claude a way to verify its work» → 2-3× качество, plus CLAUDE.md как живой регрессионный артефакт. Skill Creator eval (март 2026): blind A/B между skill-версиями, 50k+ installs валидируют подход.
 
-Tier 3 (blind compare) — ad-hoc, when Tier 1 показывает ambiguous deltas.
+Empirical insight (own data, 22 runs × 5 tasks, devlog #24-25): **harness ROI ∝ ambient exploration cost** = (fixture navigation depth) × (spec ambiguity). Toy + explicit → overhead. Realistic + navigation-required → win. Этот axis бенчмарк должен сэмплить систематически.
 
 ---
 
-## Tier 0 — Static checks
+## 4-layer model
 
-Cheap, fast (<10 sec), automated. **Blocker** if fail.
-
-### Checks list
-
-| # | Check | Command / criteria | Source of constraint |
+| Layer | Что измеряет | Cost | Когда |
 |---|---|---|---|
-| 1 | `CLAUDE.md` size budget | `wc -l .claude/CLAUDE.md` ≤ 200 | meta-CLAUDE.md anti-pattern «не лить мегарайлзы» + ADR-012 |
-| 2 | Each `SKILL.md` size budget | per skill ≤ 500 строк | skill-creator anatomy guideline |
-| 3 | Active decisions size budget | `principles.md` ≤ 200 строк + каждая `### D-NNN` секция ≤ 30 | D-021 + tight format |
-| 4 | Devlog index integrity | `python3 .claude/devlog/rebuild-index.py` exit 0 | ADR-004 |
-| 5 | Skill frontmatter present | every `.claude/skills/*/SKILL.md` has `name` + `description` YAML | Claude Code skill spec |
-| 6 | Rules frontmatter (если есть) | `paths:` valid если frontmatter присутствует | docs-discipline rule 4 |
-| 7 | Skill discovery runtime | `claude --print` lists all `.claude/skills/*` | ADR-016 pilot pattern |
-| 8 | Agent inventory | `claude agents` lists expected (`deliverable-planner`, `meta-creator`, built-ins) | ADR-007 |
-| 9 | Hook smoke tests | каждый hook на stdin типичного input → exit 0 | ADR-016 (session-context.sh bugfix lesson) |
-| 10 | No retired components | grep `.claude/` against retired list (per ADR-007/010/011/016) | append-only history + retire ADR'ы |
-| 11 | Active+archive doc paths | `principles.md` + `.claude/docs/archive/decisions-2026Q2.md` оба существуют | D-021 |
-
-### Implementation
-
-`.claude/benchmark/static-checks.sh` — implemented; запускается из harness root, выводит таблицу check / pass-fail / actual value, exit 1 при любом fail.
-
-### Когда ослабить
-
-Если Tier 0 false-positive rate >20% (блокирует legitimate changes по ложной тревоге) — пересмотреть constraints. Counter-evidence to revise — см. ADR-019.
+| **A — Structural** | invariants harness'а (size budgets, frontmatter, agent inventory) | <10s | каждый harness change |
+| **B — Behavioral matrix** | task pass/fail на матрице fixture × task type | minutes-hours | behavior-changing principle/skill/agent change |
+| **C — Trajectory quality** | как Claude дошёл: skills/subagents/invariant compliance/workflow markers | parsed from B output | вместе с B |
+| **D — Statistical protocol** | variance handling, sign-inversion criteria, multi-run | n=3 multiplier | для любого numerical claim |
 
 ---
 
-## Tier 1 — Pilot project task suite
+## Layer A — Static checks
 
-Medium cost (manual + scripted). Запуск на ADR'ах меняющих behavior + при изменении skill/agent/hook.
+`.claude/benchmark/static-checks.sh` — 14 checks, ~44ms. Pre-commit blocker.
 
-### Fixture project
+Покрытие: CLAUDE.md ≤200, SKILL.md ≤500/каждый, principles.md ≤200, devlog index integrity, skill/rules frontmatter, skill discovery runtime, agent inventory, hook smoke, retired-component grep, active+archive paths.
 
-Default: `~/PROJECTS/FastApi-Base` (использован в ADR-016 pilot validation).
+Когда ослаблять: false-positive rate >20% — пересмотр constraints (counter-evidence per ADR-019).
 
-Альтернатива: dedicated `~/PROJECTS/Harness-Bench-Fixture` (свежий проект specifically для benchmark) — создаётся при первом случае когда FastApi-Base недоступен/несовместим.
+---
 
-Fixture должен иметь:
-- Git repo initialized (даже 1 commit OK; `git init` дешёвый pre-step если fixture был tarball-style).
-- 2+ top-level dirs в `src/` (для CODE-MAP.md trigger).
-- Existing tests (для baseline regression).
-- `docs/` либо отсутствует, либо минимальный (тестирует docs-bootstrap skill).
-- (Soft) ≥10 commits history для mode-detection signal; меньше — bootstrap mode.
+## Layer B — Behavioral matrix (fixture × task)
 
-### Standard task suite (7 задач, расширяется по необходимости)
+Replaces narrow Tier-1 suite. Matrix sparse: не cross-product, а selected cells покрывающие axis exploration cost.
 
-| ID | Type | Prompt | Expected signal |
-|---|---|---|---|
-| T01 | feature | «Add /health endpoint returning {status: ok, uptime: seconds}» | endpoint added, test passing, latency <50ms |
-| T02 | bugfix | «POST /users возвращает 500 если email duplicate — должен 409» | reproduce bug, fix, regression test added |
-| T03 | refactor | «Раздели monolith handlers на routers по resource» | structure changed, behavior identical (test suite passes) |
-| T04 | docs | «Project lacks ARCHITECTURE.md, добавь» | проверяет project-docs-bootstrap skill autotrigger |
-| T05 | ops | «Run linter, fix warnings» | lint clean, no behavior change |
-| T06 | research | «Какие endpoints возвращают user PII?» | accurate enumeration без modifications |
-| T07 | test | «Coverage gap: auth middleware. Добавь tests» | new tests, coverage delta |
+### Fixture legends (Python-проекты, разная топология)
 
-### Metrics per task
+| Fixture | LoC | Topology | Exploration | Status |
+|---|---:|---|---|---|
+| `toy-users-svc` (`sample-py-app`) | ~50 | 1-file service | trivial | ✓ live |
+| `fastapi-domain` (external `FastApi-Base`) | ~1000 | domain-layered web | medium-high | ✓ live |
+| `express-node` (external `ExpressApi-Base`) | ~300 | Express + Jest (polyglot control) | low | ✓ live |
+| `legacy-no-tests` | ~600 | Py2-style mix, no tests, mixed indents | high (modernization) | planned (P3) |
+| `partial-migration` | ~900 | Flask→FastAPI mid-migration | high (ambiguous) | future |
+| `cli-click-multicmd` | ~300 | Click + plugin system | medium | future |
+| `monorepo-uv` | ~1500 | UV workspace 3 packages | high | future |
 
-- **Tokens**: input + output (proxy для cost / context efficiency)
-- **Turns**: assistant turns to completion (proxy для thinking depth)
-- **Files**: read / edited / created counts
-- **Success**: binary, judged по acceptance signal (см. expected signal)
-- **Duration**: wall-clock
+Fixture spec: README с known issues, git initialised (≥1 commit), tests directory или явный absence.
 
-### Comparison protocol
+### Task taxonomy
 
-1. Snapshot harness-current state (git stash или branch).
-2. Run each task на harness-current. Capture metrics.
-3. Apply harness change. Run each task на harness-proposed. Capture metrics.
-4. Compute delta per metric per task.
-
-### Threshold
-
-| Metric | OK delta | Investigate threshold |
+| Type | Description | Quality judge |
 |---|---|---|
-| Tokens | ±20% | >+30% (regression) |
-| Turns | ±2 | >+4 (regression) |
-| Success rate | 100% maintained | any drop |
-| Files touched | ±2 | >+5 (scope creep signal) |
+| `F-easy` | feature add, explicit spec | pytest pass |
+| `F-explore` | feature add, location не задана | pytest pass + correct location |
+| `F-ambiguous` | vague spec («сделай надёжнее») | criteria match + manual judge |
+| `B-repro` | bugfix reproduction-first (RED→GREEN) | regression test added + tests pass |
+| `R-refactor` | move structure, behavior identical | full suite pass, files >2 changed |
+| `M-migration` | schema/framework migration | pytest pass + migration applies clean |
+| `D-docs` | generate/update docs | docs files exist + content non-trivial |
+| `Neg-invariant` | trip-wire prompt толкает к нарушению инварианта | Claude отказался или трансформировал |
 
-Outside threshold → investigate root cause. Inside → harness change OK.
-
----
-
-## Tier 2 — Per-component evals
-
-Per skill: skill-creator workflow.
-- Eval set: 8-10 should-trigger queries + 8-10 should-not-trigger (near-misses).
-- Run: `python -m scripts.run_loop --eval-set <path> --skill-path <skill> --model claude-opus-4-7 --max-iterations 1`
-- Pass criteria: trigger accuracy ≥85% on held-out test split.
-
-Per agent: similar — prompt corpus that should/shouldn't spawn agent. Manual judge для invocation appropriateness.
-
-Per hook: covered в Tier 0 smoke tests; tier 2 — non-applicable.
+Текущие задачи в `tier1/tasks/`: T01 (F-easy/toy), T02 (B-repro/toy), T03 (F-explore/fastapi), T03e (F-explore/express), T04 (M-migration/fastapi). Расширение — P3+.
 
 ---
 
-## Tier 3 — Blind compare (optional)
+## Layer C — Trajectory quality
 
-Используется когда Tier 1 показывает ambiguous deltas. Per skill-creator `agents/comparator.md`:
-1. Same task на harness-A vs harness-B.
-2. Independent agent (general-purpose) judges quality blind.
-3. Analyze winner reasoning (per `agents/analyzer.md`).
+`headless-runner.sh` парсит session JSON + assistant text. Метрики:
 
-Cost: 2× Tier 1 + judge agent. Не required; ad-hoc.
+- **Skills triggered** — `<skill>` markers в output. Per task: expected_skills (should-trigger) + forbidden_skills (should-not-trigger) → accuracy.
+- **Subagent dispatches** — count + types из `claude --print` JSON. Flag «over-delegation» если simple task → >1 subagent.
+- **Invariant pings** — grep tool-call payload на forbidden patterns: `ANTHROPIC_API_KEY`, `--bare`, `--betas managed-agents-`, `--max-budget-usd`, `--no-verify` (без user-imperative). Любой ping = invariant violation.
+- **Workflow markers** — regex assistant text на Plan / Work / Review-stage cues. Per task: expected_phases.
+- **Docs-discipline compliance** — если task меняет архитектуру / добавляет dir / вводит термин → docs touch detected? (per `.claude/rules/docs-discipline.md`).
+
+Trajectory metrics — additive к существующим (tokens / turns / wall / cost / pytest), не replacement.
+
+---
+
+## Layer D — Statistical protocol
+
+- **n=3 minimum** per cell. n=5 для close calls (|median Δ| < 15%).
+- **Bracket reporting** `[min, median, max]` + CV (coefficient of variation, %).
+- **Sign-inversion gate** (для claims вроде «harness ускорил»): median delta вне baseline IQR + ≥2/3 runs same side.
+- **Within-noise honesty**: ±5% при CV ≥10% — нельзя называть улучшением.
+
+Эмпирика, на которой стоит протокол: T03 4×4 runs показал CV=20.8% на our harness vs 8.7% на no-harness baseline. Single-run claims на этом variance — лотерея.
+
+---
+
+## Trigger matrix
+
+| Trigger | A | B | C | D |
+|---|:---:|:---:|:---:|:---:|
+| Pre-commit любой harness change | ✓ | — | — | — |
+| Behavior-changing principle update | ✓ | ✓ (subset) | ✓ | ✓ |
+| New/changed skill | ✓ | ✓ (skill-relevant cells) | ✓ | ✓ |
+| New/changed agent | ✓ | ✓ (agent-relevant cells) | ✓ | ✓ |
+| New/changed hook | ✓ | ✓ (smoke) | partial | — |
+| Retire/trim component | ✓ | ✓ (full subset) | ✓ | ✓ |
+| ADR с numerical claim | ✓ | ✓ | ✓ | **required** |
+
+«Subset» / «relevant cells» = sparse selection per change scope, не full matrix. Right-sizing — за main thread'ом per судить по природе изменения.
 
 ---
 
 ## Reporting
 
-Каждый behavior-changing ADR — attach benchmark report:
+Report format: `reports/<task>-<fixture>-<harness>-runN.json` (per-run) + `reports/<ADR-or-change>/summary.md` (aggregate). Markdown template — `reports/README.md`.
 
-```markdown
-## Benchmark report (ADR-NNN)
-
-**Tier 0**: pass (11/11)
-**Tier 1**: 5 tasks ran on FastApi-Base
-| Task | Tokens delta | Turns delta | Success | Notes |
-|---|---|---|---|---|
-| T01 | -8% | -1 | ✓ | — |
-| T02 | +3% | 0 | ✓ | — |
-| T03 | +12% | +1 | ✓ | within threshold |
-| T04 | -22% | -2 | ✓ | improvement (docs-bootstrap skill auto-triggered) |
-| T05 | +5% | 0 | ✓ | — |
-
-**Conclusion**: net improvement (T04), no regressions.
-```
-
-Report storage: либо section в ADR, либо separate `.claude/benchmark/reports/ADR-NNN.md` если объёмный.
+Aggregate summary обязан включать:
+- bracket table [min, median, max] per cell
+- CV per cell
+- sign-inversion verdict для claimed deltas
+- trajectory deltas (skill accuracy, invariant pings count)
 
 ---
 
 ## Current implementation state
 
-- **Tier 0**: fully automated (`.claude/benchmark/static-checks.sh`, 14 checks, 44ms runtime).
-- **Tier 1**: scaffolding ready (`.claude/benchmark/tier1/`) — task definitions validated, fixture present (`.claude/benchmark/fixtures/sample-py-app/`). Actual Claude invocation остаётся manual.
-- **Tier 2**: scaffolding ready (`.claude/benchmark/tier2/`) — eval sets для skill trigger accuracy. Manual evaluation.
-- **Stop-hook validation**: `.claude/hooks/stop-validation.sh` — independent test re-run на session end (two-gate validation pattern, community evidence false-completion 35%→4%).
-
-## Infrastructure layout
-
-```
-.claude/benchmark/
-├── README.md              — quick start + overview
-├── static-checks.sh       — Tier 0 (automated)
-├── run-all.sh             — orchestrate all tiers
-├── tier1/
-│   ├── README.md
-│   ├── run-tier1.sh
-│   └── tasks/             — T01-T02 sample tasks (yaml), extend по необходимости
-├── tier2/
-│   ├── README.md
-│   ├── run-tier2.sh
-│   └── eval-sets/         — <skill>-should-trigger.txt + <skill>-should-not-trigger.txt
-├── fixtures/
-│   ├── README.md
-│   └── sample-py-app/     — self-contained Python fixture с known bugs T01/T02
-└── reports/
-    └── README.md          — report template
-```
+- **Layer A**: fully automated (`static-checks.sh`, 14 checks, 44ms).
+- **Layer B**: operational на 3 fixture × 5 tasks. `headless-runner.sh` clone→inject→`claude --print`→JSON→pytest judge→report. Cross-harness comparison validated (`reports/CROSS-HARNESS-COMPARISON.md`).
+- **Layer C**: partial — token/turn/cost захвачены, trajectory parsing — work-in-progress (P2 этой итерации).
+- **Layer D**: applied ad-hoc на T03 (4×4 confirmed −24% median), не protocol-default yet.
+- **Stop-hook two-gate validation**: `.claude/hooks/stop-validation.sh` — independent test re-run on session end.
 
 ## Roadmap
 
-- **Done**: Tier 0 automation, Tier 1/2 scaffolding, self-contained fixture, Stop-hook validation.
-- **Next**: Tier 1 full automation через `claude --print --add-dir <fixture>` orchestrator (OAuth-compatible) с output parsing для tokens/turns/files metrics. `--bare` остаётся out of scope (strictly требует `ANTHROPIC_API_KEY` per `claude --help`).
-- **Future**: cross-harness comparison fixtures (clone everything-claude-code / claude-code-harness / Superpowers для quantitative benchmark на same task suite).
+- **Active (P1+P2, 2026-05-11)**: trajectory parsing в `headless-runner.sh`, доки aligned, T01–T04 re-prog.
+- **P3**: первая legend `legacy-no-tests` (modernization scenario, наибольший expected harness ROI).
+- **P4**: trip-wire / Neg-invariant tasks (5-8 honeypot prompts).
+- **P5**: stat protocol enforced default (n=3, bracket reporting).
+- **P6**: F-ambiguous tasks (criteria-judge не pytest binary). Самое ценное, самое тяжёлое.
 
 ---
 
 ## Связь с harness
 
-- `.claude/skills/skill-creator:skill-creator` (marketplace plugin) — Tier 2 implementation для skills.
-- `.claude/devlog/rebuild-index.py` — Tier 0 check #4.
-- `.claude/benchmark/static-checks.sh` — Tier 0 implementation.
-- `.claude/hooks/stop-validation.sh` — Stop-hook two-gate validation.
+- `.claude/benchmark/static-checks.sh` — Layer A implementation.
+- `.claude/benchmark/headless-runner.sh` — Layer B+C runner.
+- `.claude/devlog/rebuild-index.py` — Layer A check #4.
+- `.claude/hooks/stop-validation.sh` — independent two-gate validation.
+- `.claude/skills/skill-creator:skill-creator` (marketplace) — Layer B+C для skills (eval + Comparator).
+
+---
+
+## Native `/goal` и `claude agents` — где применимы, где нет
+
+Claude Code 2.1.139 (май 2026) ввёл встроенные `/goal` (loop-to-condition внутри сессии) и `claude agents` (TUI для параллельных background-сессий). На первый взгляд кажется, что это покрывает наши runner'ы — на практике нет: они на разном уровне абстракции.
+
+**`/goal` — runtime control внутри одной `claude --print` сессии**. Наши runner'ы — measurement pipelines (clone fixture → inject harness → run claude → parse stream-json → pytest judge → aggregate report). `/goal` не заменяет ни один из 5/9 фаз. Заменить им можно только **prompt** на входе в Phase 3 (Build) battle-test-runner'а, и то выборочно:
+
+- Уместно: усилить acceptance в `prompt.txt` (`/goal The deliverable invokes without ImportError and pytest exits 0`). Это prompt-engineering, не структурное изменение.
+- Не уместно: оборачивать сам `claude --print` в bash-loop вокруг `/goal` — это попытка дублировать встроенный механизм извне.
+
+**Cost watch**: тривиальный `/goal` (одна Edit, 4 turn'а, 14s) — $0.11 (Opus 4.7 1M $0.109 + Haiku 4.5 $0.003, гибрид). Для долгих goals предсказуемо $1+. Безопасность — в `prompt.txt` явное «stop after N turns regardless» либо внешний `timeout`.
+
+**`claude agents` (TUI) — параллельные independent-сессии с автоматической worktree-isolation**. Кандидат на замену последовательного multi-run в Layer D protocol (n=3..5 на cell). Не верифицировано эмпирически в нашем контексте на момент 2026-05-12; перед адопцией нужен test-run: запустить 3 одинаковых benchmark cell'а через agent view и подтвердить (а) корректную worktree-изоляцию между ними, (б) отсутствие гонок при записи `reports/`, (в) что permission-context из `.claude/settings.json` применяется per-process.
+
+**Empirical reference**: `~/.claude/projects/-home-nikita-PROJECTS-Harnesses-Claude/memory/reference_goal_agentview_empirical.md` — что подтверждено бинарём и live-тестом, что осталось гипотезой.

@@ -1,4 +1,4 @@
-# Multi-agent baseline (Opus 4.7 + наш harness)
+# Multi-agent baseline (Opus 4.8 + наш harness)
 
 > Baseline для построения multi-agent workflows **в проектах**, использующих этот harness. **Не** про baseline самого harness'а — это `principles.md` (active) + `.claude/docs/archive/decisions-2026Q2.md` (frozen). Evidence-based: цифры и паттерны взяты из canonical Anthropic статей + наших ADR'ов. Дата компиляции: **2026-05-10**.
 >
@@ -6,9 +6,9 @@
 
 ## TL;DR
 
-1. **Default to single-agent main thread**. Multi-agent оправдан только при breadth-first parallelism или context isolation. **Высоко-зависимые задачи (most coding) — ill-suited** (Anthropic).
-2. **Token overhead**: single-agent = ~4× обычного chat'а; multi-agent = ~15×. **80% variance производительности объясняется token usage** (Anthropic BrowseComp eval).
-3. **Lead Opus 4.7 + Sonnet 4.6 subagents** дают **+90.2%** к single-Opus baseline (Anthropic). Haiku 4.5 — для grunt subagents (file scans, log filtering, API pulls).
+1. **Default to single-agent main thread**. Multi-agent оправдан только при breadth-first parallelism или context isolation. **Высоко-зависимые задачи (most coding) — ill-suited** (Anthropic). Что изменилось под 4.8: для bounded fan-out (codebase-scale / миграция / trust-critical verification) есть first-party примитив **dynamic workflows** (`/workflow`, `ultracode`) — роутим к нему по built-ins-first, не строим кастомный pipeline.
+2. **Token overhead**: single-agent = ~4× обычного chat'а; multi-agent = ~15×. **80% variance производительности объясняется token usage** (Anthropic BrowseComp eval). Dynamic workflows кэпят fan-out: 16 concurrent / 1000 total agents.
+3. **Lead Opus 4.8 + Sonnet 4.6 subagents**: +90.2% — это **4.7-era Anthropic eval**, на 4.8 не перемерено. Haiku 4.5 — для grunt subagents (file scans, log filtering, API pulls).
 4. **Brief subagent как нового коллегу**: цель + формат вывода + границы + tool preferences. Короткий brief → spawn-spam, дублирование, gaps.
 5. **Effort scaling**: 1 agent для facts → 2-4 для сравнений → 10+ для multi-aspect research.
 6. **Built-ins-first** (Explore / Plan / general-purpose) до создания custom `.claude/agents/`.
@@ -23,7 +23,7 @@
 | Main agent  | session main thread                    | session                | reasoning, integration, delivery |
 | Skills      | `Skill` tool, `.claude/skills/`        | per-call в same window | reusable workflows               |
 | Subagents   | `Agent` tool, `.claude/agents/`        | one-way return         | isolated / parallel work         |
-| Teams       | `claude --print --add-dir`             | separate processes     | bidirectional cross-agent (CI)   |
+| Teams       | `TeamCreate` (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, off by default) | separate processes | bidirectional cross-agent |
 
 **Главный failure mode** (Anthropic 2026): «using the right tool in the wrong layer».
 - Behavioural constraint → **hook** (deterministic), не system prompt (interpretive).
@@ -40,7 +40,7 @@
 | -------------------------------- | --------------------------------------- | -------------------- | ---------- |
 | (а) Изоляция контекста           | broad codebase scan, 50+ files, log dive | нет                  | 4-15×      |
 | (б) Параллельность               | N независимых verifications/researches  | да: max(N) vs sum    | 4-15×      |
-| (в) Auto-compact rescue          | редко при 1M context Opus 4.7           | n/a                  | 4-15×      |
+| (в) Auto-compact rescue          | редко при 1M context Opus 4.8           | n/a                  | 4-15×      |
 
 ### 2.2 Bad fit (Anthropic explicit)
 
@@ -106,7 +106,7 @@ skills:
 | `general-purpose`   | open-ended multi-step research                 | catch-all               |
 | `statusline-setup`  | niche                                          | —                       |
 
-В **нашем harness'е** custom = 2 (`deliverable-planner`, `meta-creator`). Это minimal достаточный набор после Stage 2 trim'а (см. ADR-007 / ADR-011: 6 skills + 3 agents удалены как duplicate built-ins). Любое расширение — через симметричное правило (N≥3 промахи).
+В **нашем harness'е** custom = 3 (`meta-creator`, `security-reviewer`, `discovery-critic` — последний opt-in через `/critique`). Minimal достаточный набор (см. ADR-007 / ADR-011: duplicate built-ins удалены). Built-ins теперь **5** (+`claude-code-guide`). Любое расширение — через симметричное правило (N≥3 промахи).
 
 ---
 
@@ -120,7 +120,7 @@ skills:
 | Variance объяснитель #2 | tool call count    | BrowseComp eval     |
 | Variance объяснитель #3 | model choice       | BrowseComp eval     |
 
-**Implication**: token throw **не заменяет** model upgrade. «Sonnet 4 upgrade > doubling Sonnet 3.7 budget» (Anthropic). Под Opus 4.7 модель уже на максимуме; subagent-spam без isolation/parallelism gain — чистый overhead.
+**Implication**: token throw **не заменяет** model upgrade. «Sonnet 4 upgrade > doubling Sonnet 3.7 budget» (Anthropic). Под Opus 4.8 модель уже на максимуме; subagent-spam без isolation/parallelism gain — чистый overhead.
 
 ---
 
@@ -128,11 +128,11 @@ skills:
 
 | Role               | Model       | Зачем                                       |
 | ------------------ | ----------- | ------------------------------------------- |
-| Main agent (lead)  | Opus 4.7    | Reasoning, planning, integration            |
+| Main agent (lead)  | Opus 4.8    | Reasoning, planning, integration            |
 | Reasoning subagent | Sonnet 4.6  | Quality reasoning at lower cost             |
 | Grunt subagent     | Haiku 4.5   | File scans, log filtering, API pulls        |
 
-Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents = +90.2%** к single-Opus baseline (Anthropic eval). Haiku для grunt — без quality loss на грубой работе.
+Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents = +90.2%** к single-Opus baseline (Anthropic eval, 4.7-era — на 4.8 не перемерено). Haiku для grunt — без quality loss на грубой работе.
 
 ---
 
@@ -162,11 +162,11 @@ Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents =
 
 **Pattern 2 — TDD triad** (test-writer / impl / refactorer): community evidence (AgentCoder 87.8% accuracy vs 61% single-agent — [alexop.dev](https://alexop.dev/posts/custom-tdd-workflow-claude-code-vue/); AgentShield Anthropic Hackathon winner — red/blue/auditor pipeline на 3 Opus агентах). **Banned в нашем harness'е per ADR-002** (см. §8) — single context + `rules/testing.md` invariants заменяют. Documented здесь только для cross-reference на community claims.
 
-**Pattern 3 — Driver-Navigator** (Opus+Sonnet pair): Navigator (Opus 4.7, strategic) — PLAN/RED/REVIEW, никогда impl; Driver (Sonnet 4.6, tactical) — GREEN/REFACTOR, никогда не пишет/модифицирует тесты. Source: [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009).
+**Pattern 3 — Driver-Navigator** (Opus+Sonnet pair): Navigator (Opus 4.8, strategic) — PLAN/RED/REVIEW, никогда impl; Driver (Sonnet 4.6, tactical) — GREEN/REFACTOR, никогда не пишет/модифицирует тесты. Source: [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009).
 
 Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Chachamaru127/claude-code-harness) — formal Plan→Work→Review с worker/reviewer/scaffolder + Go-native guardrails + breezing mode для parallel + опциональная harness-mem.
 
-**API constraint**: [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) (cloud P/G/E через `managed-agents-2026-04-01` beta) — API-only, out of scope. Pattern-level знание переносится на CLI primitives (Task tool + `.claude/agents/` + hooks).
+**P/G/E нативно на CLI-подписке (4.8)**: с Opus 4.8 / CC v2.1.154+ паттерн Planner→Generator→Evaluator и adversarial-convergence (find→refute→converge) доступны через built-in **dynamic workflows** (`/workflow`, `ultracode`) — **без** API/managed-agents. [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) (API-only beta) остаются out of scope; концепт больше не нужно вручную портировать на CLI-примитивы — он встроен.
 
 ---
 
@@ -176,12 +176,12 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 | -------------------------------------------- | ------------------------------- | --------------------------------------------------------- |
 | TDD-тройка test-writer / impl / refactor     | ADR-002                         | Single context + TaskCreate phases + `rules/testing.md`   |
 | PM → Architect → Dev → QA pipeline           | meta-CLAUDE.md                  | Main thread + built-in `Plan` для design                  |
-| Generator/Evaluator контракт каждый sprint   | meta-CLAUDE.md                  | Opus 4.7 «devises ways to verify own outputs»             |
+| Generator/Evaluator контракт каждый sprint   | meta-CLAUDE.md                  | Opus 4.8 «devises ways to verify own outputs»; high-stakes — dynamic workflow opt-in |
 | Custom subagent дублирующий built-in         | ADR-007                         | `claude agents` check **до** создания                     |
 | code-reviewer как custom agent               | ADR-011                         | Built-in `/review` или main thread + diff                 |
 | Multi-agent для sequential dependency chain  | Anthropic [multi-agent-systems] | Single agent + TaskCreate                                 |
 | Subagent как wrapper над одним tool call     | принцип                         | Direct tool call в main thread                            |
-| Multi-agent для most coding                  | Anthropic explicit              | Main thread + parallel verification только после impl     |
+| Multi-agent для most coding                  | Anthropic explicit              | Main thread; для scope>1 контекста — built-in dynamic workflow, не кастомный pipeline |
 
 ---
 
@@ -229,7 +229,7 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 
 Этот baseline **не invariant** — frozen on date 2026-05-10. Re-evaluate когда:
 
-- **Major-релиз модели** (4.x → 5.x): прогон проектных multi-agent workflows на классах задач, где они критичны.
+- **Major-релиз модели** (напр. 4.7 → 4.8, выполнено в devlog #50; или 4.x → 5.x): прогон проектных multi-agent workflows на классах задач, где они критичны.
 - **N≥3 эмпирических промаха** одного типа (наблюдаемый telephone-game / token-overhead inefficiency / failure mode не в §9).
 - **Breaking change в built-in каталоге** Claude Code (новый built-in agent заменяет custom-паттерн baseline'а).
 
