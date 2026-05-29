@@ -49,9 +49,16 @@ test-system-guard.sh`, 29/29) + фикс реального false-positive (`-gu
 `.claude/benchmark/text2sql-v2/`. Остаток до живого прогона: закрыть `_shape` для wide number_map с
 производными ключами (T5 delta, T6 PNL_TOTAL) + подключить реального агента через `AgentSolver`.
 
-## Следующая задача: live-прогон бенчмарка v2 + мульти-сессийный замер
-- Бенчмарк v2: закрыть live-mode `_shape` (per-task column-aliasing), поднять docker-Oracle+ollama
-  (env-креды), прогнать реального агента-под-тестом (`AgentSolver` через `claude --print`/пайплайн).
+## Бенчмарк v2 — живой прогон выполнен (#59)
+- Live-mode `_shape` закрыт (per-task shape + case-insensitive ключи + алиасы). Фикстура грузится в
+  изолированную `client_product_bench` (`seed_oracle.py`) — рабочую таблицу не трогаем.
+- `OllamaSolver` (реальный агент через ollama). На реальном Oracle+ollama: ReferenceSolver 12/12;
+  реальный qwen3-агент **5/12** (валит доменные traps, фабрикует G1) — бенчмарк дискриминирует качество.
+- Отчёт: `.claude/benchmark/reports/2026-05-29-text2sql-v2-ollama-baseline/`.
+
+## Следующая задача: мульти-сессийный замер practice-слоя
+- Бенчмарк v2 готов и рабочий e2e. Доп.: агент с полным доменным промптом (vs тонкий hint) — дельта;
+  оси 7-9 (judge) в живом прогоне.
 - Practice-слой: мульти-сессийный сценарий (сессия N ← devlog 1..N-1), судить качество — single-shot
   зануляет ценность continuity/methodology (#52).
 - Опц.: пред-существующие дыры system-guard (`find -delete`, `truncate`, `chmod -R /`).
