@@ -27,8 +27,12 @@ COLUMNS = [
 ]
 
 # Periods used by the tasks. Closed months use EOM dates; the current month is
-# deliberately NOT end-of-month (lagging snapshot, as on prod).
+# deliberately NOT end-of-month (lagging snapshot, as on prod). Q3/Q4 2024 are
+# disjoint from Q1 2024 so T1/T3/T6/T7/T9 (which filter on Q1 months) are
+# unaffected; all 2024 months precede MAX(MONTH_DT)=2026-04-22 so T10 holds.
 Q1_2024 = ["2024-01-31", "2024-02-29", "2024-03-31"]
+Q3_2024 = ["2024-07-31", "2024-08-31", "2024-09-30"]
+Q4_2024 = ["2024-10-31", "2024-11-30", "2024-12-31"]
 Q3_2025 = ["2025-07-31", "2025-08-31", "2025-09-30"]
 Q4_2025 = ["2025-10-31", "2025-11-30", "2025-12-31"]
 CURRENT_MONTH = "2026-04-22"   # MAX(MONTH_DT); EOM would be 2026-04-30
@@ -41,6 +45,20 @@ CLIENTS = {
     1004: ("ООО СУХОЙ ПОРТ", "Middle", None),
     1005: ("АО ГАЗПРОМ-ТРЕЙД", "International", None),
     1006: ("ООО РОМАШКА", "SME", None),
+}
+
+# Account-opening dates (T4: new clients are counted by CREATE_DT, NOT MONTH_DT).
+# Three clients opened during 2024 (two of them in the same month — Feb — so the
+# month→count map has a >1 bucket); the rest predate the window. CREATE_DT does
+# not affect snapshot aggregations (T1/T3/T6/T7/T9 filter on MONTH_DT), so the
+# existing golden values are unchanged by these values.
+_CREATE_DT = {
+    1001: "2020-01-15",
+    1002: "2020-01-15",
+    1003: "2024-02-10",
+    1004: "2024-02-20",
+    1005: "2024-05-05",
+    1006: "2019-11-30",
 }
 
 # Per-client Q1-2024 monthly CA_LCY_SUM (balances vary so two-step AVG over the
@@ -66,6 +84,16 @@ _PNL_Q1 = {
     1006: dict(PL_CA=5,  PL_DEP=0,  PL_VK=1,  PL_VK_OUT=0, FX_MARGIN_RUB=0,  VED_SUM=0,  PNL_SUM=6),
 }
 
+# Per-client FX turnover (FX_VOLUME_RUB), constant across Q1 months — a flow
+# field, so it is SUM'd over the period (T7 FX-by-month, T9 "sum FX" per segment).
+_FX_Q1 = {1001: 70, 1002: 600, 1003: 200, 1004: 0, 1005: 150, 1006: 5}
+
+# Per-client TOTAL income (PNL_SUM) for Q3-2024 and Q4-2024, constant across each
+# quarter's 3 months. T5 compares the quarter SUMs. Values are disjoint from Q1
+# data (different MONTH_DT), so T1/T3/T6/T7/T9 are unaffected.
+_PNL_Q3_2024 = {1001: 10, 1002: 100, 1003: 20, 1004: 5, 1005: 30, 1006: 5}
+_PNL_Q4_2024 = {1001: 20, 1002: 150, 1003: 30, 1004: 5, 1005: 40, 1006: 5}
+
 # VED_VOL by client per quarter (T8 two-period stop). Q4 absence of a client
 # also counts as "stopped" (the IS NULL case).
 _VED_Q3 = {1001: 0, 1002: 500, 1005: 300, 1006: 200}
@@ -77,7 +105,7 @@ def _row(inn: int, month: str, **over) -> dict[str, object]:
     name, seg, grp = CLIENTS[inn]
     r: dict[str, object] = {c: 0 for c in COLUMNS}   # numeric columns default to 0
     r.update({
-        "MONTH_DT": month, "CREATE_DT": "2020-01-15", "CLOSE_DT": None,
+        "MONTH_DT": month, "CREATE_DT": _CREATE_DT[inn], "CLOSE_DT": None,
         "CUSTOMER_ID": inn, "INN": inn, "ORGANIZATION_NM": name,
         "GROUP_NM": grp, "SEG": seg, "DESK": "DESK_A", "HUB": "Москва",
         "MANAGER_NAME": "Иванов", "SALARY_PROJECT": None,
@@ -89,10 +117,18 @@ def _row(inn: int, month: str, **over) -> dict[str, object]:
 
 def build_rows() -> list[dict]:
     rows: list[dict] = []
-    # Q1 2024: all clients, all 3 months — balances + income components.
+    # Q1 2024: all clients, all 3 months — balances + income components + FX vol.
     for inn in CLIENTS:
         for i, month in enumerate(Q1_2024):
-            rows.append(_row(inn, month, CA_LCY_SUM=_CA_Q1[inn][i], **_PNL_Q1[inn]))
+            rows.append(_row(inn, month, CA_LCY_SUM=_CA_Q1[inn][i],
+                             FX_VOLUME_RUB=_FX_Q1[inn], **_PNL_Q1[inn]))
+    # Q3 2024 and Q4 2024: total income only (T5 quarter comparison).
+    for inn, pnl in _PNL_Q3_2024.items():
+        for month in Q3_2024:
+            rows.append(_row(inn, month, PNL_SUM=pnl))
+    for inn, pnl in _PNL_Q4_2024.items():
+        for month in Q4_2024:
+            rows.append(_row(inn, month, PNL_SUM=pnl))
     # Q3 2025: VED activity for a subset.
     for inn, ved in _VED_Q3.items():
         for month in Q3_2025:
