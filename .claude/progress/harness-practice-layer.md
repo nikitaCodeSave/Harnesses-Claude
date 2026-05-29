@@ -35,11 +35,20 @@ test-system-guard.sh`, 29/29) + фикс реального false-positive (`-gu
 рекурсивный флаг) + закрытие HIGH-дыры (capital `-R`) по итогам security-reviewer subagent'а.
 §7 в `~/.claude/CLAUDE.md`: project-danger кодируется реактивно (permissions.deny), не upfront.
 
-## Следующая задача: мульти-сессийный бенчмарк practice-слоя
-Все 3 столба готовы → нужен «правильный» замер ценности. Single-shot battle-test-runner зануляет
-continuity/methodology (devlog #52). Нужен сценарий: сессия N опирается на devlog 1..N-1 + судить
-КАЧЕСТВО (тестов/решений), не pass/fail. Инфра: `.claude/benchmark/` (Oracle, Ollama).
-Опц. follow-up: пред-существующие дыры system-guard (`find -delete`, `truncate`, `chmod -R /`).
+## Доп. сделано в этой сессии (вне 3 столбов)
+- **system-guard упрощён → DENY-only + sudo LOG** (#56): убраны ASK-тиры (трение), оставлен
+  катастрофический пол. Тест 29/29.
+- **Бенчмарк text2sql v2 MVP** (#57): 4-агентная разведка production-проекта `AI_analyst_migration`
+  → design-doc + MVP (`.claude/benchmark/text2sql-v2/`: фикстура+golden+оси 1-4, тест 18/18 «good vs
+  naive»). Узкий NL→SQL + golden; судим КАЧЕСТВО результата, не pass/fail. Шаг к правильному замеру.
+
+## Следующая задача: достроить бенчмарк v2 + мульти-сессийный замер
+- Бенчмарк v2 next: live-Oracle runner (seed→docker-Oracle→агент-под-тестом→scorer); задачи
+  T2/T4/T5/T7/T9 + guardrail G1/G2; оси 5-9 (reliability/stability + LLM-judge). См.
+  `.claude/benchmark/text2sql-v2-design.md` (open questions).
+- Practice-слой: мульти-сессийный сценарий (сессия N ← devlog 1..N-1), судить качество — single-shot
+  зануляет ценность continuity/methodology (#52).
+- Опц.: пред-существующие дыры system-guard (`find -delete`, `truncate`, `chmod -R /`).
 **Сначала предложи план, дождись апрува, потом исполняй.**
 
 ## Ограничения
