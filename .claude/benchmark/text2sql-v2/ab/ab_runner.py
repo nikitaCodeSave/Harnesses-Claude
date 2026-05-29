@@ -36,7 +36,7 @@ import runner  # noqa: E402
 BUILD_PROMPT = (_V2 / "ab" / "build_prompt.md").read_text(encoding="utf-8")
 BUILD_MODEL = os.getenv("AB_BUILD_MODEL", "claude-sonnet-4-6")
 BUILD_TIMEOUT = int(os.getenv("AB_BUILD_TIMEOUT", "2400"))
-SOLVE_TIMEOUT = int(os.getenv("AB_SOLVE_TIMEOUT", "60"))
+SOLVE_TIMEOUT = int(os.getenv("AB_SOLVE_TIMEOUT", "240"))  # impl makes an ollama call per task
 
 
 class BuiltImplSolver:
@@ -47,10 +47,15 @@ class BuiltImplSolver:
         self.timeout = timeout
 
     def solve(self, task: dict) -> dict:
+        # Run with the lab interpreter (has httpx/urllib for the ollama call); the
+        # ollama + Oracle env (already exported for the run) is inherited so the
+        # built impl can reach the local model. The impl returns SQL; the runner
+        # executes it against the bench Oracle.
         try:
             out = subprocess.run(
                 [sys.executable, "solve.py", task["nl"]],
-                cwd=self.impl_dir, capture_output=True, text=True, timeout=self.timeout,
+                cwd=self.impl_dir, capture_output=True, text=True,
+                timeout=self.timeout, env=dict(os.environ),
             )
         except Exception as exc:  # noqa: BLE001
             return {"sql": "", "result": None, "status": "error", "answer": str(exc)[:300]}
