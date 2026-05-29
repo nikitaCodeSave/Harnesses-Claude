@@ -1,7 +1,7 @@
 # Devlog
 
 Хронология значимых изменений в проекте. Источник правды — `entries/*.md`,
-`index.json` регенерируется из их frontmatter.
+`index.json` и `tldr.md` регенерируются из их frontmatter и body.
 
 ## Зачем
 
@@ -13,13 +13,20 @@ Squash-merge схлопывает мотивацию — devlog сохраняе
 
 ```
 .claude/devlog/
-  index.json                 # АВТО-ГЕНЕРИРУЕТСЯ — не редактировать
-  rebuild-index.py           # запускать после добавления записи
+  index.json                 # АВТО-ГЕНЕРИРУЕТСЯ — не редактировать (jq-friendly, с _schema)
+  tldr.md                    # АВТО-ГЕНЕРИРУЕТСЯ — не редактировать (digest для холодного входа)
+  rebuild-index.py           # запускать после добавления записи (пишет оба derived файла)
   README.md                  # этот файл
   entries/
     0001-bootstrap-...md     # frontmatter + body
     0002-...md
 ```
+
+`index.json` несёт `_schema` блок с описанием полей — агент или человек,
+открывший файл впервые, понимает контракт без чтения этого README.
+`tldr.md` — newest-first дайджест с preview на каждую запись и ссылкой
+на entry-файл. Назначение: один Read даёт обзор проекта без чтения всех
+entries целиком.
 
 ## Имя файла
 
@@ -70,7 +77,12 @@ supersedes: 12                      # optional, id записи, которую 
 - #12 — кратко о связи
 ```
 
-Структура body не валидируется — индексер не парсит body. Главное чтобы было читаемо человеком и LLM.
+Структура body не валидируется. **Но один конвент держим:** первый
+параграф `## Контекст` — это самодостаточное one-paragraph объяснение
+мотивации (≤280 символов идеально). Индексер вытащит его в поле
+`preview` в `index.json` и в `tldr.md`. Если параграф длиннее —
+будет обрезан по слову с `…`. Если секции `## Контекст` нет — fallback
+на первый параграф body после H1.
 
 ## Когда добавлять запись
 
@@ -122,13 +134,13 @@ LLM может пропустить шаг 1-5 и сразу дать готов
 
 Допустимы только технические правки старых записей: опечатки, битые ссылки, несоответствие формата. **Суть события не редактируется.**
 
-## Регенерация index.json
+## Регенерация derived артефактов
 
 ```bash
 python3 .claude/devlog/rebuild-index.py
 ```
 
-- `exit 0` — всё ок, index.json обновлён
+- `exit 0` — `index.json` + `tldr.md` обновлены
 - `exit 1` — ошибки в entries (показаны в stderr): отсутствуют поля, несовпадение id/имени файла, дубли id, slug разошёлся со slugify(title)
 
 Скрипт идемпотентен — можно запускать сколько угодно раз. Подходит как pre-commit hook.
@@ -136,8 +148,8 @@ python3 .claude/devlog/rebuild-index.py
 ## Поиск
 
 ```bash
-# Хронология
-jq -r '.entries[] | "\(.date)  #\(.id)  \(.title)"' .claude/devlog/index.json
+# Хронология с preview (компактный обзор для холодного входа)
+jq -r '.entries[] | "\(.date)  #\(.id)  \(.title)\n    \(.preview)"' .claude/devlog/index.json
 
 # По тегу
 jq '.entries[] | select(.tags[]? == "bugfix")' .claude/devlog/index.json
@@ -147,4 +159,11 @@ jq '.entries[] | select(.date == "2026-05-09")' .claude/devlog/index.json
 
 # Только действующие (без superseded)
 jq '.entries[] | select(.status != "superseded")' .claude/devlog/index.json
+
+# Схема полей (для агента, открывшего index.json впервые)
+jq '._schema' .claude/devlog/index.json
 ```
+
+Для агентского обзора без jq — открой `tldr.md`: один Read даёт newest-first
+дайджест с preview и ссылкой на каждую entry. Глубокое чтение — открывать
+отдельные `entries/NNNN-*.md`.

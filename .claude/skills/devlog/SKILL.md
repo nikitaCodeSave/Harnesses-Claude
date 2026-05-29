@@ -67,7 +67,10 @@ status: complete
 # <title>
 
 ## Контекст
-Какая проблема решалась или какая цель достигается. 2-4 предложения.
+Какая проблема решалась или какая цель достигается. **Первый параграф** —
+самодостаточное one-paragraph объяснение мотивации (≤280 символов
+идеально); `rebuild-index.py` вытащит его в `preview` (в `index.json`
+и `tldr.md`). Дальше — детали, 2-4 предложения.
 
 ## Изменения
 Что конкретно сделано. Ключевые решения и trade-offs. Code blocks где уместно.
@@ -98,13 +101,13 @@ status: complete
 
 Область — свободная (например: `api`, `db`, `frontend`, `cli`, `prompts`, `harness`).
 
-### 5. Регенерируй index.json
+### 5. Регенерируй derived артефакты
 
 ```bash
 python3 .claude/devlog/rebuild-index.py
 ```
 
-- `exit 0` + `index.json updated: N entries` — успех
+- `exit 0` + `index.json + tldr.md updated: N entries` — успех
 - `exit 1` + ошибки в stderr — исправь и запусти снова. Типичные ошибки:
   - `required field 'X' missing` — добавь поле в frontmatter
   - `frontmatter id N != filename id M` — переименуй файл или поправь id

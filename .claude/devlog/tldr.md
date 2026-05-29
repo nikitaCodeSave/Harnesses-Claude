@@ -8,6 +8,116 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #54 · 2026-05-29 · Continuity pillar — global SessionStart context hook
+
+**Tags:** feature, harness, hooks
+
+Второй столб practice-слоя (после methodology, #53): сделать «что было до» глобальным дефолтом. Раньше continuity-сёрфинг работал ТОЛЬКО в этом lab-репо через project-level .claude/hooks/session-context.sh. Цель — в ЛЮБОМ проекте Claude при старте видит недавнюю историю работы…
+
+[→ entries/0054-continuity-pillar-global-sessionstart-context-hook.md](entries/0054-continuity-pillar-global-sessionstart-context-hook.md)
+
+---
+
+## #53 · 2026-05-29 · Test-quality methodology pillar (global, evidence-grounded)
+
+**Tags:** feature, harness, adr
+
+Оператор сформулировал недостающее звено: harness ценен как standing development-practice layer (заточить Claude под разработку), а не как разовый bootstrap; и не хватало надёжного методологического слоя (приходилось переруливать BDD/TDD в каждом проекте, чтобы не было…
+
+[→ entries/0053-test-quality-methodology-pillar-global-evidence-grounded.md](entries/0053-test-quality-methodology-pillar-global-evidence-grounded.md)
+
+---
+
+## #52 · 2026-05-29 · Benchmark text2sql Opus 4.8: harness vs noharness (n=1)
+
+**Tags:** benchmark, harness
+
+Re-measurement cost-envelope под Opus 4.8 (триггер из devlog #50/#51 — major model upgrade). Прогон battle-test-runner.sh --task text2sql на двух армах: harness=ours vs noharness, оба --build-model opus --judge-model opus (4.8), последовательно (чтобы избежать contention на…
+
+[→ entries/0052-benchmark-text2sql-opus-4-8-harness-vs-noharness-n-1.md](entries/0052-benchmark-text2sql-opus-4-8-harness-vs-noharness-n-1.md)
+
+---
+
+## #51 · 2026-05-29 · Lab docs re-grounded to Opus 4.8 + dynamic workflows
+
+**Tags:** docs, harness
+
+Продолжение devlog #50 (то записало «остаётся глубокий re-ground lab-доков»). Четыре on-demand reference-дока были приколочены к Opus 4.7 / CC 2.1.143 и пропускали главный новый workflow-примитив — dynamic workflows. Harness'а собственная доктрина (workflow-evolution.md)…
+
+[→ entries/0051-lab-docs-re-grounded-to-opus-4-8-dynamic-workflows.md](entries/0051-lab-docs-re-grounded-to-opus-4-8-dynamic-workflows.md)
+
+---
+
+## #50 · 2026-05-29 · Harness starter consolidated under Opus 4.8
+
+**Tags:** refactor, harness
+
+Оператор указал, что «стартовый harness первой сессии» перегружен и местами хуже голого claude. Разведка двумя субагентами вскрыла корень: «стартер» = глобальный слой ~/.claude/, и в нём жили ДВА конкурирующих bootstrap-скилла. Глобальный harness-setup (Python-only, 19…
+
+[→ entries/0050-harness-starter-consolidated-under-opus-4-8.md](entries/0050-harness-starter-consolidated-under-opus-4-8.md)
+
+---
+
+## #49 · 2026-05-18 · Working style block added to harness-setup template (A/B/C N=3×3)
+
+**Tags:** adr, harness, experiment
+
+Оператор сообщил, что /harness-setup (skill claude-code-harness) генерирует target-CLAUDE.md без behavioral guidance — нет «думай прежде чем кодить / минимум кода / surgical changes / verifiable goals», которые Карпати [сформулировал в…
+
+[→ entries/0049-working-style-block-added-to-harness-setup-template-a-b-c-n.md](entries/0049-working-style-block-added-to-harness-setup-template-a-b-c-n.md)
+
+---
+
+## #48 · 2026-05-18 · Workflow doc split — 6-файловый layout с empirical grounding 2026 Q2
+
+**Tags:** docs, harness, refactor
+
+Заменили монолитный workflow.md (380 строк, 2026-05-10 vintage) на тонкий spine + 5 slice docs. Старая версия дублировала Anthropic-canonical feature-dev plugin и игнорировала весь inventory Claude Code 2.1.143 (Monitor tool, /goal, dispatch flags v2.1.142, hooks v2.1.139…
+
+[→ entries/0048-workflow-doc-split-6-layout-empirical-grounding-2026-q2.md](entries/0048-workflow-doc-split-6-layout-empirical-grounding-2026-q2.md)
+
+---
+
+## #47 · 2026-05-17 · harness-setup items 1-3 closed (ruff/py-detect/B7)
+
+**Tags:** refactor, harness, skill
+
+Closure трёх deferred open items из devlog #46 для ~/.claude/skills/harness-setup/. Все три — разные axis того же anti-pattern #15 «prescribe-without-detect» + один scope decision. Цель — устранить friction день 1 на user'ских системах с Python ≠ 3.12 и формализовать sample-app…
+
+[→ entries/0047-harness-setup-items-1-3-closed-ruff-py-detect-b7.md](entries/0047-harness-setup-items-1-3-closed-ruff-py-detect-b7.md)
+
+---
+
+## #46 · 2026-05-17 · /harness-setup audit — 13 fixes + anti-pattern #15
+
+**Tags:** refactor, harness, skill, audit
+
+Сессия комплексного аудита skill'а ~/.claude/skills/harness-setup/ против leader-canon (Anthropic Best Practices / Effective Harnesses / Cherny howborisusesclaudecode / NLAH arXiv 2603.25723 / Meta-Harness arXiv 2603.28052 / Chroma Context Rot). Поводом стал реальный run…
+
+[→ entries/0046-harness-setup-audit-13-fixes-anti-pattern-15.md](entries/0046-harness-setup-audit-13-fixes-anti-pattern-15.md)
+
+---
+
+## #45 · 2026-05-16 · Harness-setup final outcome contract v3
+
+**Tags:** refactor, adr, harness, skills
+
+Pilot run /harness-setup на /home/nikita/PROJECTS/test/ (2026-05-16) выявил пять новых проблем после compact reorg v2 (#44):
+
+[→ entries/0045-harness-setup-final-outcome-contract-v3.md](entries/0045-harness-setup-final-outcome-contract-v3.md)
+
+---
+
+## #44 · 2026-05-16 · Harness-setup compact reorg v2
+
+**Tags:** refactor, adr, harness, skills
+
+Pilot iteration 2 теста /harness-setup на пустом репо (/home/nikita/PROJECTS/test/) обнаружила два structural дефекта: (а) F8d block .venv/bin/ prefix баг — skill подставлял .venv/bin/<tool> для всех Python инструментов, не различая глобальный ruff (~/.local/bin/) от venv-bound…
+
+[→ entries/0044-harness-setup-compact-reorg-v2.md](entries/0044-harness-setup-compact-reorg-v2.md)
+
+---
+
 ## #43 · 2026-05-16 · harness-setup → team-ready Python-only (Windows-native, settings split, idempotent)
 
 **Tags:** skill, harness-setup, refactor, testing
