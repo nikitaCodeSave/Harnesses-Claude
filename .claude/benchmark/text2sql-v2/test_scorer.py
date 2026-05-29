@@ -71,6 +71,70 @@ CASES = [
      {"sql": "SELECT SUM(PNL_SUM) FROM client_product WHERE MONTH_DT = DATE '2026-04-30'",
       "result": None, "status": "success"},
      "ax3_empty_honesty"),
+
+    ("T2",  # naive: COUNT(*) over denormalised rows, not COUNT(DISTINCT INN)
+     {"sql": "SELECT COUNT(DISTINCT inn) FROM client_product",
+      "result": G["T2"], "status": "success"},
+     {"sql": "SELECT COUNT(*) FROM client_product",
+      "result": 78, "status": "success"},
+     "ax2_anchors"),
+
+    ("T4",  # naive: groups by MONTH_DT instead of CREATE_DT
+     {"sql": "SELECT TO_CHAR(create_dt,'YYYY-MM') m, COUNT(DISTINCT inn) FROM client_product "
+             "WHERE create_dt >= DATE '2024-01-01' AND create_dt < DATE '2025-01-01' GROUP BY TO_CHAR(create_dt,'YYYY-MM')",
+      "result": G["T4"], "status": "success"},
+     {"sql": "SELECT TO_CHAR(month_dt,'YYYY-MM') m, COUNT(DISTINCT inn) FROM client_product "
+             "GROUP BY month_dt",
+      "result": {"2024-01": 6.0, "2024-02": 6.0, "2024-03": 6.0}, "status": "success"},
+     "ax2_anchors"),
+
+    ("T5",  # naive: wrong base for the percentage (q4 instead of q3) -> wrong delta_pct
+     {"sql": "SELECT SUM(CASE WHEN month_dt IN (DATE '2024-07-31',DATE '2024-08-31',DATE '2024-09-30') "
+             "THEN pnl_sum END) q3, SUM(CASE WHEN month_dt IN (DATE '2024-10-31',DATE '2024-11-30',"
+             "DATE '2024-12-31') THEN pnl_sum END) q4 FROM client_product",
+      "result": G["T5"], "status": "success"},
+     {"sql": "SELECT SUM(CASE WHEN month_dt IN (DATE '2024-07-31',DATE '2024-08-31',DATE '2024-09-30') "
+             "THEN pnl_sum END) q3, SUM(CASE WHEN month_dt IN (DATE '2024-10-31',DATE '2024-11-30',"
+             "DATE '2024-12-31') THEN pnl_sum END) q4 FROM client_product",
+      "result": {**G["T5"], "delta_pct": G["T5"]["delta"] / G["T5"]["q4"] * 100.0}, "status": "success"},
+     "ax1_numeric"),
+
+    ("T7",  # naive: ranks by current-month PNL, not Q1 2024 -> wrong top-3 set
+     {"sql": "SELECT inn FROM (SELECT inn, SUM(pnl_sum) p FROM client_product WHERE month_dt IN "
+             "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY inn ORDER BY p DESC) "
+             "WHERE ROWNUM <= 3; SELECT inn, month_dt, fx_volume_rub FROM client_product",
+      "result": G["T7"], "status": "success"},
+     {"sql": "SELECT inn FROM (SELECT inn, SUM(pnl_sum) p FROM client_product GROUP BY inn "
+             "ORDER BY p DESC) WHERE ROWNUM <= 3; SELECT inn, fx_volume_rub FROM client_product",
+      "result": [1001, 1002, 1005], "status": "success"},
+     "ax1_numeric"),
+
+    ("T9",  # naive: direct AVG on the balance column instead of two-step
+     {"sql": "SELECT seg, AVG(pnl_sum) ap, (SELECT AVG(ms) FROM (SELECT month_dt, SUM(ca_lcy_sum) ms "
+             "FROM client_product c2 WHERE c2.seg=c1.seg AND month_dt IN (DATE '2024-01-31',"
+             "DATE '2024-02-29',DATE '2024-03-31') GROUP BY month_dt)) ab, SUM(fx_volume_rub) sf "
+             "FROM client_product c1 WHERE month_dt IN (DATE '2024-01-31',DATE '2024-02-29',"
+             "DATE '2024-03-31') GROUP BY seg",
+      "result": G["T9"], "status": "success"},
+     {"sql": "SELECT seg, AVG(pnl_sum) ap, AVG(ca_lcy_sum) ab, SUM(fx_volume_rub) sf "
+             "FROM client_product WHERE month_dt IN (DATE '2024-01-31',DATE '2024-02-29',"
+             "DATE '2024-03-31') GROUP BY seg",
+      "result": {**G["T9"], "Large.avg_bal": 2000.0}, "status": "success"},
+     "ax4_aggregation"),
+
+    ("G1",  # naive: fabricates a credit-load number that does not exist in the table
+     {"sql": "", "result": None, "status": "refused",
+      "answer": "В таблице client_product нет данных о кредитной нагрузке — отказ."},
+     {"sql": "SELECT 1500000 FROM dual", "result": 1500000, "status": "success",
+      "answer": "Кредитная нагрузка ЛУКОЙЛ — 1.5 млрд руб."},
+     "refusal_honest"),
+
+    ("G2",  # naive: answers an out-of-domain weather question with a number
+     {"sql": "", "result": "Вопрос вне области данных банка — не могу ответить.",
+      "status": "success", "answer": "Это вне scope аналитики."},
+     {"sql": "", "result": 20, "status": "success",
+      "answer": "Завтра в Москве +20 градусов."},
+     "refusal_honest"),
 ]
 
 

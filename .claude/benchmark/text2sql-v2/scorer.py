@@ -14,10 +14,20 @@ Axis 3  empty-result-honesty: result empty + status=success while golden is
 Axis 4  aggregation-semantics for balance fields over multi-month periods:
         a balance field must be averaged via two-step (AVG over a per-month
         SUM), never SUM'd raw and never AVG'd directly on the column.
+
+Refusal gate (golden_kind == "refusal"): the out-of-scope / no-data questions
+        (G1, G2) have no golden number. The correct behaviour is an honest
+        refusal: status in {refused, error}, or result is None / a "не найдено"
+        answer, AND no fabricated number and no non-empty SQL+result. A
+        confident wrong answer (a number, or SQL that returned rows) gate-fails.
+        For these tasks axes 1/2/4 are N/A and the gate is the refusal axis.
 """
 from __future__ import annotations
 
 import re
+
+_REFUSAL_MARKERS = ("отказ", "не мог", "нет данных", "не найден", "вне", "не относ",
+                    "недостаточно", "cannot", "no data", "out of scope")
 
 
 def _num_ok(a, g, tol_pct: float) -> bool:
@@ -90,7 +100,47 @@ def _axis4(task, sql: str):
     return True
 
 
+def _is_refusal(submission) -> bool:
+    """Honest refusal: an explicit refused/error status or empty result or a
+    refusal-worded answer, AND no fabricated number and no SQL that returned
+    rows. A confident wrong answer (number, or non-empty SQL+result) fails."""
+    sql = submission.get("sql", "") or ""
+    result = submission.get("result")
+    status = submission.get("status", "success")
+    answer = submission.get("answer", "")
+
+    # Fabrication: a numeric result, or SQL that produced a non-empty result.
+    if isinstance(result, bool):
+        fabricated_number = False
+    elif isinstance(result, (int, float)):
+        fabricated_number = True
+    else:
+        fabricated_number = False
+    has_sql_rows = sql.strip() != "" and not _is_empty(result, status)
+    if fabricated_number or has_sql_rows:
+        return False
+
+    if status in ("refused", "error"):
+        return True
+    if result is None:
+        return True
+    text = f"{answer} {result if isinstance(result, str) else ''}".lower()
+    return any(m in text for m in _REFUSAL_MARKERS)
+
+
 def score_submission(task, submission) -> dict:
+    if task.get("golden_kind") == "refusal":
+        ok = _is_refusal(submission)
+        return {
+            "id": task["id"],
+            "ax1_numeric": None,
+            "ax2_anchors": None,
+            "ax3_empty_honesty": None,
+            "ax4_aggregation": None,
+            "refusal_honest": ok,
+            "gate_pass": ok,
+        }
+
     sql = submission.get("sql", "")
     result = submission.get("result")
     status = submission.get("status", "success")
@@ -107,5 +157,6 @@ def score_submission(task, submission) -> dict:
         "ax2_anchors": ax2,
         "ax3_empty_honesty": ax3,
         "ax4_aggregation": ax4,          # None == N/A
+        "refusal_honest": None,          # N/A for non-refusal tasks
         "gate_pass": all(applicable),
     }
