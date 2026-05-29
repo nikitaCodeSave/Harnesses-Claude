@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #56 · 2026-05-29 · system-guard simplified to DENY-only
+
+**Tags:** refactor, harness, hooks
+
+Сразу после hardening (#55) оператор: «system-guard можно упростить — модель умная, очевидно опасное не сделает; хук скорее формальность + дополнительный контроль». Это согласуется с central principle (минимум обвязки под Opus 4.8) и с пережитым в этой сессии трением (ASK на…
+
+[→ entries/0056-system-guard-simplified-to-deny-only.md](entries/0056-system-guard-simplified-to-deny-only.md)
+
+---
+
 ## #55 · 2026-05-29 · Guardrails pillar — system-guard hardening
 
 **Tags:** feature, harness, hooks, security

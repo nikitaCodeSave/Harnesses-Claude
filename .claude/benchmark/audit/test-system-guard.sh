@@ -2,10 +2,11 @@
 # Behavior test for the GLOBAL ~/.claude/hooks/system-guard.sh PreToolUse guard.
 # Cases are fed via crafted PreToolUse JSON on stdin (NOT via the real tool call),
 # so trigger substrings never touch the operator's own command line.
-# Asserts the permissionDecision tier (deny / ask / safe) per Nikita's contract.
+# Guard is DENY-only (devlog #56): catastrophic/irreversible -> deny, sudo -> log,
+# everything else passes through (safe). No ASK tier. Asserts the tier per case.
 # Regression-guards the false-positive where a hyphenated word ("system-guard")
 # matched the loose recursive-flag regex (-[a-z]*r) anywhere in the command.
-# Devlog #55.
+# Devlog #55/#56.
 set -uo pipefail
 
 GUARD="${GUARD:-${HOME}/.claude/hooks/system-guard.sh}"
@@ -55,12 +56,12 @@ check "deny: dd of=/dev/sda"      deny "$(verdict "dd if=/dev/zero of=/dev/sda")
 check "deny: fork bomb"           deny "$(verdict ':(){ :|:& };:')"
 check "deny: no-preserve-root"    deny "$(verdict "$R --no-preserve-root -rf /")"
 
-# --- ASK tier (risky/reversible) --------------------------------------------
-check "ask: plain $R file"        ask  "$(verdict "$R /tmp/foo.txt")"
-check "ask: $R -rf non-root dir"  ask  "$(verdict "$R -rf /tmp/mydir")"
-check "ask: systemctl stop"       ask  "$(verdict "sudo systemctl stop nginx")"
-check "ask: docker rm"            ask  "$(verdict "docker rm somebox")"
-check "ask: reboot"               ask  "$(verdict "reboot")"
+# --- Former ASK tier: now passes through (DENY-only guard) ------------------
+check "passthrough: plain $R file"       safe "$(verdict "$R /tmp/foo.txt")"
+check "passthrough: $R -rf non-root dir" safe "$(verdict "$R -rf /tmp/mydir")"
+check "passthrough: systemctl stop"      safe "$(verdict "sudo systemctl stop nginx")"
+check "passthrough: docker rm"           safe "$(verdict "docker rm somebox")"
+check "passthrough: reboot"              safe "$(verdict "reboot")"
 
 # --- SAFE tier --------------------------------------------------------------
 check "safe: ls -la"              safe "$(verdict "ls -la")"
@@ -73,15 +74,16 @@ check "safe: grep -r hyphen-word" safe "$(verdict "grep -r system-guard ~/.claud
 # non-recursive destructive token on /tmp, and a ~/ path. It must be ASK
 # (a destructive token is present) — NOT DENY (it is not catastrophic).
 fp="cp ~/.claude/hooks/system-guard.sh /tmp/bak && $R /tmp/bak"
-check "regression: hyphen-word + non-recursive rm -> ask (not deny)" ask "$(verdict "$fp")"
+check "regression: hyphen-word + non-recursive rm -> safe (not deny)" safe "$(verdict "$fp")"
 # Same shape, no destructive token at all -> safe.
 fp2="cp ~/.claude/hooks/system-guard.sh /tmp/bak # restore-later"
 check "regression: hyphen-word, no rm -> safe" safe "$(verdict "$fp2")"
 
-# --- Edit/Write protected paths ---------------------------------------------
-check "edit ask: /etc/hosts"      ask  "$(verdict_edit /etc/hosts)"
-check "edit ask: ~/.ssh/config"   ask  "$(verdict_edit "$HOME/.ssh/config")"
-check "edit safe: project file"   safe "$(verdict_edit /home/nikita/x/main.py)"
+# --- Edit/Write: DENY-only guard no longer gates protected paths ------------
+# (NTFS/Windows-mount writes are still DENY, but require a live mount to test.)
+check "edit passthrough: /etc/hosts"    safe "$(verdict_edit /etc/hosts)"
+check "edit passthrough: ~/.ssh/config" safe "$(verdict_edit "$HOME/.ssh/config")"
+check "edit safe: project file"         safe "$(verdict_edit /home/nikita/x/main.py)"
 
 echo "----"
 echo "PASS=$pass FAIL=$fail"
