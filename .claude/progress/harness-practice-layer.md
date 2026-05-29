@@ -1,9 +1,11 @@
 # Progress: harness as development-practice layer
 
-**Quick state (2026-05-29):** Harness переосмыслен как **standing development-practice
-layer** (не bootstrap). Все 3 столба ✅: **methodology** (#53), **continuity** (#54),
-**guardrails** (#55). Каждый = mechanical hook + standing-инструкция (CLAUDE.md §5/§6/§7).
-Коммиты #50–#54 закоммичены (committer-агент, 6 коммитов); #55 коммитится этой сессией.
+**Quick state (2026-05-29):** Harness = **standing development-practice layer**. Все 3 столба ✅
+(methodology #53, continuity #54, guardrails #55) + system-guard упрощён до DENY-only (#56).
+**Бенчмарк качества text2sql v2 построен и прогнан вживую** (#57-59): 12 задач, 9 осей, реальный
+Oracle+ollama. **A/B harness-vs-noharness обвязка + проба** (#60-61): n=1 показал delta −1 (шум) —
+single-shot не выявляет ценность practice-слоя (подтверждает #52). Всё закоммичено на main.
+**Открытый главный трек: мульти-сессийный замер** (где continuity реально задействован).
 
 ## Большая картина
 Эмпирика (devlog #52): на single-shot greenfield harness = overhead (×2.6 cost, ×2 turns,
@@ -56,20 +58,36 @@ test-system-guard.sh`, 29/29) + фикс реального false-positive (`-gu
   реальный qwen3-агент **5/12** (валит доменные traps, фабрикует G1) — бенчмарк дискриминирует качество.
 - Отчёт: `.claude/benchmark/reports/2026-05-29-text2sql-v2-ollama-baseline/`.
 
-## A/B-обвязка готова к запуску (#60)
-- Дизайн (апрув): claude строит NL→SQL impl; toggle = глобальный `~/.claude` on/off; судья v2.
-- Замеры: дисперсия оракула 5/5/5 (детерминирован — стабильный инструмент, шум #52 отсутствует);
-  live reference 12/12; baseline 5/12. Toggle подтверждён механически (hooks 4 vs 0).
-- `text2sql-v2/ab/ab_runner.py` (--stub валидирован, оба arm 12/12). Триггер полного прогона:
-  `python3 ab/ab_runner.py --arms both --builds 3` (env Oracle) — дорогой (2×N claude-билдов).
+## A/B harness-vs-noharness (#60 обвязка, #61 проба) — ВЫПОЛНЕНО
+- Дизайн (апрув): claude --print строит NL→SQL impl; toggle = глобальный `~/.claude` on/off
+  (механизм: bare CLAUDE_CONFIG_DIR + только creds; подтверждён hooks 4 vs 0); судья v2.
+- Замеры: дисперсия оракула 5/5/5 (детерминирован); live reference 12/12; baseline 5/12.
+- Проба `--builds 1`: **harness 4/12, noharness 5/12, delta −1 (n=1 = шум)**. Оба arm построили
+  почти идентичные структурированные+тестируемые импл — methodology-столб не дал видимой дельты
+  (Opus 4.8 и так пишет чисто). Отчёт `reports/2026-05-29-ab-harness-vs-noharness-b1/`.
+- Вывод: single-shot не выявляет ценность practice-слоя (как #52) → нужен мульти-сессийный замер.
+- Попутно: исправлен build-контракт (ollama-backed, не stdlib-toy; #61); executor устойчив к
+  недоверенному SQL агента (#1cc5d01).
 
-## Следующая задача: запустить полный A/B (по команде) + мульти-сессийный замер
-- Полный A/B даст дельту harness vs noharness на build-task. Caveat: single-shot билд не задействует
-  continuity-столб (#54) — для него нужен отдельный мульти-сессийный сценарий.
-- Practice-слой: мульти-сессийный сценарий (сессия N ← devlog 1..N-1), судить качество — single-shot
-  зануляет ценность continuity/methodology (#52).
-- Опц.: пред-существующие дыры system-guard (`find -delete`, `truncate`, `chmod -R /`).
+## Следующая задача: мульти-сессийный замер practice-слоя (главный открытый трек)
+Единственный сценарий, где continuity-столб (#54) задействован: сессия N опирается на devlog/progress
+1..N-1, судить КАЧЕСТВО (v2-оракул готов). Опц.: A/B `--builds 3+` для направленной single-shot
+оценки; пред-существующие дыры system-guard (`find -delete`/`truncate`/`chmod -R /`).
 **Сначала предложи план, дождись апрува, потом исполняй.**
+
+## 🏆 Достижения этого арка (devlog #50–#61, 2026-05-29)
+- **Practice-слой целиком**: переосмысление harness'а (setup→practice), 3 глобальных столба
+  (methodology/continuity/guardrails) — каждый mechanical hook + CLAUDE.md §5/§6/§7, evidence-grounded.
+- **system-guard**: закалён (фикс false-positive + HIGH-дыра, security-reviewer) → затем упрощён до
+  DENY-only по решению оператора. Тест 29/29.
+- **Бенчмарк качества text2sql v2** с нуля: разведка реального проекта 4 агентами → design → MVP →
+  3-агентная параллельная сборка (12 задач × 9 осей) → интеграция → **живой e2e на Oracle+ollama**.
+  Тесты scorer 39 / judge 19 / runner 44. Реальный агент 5/12 (дискриминирует качество, ловит
+  фабрикацию G1).
+- **A/B-инфраструктура** harness-vs-noharness + честная проба (delta −1, n=1) — строгий замер на
+  качественном оракуле, подтвердил central thesis (#52).
+- Дисциплина: ~16 коммитов на main, devlog #54–#61, reproduce/mutation-тесты, ничего не запушено,
+  рабочая БД пользователя не тронута (изолированная bench-таблица), `.scratch/`/`files.zip` не тронуты.
 
 ## Ограничения
 - Blast radius: правки в global `~/.claude/` влияют на все проекты → бэкап, advisory/exit-0,

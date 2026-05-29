@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #61 · 2026-05-29 · A/B harness vs noharness single-build probe
+
+**Tags:** benchmark, harness, measurement
+
+Оператор: «запускай 1 для быстрой пробы». Полный A/B (#60-обвязка): claude --print строит NL→SQL-аналитик с глобальным практическим слоем ~/.claude ON (harness) vs OFF (noharness), судья — v2 на живом Oracle+ollama.
+
+[→ entries/0061-a-b-harness-vs-noharness-single-build-probe.md](entries/0061-a-b-harness-vs-noharness-single-build-probe.md)
+
+---
+
 ## #60 · 2026-05-29 · A/B harness test readiness (with vs without practice layer)
 
 **Tags:** benchmark, harness, multi-agent
