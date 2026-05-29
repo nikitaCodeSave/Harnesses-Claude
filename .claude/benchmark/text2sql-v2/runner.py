@@ -231,10 +231,10 @@ class OracleExecutor:
             rows = cur.fetchall()
             cols = [str(d[0]) for d in (cur.description or [])]
             cur.close()
-        except Exception as exc:  # noqa: BLE001 — surface as honest error status
+            shaped = self._shape(rows, cols, task)   # inside try: a wrong-shape
+        except Exception as exc:  # noqa: BLE001 — agent SQL is untrusted; surface as error
             return (f"{type(exc).__name__}: {exc}", "error", time.perf_counter() - t0)
-        latency = time.perf_counter() - t0
-        return (self._shape(rows, cols, task), "success", latency)
+        return (shaped, "success", time.perf_counter() - t0)
 
     def _rewrite_table(self, sql: str) -> str:
         """Redirect the canonical table name to the isolated bench table, so the
@@ -247,20 +247,26 @@ class OracleExecutor:
     @staticmethod
     def _shape(rows: list, cols: list[str], task: dict) -> Any:
         """Map DB rows to the task's golden form via its per-task `shape`."""
+        # Defensive: the agent's SQL is untrusted, so its result may not match the
+        # expected column count. Never raise — produce a best-effort value (scoring
+        # then fails the task naturally) rather than crashing the whole run.
         shape = task.get("shape") or task["golden_kind"]
         if shape in ("scalar", "number"):
-            return None if (not rows or rows[0][0] is None) else rows[0][0]
+            return None if (not rows or not rows[0] or rows[0][0] is None) else rows[0][0]
         if shape in ("ids", "id_set"):
-            return [r[0] for r in rows]
+            return [r[0] for r in rows if r]
         if shape == "map_kv":                       # (key, value) over N rows
-            return {str(r[0]): r[1] for r in rows}
+            return {str(r[0]): (r[1] if len(r) > 1 else None) for r in rows if r}
         if shape == "map_row":                      # single row, aliased columns
-            return {cols[i]: rows[0][i] for i in range(len(cols))} if rows else {}
+            if not rows or not rows[0]:
+                return {}
+            r0 = rows[0]
+            return {cols[i]: (r0[i] if i < len(r0) else None) for i in range(len(cols))}
         if shape == "map_pivot":                    # key col + metric cols -> "key.metric"
             out: dict[str, Any] = {}
             for r in rows:
                 for j in range(1, len(cols)):
-                    out[f"{r[0]}.{cols[j]}"] = r[j]
+                    out[f"{r[0]}.{cols[j]}"] = r[j] if j < len(r) else None
             return out
         return rows
 

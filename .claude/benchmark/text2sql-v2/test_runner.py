@@ -231,6 +231,17 @@ def test_table_rewrite_isolation():
           noop._rewrite_table("SELECT 1 FROM client_product") == "SELECT 1 FROM client_product")
 
 
+# (j) shaping is robust to a malformed agent result (wrong column count) — must
+# NOT raise (untrusted agent SQL); the task just scores wrong.
+def test_shape_robust_to_wrong_arity():
+    t3 = TASK_BY_ID["T3"]   # map_kv expects (key, value); agent returns 1 col
+    shaped = runner.OracleExecutor._shape([("International",), ("Large",)], ["SEG"], t3)
+    check("j: map_kv 1-col rows -> no crash", isinstance(shaped, dict))
+    t9 = TASK_BY_ID["T9"]   # map_pivot expects key + metrics; agent returns key only
+    shaped2 = runner.OracleExecutor._shape([("International",)], ["SEG"], t9)
+    check("j: map_pivot short rows -> no crash", isinstance(shaped2, dict))
+
+
 # (i) SQL extraction from an LLM reply (OllamaSolver), offline.
 def test_extract_sql():
     check("i: fenced sql block", runner._extract_sql("```sql\nSELECT 1 FROM dual\n```") == "SELECT 1 FROM dual")
@@ -260,6 +271,7 @@ def run() -> int:
         test_shape_map_pivot()
         test_shape_derived_keys_t5()
         test_table_rewrite_isolation()
+        test_shape_robust_to_wrong_arity()
         test_extract_sql()
     finally:
         for k, v in saved.items():
