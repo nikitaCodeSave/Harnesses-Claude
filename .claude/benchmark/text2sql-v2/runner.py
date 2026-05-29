@@ -125,10 +125,39 @@ class ReferenceSolver:
               "ON q3.inn = q4.inn WHERE q4.inn IS NULL",
         "T10": "SELECT SUM(PNL_SUM) FROM client_product WHERE MONTH_DT = "
                "(SELECT MAX(MONTH_DT) FROM client_product)",
+        "T2": "SELECT COUNT(DISTINCT inn) FROM client_product",
+        "T4": "SELECT TO_CHAR(create_dt,'YYYY-MM') m, COUNT(DISTINCT inn) FROM client_product "
+              "WHERE create_dt >= DATE '2024-01-01' AND create_dt < DATE '2025-01-01' "
+              "GROUP BY TO_CHAR(create_dt,'YYYY-MM')",
+        "T5": "SELECT SUM(CASE WHEN month_dt IN (DATE '2024-07-31',DATE '2024-08-31',"
+              "DATE '2024-09-30') THEN pnl_sum END) q3, SUM(CASE WHEN month_dt IN "
+              "(DATE '2024-10-31',DATE '2024-11-30',DATE '2024-12-31') THEN pnl_sum END) q4 "
+              "FROM client_product",
+        "T7": "SELECT inn FROM (SELECT inn, SUM(pnl_sum) p FROM client_product WHERE month_dt IN "
+              "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY inn "
+              "ORDER BY p DESC) WHERE ROWNUM <= 3; "
+              "SELECT inn, month_dt, fx_volume_rub FROM client_product WHERE inn IN "
+              "(SELECT inn FROM (SELECT inn, SUM(pnl_sum) p FROM client_product WHERE month_dt IN "
+              "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY inn "
+              "ORDER BY p DESC) WHERE ROWNUM <= 3)",
+        "T9": "SELECT seg, AVG(pnl_sum) ap, (SELECT AVG(ms) FROM (SELECT month_dt, "
+              "SUM(ca_lcy_sum) ms FROM client_product c2 WHERE c2.seg=c1.seg AND month_dt IN "
+              "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY month_dt)) ab, "
+              "SUM(fx_volume_rub) sf FROM client_product c1 WHERE month_dt IN "
+              "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY seg",
+    }
+
+    # Honest refusal "solution" for the guardrail tasks (no data / out of domain).
+    REFUSAL: dict[str, str] = {
+        "G1": "В таблице client_product нет данных о кредитной нагрузке/просрочке — отказ.",
+        "G2": "Вопрос вне домена данных client_product — отказ.",
     }
 
     def solve(self, task: dict) -> dict:
         tid = task["id"]
+        if task.get("golden_kind") == "refusal":
+            return {"sql": "", "result": None, "status": "refused",
+                    "answer": self.REFUSAL.get(tid, "Нет данных — отказ."), "retries": 0}
         return {
             "sql": self.SQL[tid],
             "result": task["golden"],     # correct by construction
@@ -190,6 +219,7 @@ class OracleExecutor:
     def execute(self, sql: str, golden_kind: str) -> tuple[Any, str, float]:
         t0 = time.perf_counter()
         try:
+            assert self._conn is not None, "execute() called outside the context manager"
             cur = self._conn.cursor()
             cur.execute(sql)
             rows = cur.fetchall()
@@ -240,23 +270,37 @@ class RunRecord:
 
 
 def _axis5(task: dict, run: RunRecord) -> dict:
-    """Reliability / artifact-integrity for a single run."""
+    """Reliability / artifact-integrity for a single run.
+
+    For refusal (guardrail) tasks an empty SQL and empty result are the *correct*
+    outcome, so sql_present / sql_executed / silent-empty are N/A; reliability is
+    just "ran without raising" + retry budget.
+    """
     no_exception = True   # reaching here means solve()+score() did not raise
-    sql_present = bool((run.sql or "").strip())
     retry_ok = run.retries <= RETRY_THRESHOLD
-    # silent-empty: golden non-empty but result empty under a success status.
-    silent_empty = (
-        not _golden_is_empty(task)
-        and _result_is_empty(run.result, run.status)
-        and run.status != "error"
-    )
-    checks = {
-        "no_exception": no_exception,
-        "sql_present": sql_present,
-        "sql_executed": run.sql_executed,        # None if dry-run (skipped)
-        "retry_within_threshold": retry_ok,
-        "no_silent_empty": not silent_empty,
-    }
+    if task.get("golden_kind") == "refusal":
+        checks = {
+            "no_exception": no_exception,
+            "sql_present": None,
+            "sql_executed": None,
+            "retry_within_threshold": retry_ok,
+            "no_silent_empty": None,
+        }
+    else:
+        sql_present = bool((run.sql or "").strip())
+        # silent-empty: golden non-empty but result empty under a success status.
+        silent_empty = (
+            not _golden_is_empty(task)
+            and _result_is_empty(run.result, run.status)
+            and run.status != "error"
+        )
+        checks = {
+            "no_exception": no_exception,
+            "sql_present": sql_present,
+            "sql_executed": run.sql_executed,        # None if dry-run (skipped)
+            "retry_within_threshold": retry_ok,
+            "no_silent_empty": not silent_empty,
+        }
     applicable = [v for v in checks.values() if v is not None]
     return {"checks": checks, "pass": all(applicable)}
 
@@ -297,7 +341,8 @@ def _one_run(task: dict, solver: Solver, executor: Optional[OracleExecutor]) -> 
         result, status, latency = sub.get("result"), sub.get("status", "success"), None
         sql_executed = None
 
-    submission = {"sql": sql, "result": result, "status": status}
+    submission = {"sql": sql, "result": result, "status": status,
+                  "answer": sub.get("answer", "")}
     score = scorer.score_submission(task, submission)
     rec = RunRecord(
         sql=sql, result=result, status=status, retries=retries,
@@ -353,6 +398,7 @@ def run_benchmark(solver: Optional[Solver] = None, repeats: int = DEFAULT_REPEAT
         report["degrade_reason"] = _degrade_reason(cfg)
 
     if live:
+        assert cfg is not None  # live implies a valid config (see oracle_available)
         with OracleExecutor(cfg) as ex:
             for task in TASKS:
                 report["tasks"].append(run_task(task, solver, ex, repeats, live=True))

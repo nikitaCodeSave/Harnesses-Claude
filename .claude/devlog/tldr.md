@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #58 · 2026-05-29 · text2sql benchmark v2 full build and integration
+
+**Tags:** benchmark, feature, multi-agent
+
+После MVP (#57) оператор: «раздай задачи по проведению — бенчмарк v2». Декомпозировал остаток (задачи + оси 5-9 + live-runner) на 3 параллельных агента в изолированных worktree, по непересекающимся файлам (чистый merge), все от текущего HEAD.
+
+[→ entries/0058-text2sql-benchmark-v2-full-build-and-integration.md](entries/0058-text2sql-benchmark-v2-full-build-and-integration.md)
+
+---
+
 ## #57 · 2026-05-29 · text2sql benchmark v2 MVP
 
 **Tags:** benchmark, feature
