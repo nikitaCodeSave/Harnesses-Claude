@@ -1,6 +1,6 @@
 # Documentation discipline (harness invariant)
 
-6 правил поддержки проектной документации, инвариантных для любого стека. Расширяется проектным CLAUDE.md, не заменяется.
+7 правил поддержки проектной документации, инвариантных для любого стека. Расширяется проектным CLAUDE.md, не заменяется.
 
 См. также `.claude/skills/project-docs-bootstrap/` — bootstrap canonical layout (одноразовая операция; этот rule — ongoing discipline).
 
@@ -16,4 +16,6 @@
 
 6. **ADR для non-trivial решений**. Любое решение, которое будущему контрибьютору было бы непонятно «почему так» (выбор lib A vs B, layout, protocol, отказ от refactor'а) → 1-page ADR в формате Context / Decision / Consequences / Alternatives considered. Threshold: если объяснение решения в Slack заняло >5 минут — ADR.
 
-См. также `.claude/docs/principles.md` (active) и `.claude/docs/archive/decisions-2026Q2.md` ADR-017 (rationale добавления rule).
+7. **Progress journal для long-running task**. Задача с wall-clock >1ч или ≥3 distinct decision points → завести `.claude/progress/<slug>.md`. Single-threaded журнал: что сделано, что застряло, текущий state. SessionStart hook отображает active progress-файл в additionalContext. После завершения задачи — конвертация в `.claude/devlog/entries/NNNN-<slug>.md` и удаление progress-файла. Цель: переживать interrupt (auto-compact, перезапуск сессии) без потери intermediate state. Per Anthropic [effective harnesses](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) `claude-progress.txt` pattern.
+
+См. также `.claude/docs/principles.md` (active), `.claude/docs/memory-layers.md` (5-layer reference) и `.claude/docs/archive/decisions-2026Q2.md` ADR-017 (rationale добавления rule).
