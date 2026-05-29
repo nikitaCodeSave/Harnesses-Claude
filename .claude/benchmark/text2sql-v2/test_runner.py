@@ -22,7 +22,7 @@ class FakeOracle:
         self.result, self.status, self.latency, self.raises = result, status, latency, raises
         self.calls = 0
 
-    def execute(self, sql, golden_kind):
+    def execute(self, sql, task):
         self.calls += 1
         if self.raises:
             return (f"ORA-00942: {sql[:10]}", "error", self.latency)
@@ -172,13 +172,81 @@ def test_retry_threshold_enforced():
     check("f: axis-5 fails on excess retries", out["axis5_reliability"]["pass"] is False)
 
 
+# (g) per-task live result shaping maps DB rows -> golden form (item 1 fix).
+def _score_shaped(tid, rows, cols):
+    task = TASK_BY_ID[tid]
+    shaped = runner.OracleExecutor._shape(rows, cols, task)
+    sub = {"sql": runner.ReferenceSolver.SQL[tid], "result": shaped, "status": "success"}
+    return shaped, runner.scorer.score_submission(task, sub)
+
+
+def test_shape_map_kv():
+    g = TASK_BY_ID["T3"]["golden"]
+    rows = [(seg, val) for seg, val in g.items()]
+    shaped, score = _score_shaped("T3", rows, ["SEG", "AVG"])
+    check("g: map_kv shapes by (key,value)", shaped == {s: v for s, v in g.items()})
+    check("g: map_kv gate passes", score["gate_pass"] is True)
+
+
+def test_shape_map_row_uppercase_cols():
+    g = TASK_BY_ID["T6"]["golden"]
+    cols = ["PL_CA", "PL_DEP", "PL_VK", "PL_VK_OUT", "FX_MARGIN_RUB", "VED_SUM", "OTHER", "PNL_TOTAL"]
+    rows = [tuple(g[c] for c in cols)]            # Oracle returns one wide row
+    shaped, score = _score_shaped("T6", rows, cols)
+    check("g: map_row keyed by aliased columns", set(shaped) == set(cols))
+    check("g: map_row gate passes (case-insensitive keys)", score["gate_pass"] is True)
+
+
+def test_shape_map_pivot():
+    g = TASK_BY_ID["T9"]["golden"]
+    segs = sorted({k.split(".")[0] for k in g})
+    rows = [(s, g[f"{s}.avg_pnl"], g[f"{s}.avg_bal"], g[f"{s}.sum_fx"]) for s in segs]
+    shaped, score = _score_shaped("T9", rows, ["SEG", "AVG_PNL", "AVG_BAL", "SUM_FX"])
+    check("g: map_pivot builds key.metric", f"{segs[0]}.AVG_PNL" in shaped)
+    check("g: map_pivot gate passes (case-insensitive)", score["gate_pass"] is True)
+
+
+def test_shape_derived_keys_t5():
+    # T5 golden carries derived keys (delta, delta_pct) — the aliased reference
+    # SQL produces them, so live shaping must surface all four.
+    g = TASK_BY_ID["T5"]["golden"]
+    cols = ["Q3", "Q4", "DELTA", "DELTA_PCT"]
+    rows = [(g["q3"], g["q4"], g["delta"], g["delta_pct"])]
+    shaped, score = _score_shaped("T5", rows, cols)
+    check("g: T5 derived keys (delta/delta_pct) surfaced -> gate passes",
+          score["gate_pass"] is True)
+
+
+# (h) bench-table isolation: SQL is redirected away from the app's table.
+def test_table_rewrite_isolation():
+    ex = runner.OracleExecutor(runner.OracleConfig(
+        user="u", password="p", dsn="d", table="client_product_bench"))
+    out = ex._rewrite_table("SELECT * FROM client_product WHERE x = 1")
+    check("h: client_product -> bench table", out == "SELECT * FROM client_product_bench WHERE x = 1")
+    check("h: bench name not double-rewritten",
+          ex._rewrite_table(out) == "SELECT * FROM client_product_bench WHERE x = 1")
+    noop = runner.OracleExecutor(runner.OracleConfig(
+        user="u", password="p", dsn="d", table="client_product"))
+    check("h: identity rewrite when table is canonical",
+          noop._rewrite_table("SELECT 1 FROM client_product") == "SELECT 1 FROM client_product")
+
+
+# (i) SQL extraction from an LLM reply (OllamaSolver), offline.
+def test_extract_sql():
+    check("i: fenced sql block", runner._extract_sql("```sql\nSELECT 1 FROM dual\n```") == "SELECT 1 FROM dual")
+    check("i: NO_SQL -> refusal", runner._extract_sql("В таблице нет данных. NO_SQL") == "")
+    check("i: bare SELECT with trailing ;", runner._extract_sql("SELECT a FROM t;") == "SELECT a FROM t")
+    check("i: empty reply", runner._extract_sql("") == "")
+
+
 def run() -> int:
     # crude env guard so test_run_benchmark_degrades runs cleanly even if the
     # operator has Oracle env set: temporarily clear the relevant vars.
     import os
     saved = {k: os.environ.pop(k, None) for k in (
+        "AI_ANALYST_ORACLE_USERNAME", "AI_ANALYST_ORACLE_PASSWORD",
         "AI_ANALYST_ORACLE_USER", "AI_ANALYST_ORACLE_PWD", "AI_ANALYST_ORACLE_DSN",
-        "ORACLE_USER", "ORACLE_PASSWORD", "ORACLE_DSN")}
+        "ORACLE_USER", "ORACLE_PASSWORD", "ORACLE_DSN", "BENCH_TABLE")}
     try:
         test_live_reference_passes_all_axes()
         test_flakiness_lowers_stability()
@@ -187,6 +255,12 @@ def run() -> int:
         test_reliability_catches_silent_empty()
         test_reliability_catches_oracle_error()
         test_retry_threshold_enforced()
+        test_shape_map_kv()
+        test_shape_map_row_uppercase_cols()
+        test_shape_map_pivot()
+        test_shape_derived_keys_t5()
+        test_table_rewrite_isolation()
+        test_extract_sql()
     finally:
         for k, v in saved.items():
             if v is not None:

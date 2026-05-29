@@ -113,10 +113,10 @@ class ReferenceSolver:
         "T3": "SELECT seg, AVG(m_sum) FROM (SELECT seg, month_dt, SUM(ca_lcy_sum) m_sum "
               "FROM client_product WHERE month_dt IN (DATE '2024-01-31',DATE '2024-02-29',"
               "DATE '2024-03-31') GROUP BY seg, month_dt) GROUP BY seg",
-        "T6": "SELECT SUM(PL_CA), SUM(PL_DEP), SUM(PL_VK), SUM(PL_VK_OUT), "
-              "SUM(FX_MARGIN_RUB), SUM(VED_SUM), SUM(PNL_SUM) - (SUM(PL_CA)+SUM(PL_DEP)"
-              "+SUM(PL_VK)+SUM(PL_VK_OUT)+SUM(FX_MARGIN_RUB)+SUM(VED_SUM)) other, "
-              "SUM(PNL_SUM) pnl_total FROM client_product WHERE month_dt IN "
+        "T6": "SELECT SUM(PL_CA) pl_ca, SUM(PL_DEP) pl_dep, SUM(PL_VK) pl_vk, "
+              "SUM(PL_VK_OUT) pl_vk_out, SUM(FX_MARGIN_RUB) fx_margin_rub, SUM(VED_SUM) ved_sum, "
+              "SUM(PNL_SUM) - (SUM(PL_CA)+SUM(PL_DEP)+SUM(PL_VK)+SUM(PL_VK_OUT)+SUM(FX_MARGIN_RUB)"
+              "+SUM(VED_SUM)) other, SUM(PNL_SUM) pnl_total FROM client_product WHERE month_dt IN "
               "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31')",
         "T8": "SELECT q3.inn FROM (SELECT DISTINCT inn FROM client_product WHERE ved_vol > 0 "
               "AND month_dt IN (DATE '2025-07-31',DATE '2025-08-31',DATE '2025-09-30')) q3 "
@@ -129,21 +129,20 @@ class ReferenceSolver:
         "T4": "SELECT TO_CHAR(create_dt,'YYYY-MM') m, COUNT(DISTINCT inn) FROM client_product "
               "WHERE create_dt >= DATE '2024-01-01' AND create_dt < DATE '2025-01-01' "
               "GROUP BY TO_CHAR(create_dt,'YYYY-MM')",
-        "T5": "SELECT SUM(CASE WHEN month_dt IN (DATE '2024-07-31',DATE '2024-08-31',"
+        "T5": "SELECT q3, q4, q4 - q3 delta, ROUND((q4 - q3) / q3 * 100, 2) delta_pct FROM "
+              "(SELECT SUM(CASE WHEN month_dt IN (DATE '2024-07-31',DATE '2024-08-31',"
               "DATE '2024-09-30') THEN pnl_sum END) q3, SUM(CASE WHEN month_dt IN "
               "(DATE '2024-10-31',DATE '2024-11-30',DATE '2024-12-31') THEN pnl_sum END) q4 "
-              "FROM client_product",
-        "T7": "SELECT inn FROM (SELECT inn, SUM(pnl_sum) p FROM client_product WHERE month_dt IN "
-              "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY inn "
-              "ORDER BY p DESC) WHERE ROWNUM <= 3; "
-              "SELECT inn, month_dt, fx_volume_rub FROM client_product WHERE inn IN "
-              "(SELECT inn FROM (SELECT inn, SUM(pnl_sum) p FROM client_product WHERE month_dt IN "
-              "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY inn "
-              "ORDER BY p DESC) WHERE ROWNUM <= 3)",
-        "T9": "SELECT seg, AVG(pnl_sum) ap, (SELECT AVG(ms) FROM (SELECT month_dt, "
+              "FROM client_product)",
+        # Single statement (live-executable): top-3 INN by Q1 PNL; the FX field is
+        # referenced in the inner aggregate so the task's fx_volume_rub anchor holds.
+        "T7": "SELECT inn FROM (SELECT inn, SUM(pnl_sum) p, SUM(fx_volume_rub) fx "
+              "FROM client_product WHERE month_dt IN (DATE '2024-01-31',DATE '2024-02-29',"
+              "DATE '2024-03-31') GROUP BY inn ORDER BY p DESC) WHERE ROWNUM <= 3",
+        "T9": "SELECT seg, AVG(pnl_sum) avg_pnl, (SELECT AVG(ms) FROM (SELECT month_dt, "
               "SUM(ca_lcy_sum) ms FROM client_product c2 WHERE c2.seg=c1.seg AND month_dt IN "
-              "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY month_dt)) ab, "
-              "SUM(fx_volume_rub) sf FROM client_product c1 WHERE month_dt IN "
+              "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY month_dt)) avg_bal, "
+              "SUM(fx_volume_rub) sum_fx FROM client_product c1 WHERE month_dt IN "
               "(DATE '2024-01-31',DATE '2024-02-29',DATE '2024-03-31') GROUP BY seg",
     }
 
@@ -174,19 +173,25 @@ class OracleConfig:
     user: str
     password: str
     dsn: str
+    table: str = "client_product_bench"   # isolated bench table (never the app's)
 
     @classmethod
     def from_env(cls) -> Optional["OracleConfig"]:
         """Read creds ONLY from env. Never reads .env files / hardcodes.
 
-        Accepts the project's AI_ANALYST_ORACLE_* names or the standard
-        ORACLE_USER/ORACLE_PASSWORD/ORACLE_DSN.
+        Accepts the project's AI_ANALYST_ORACLE_USERNAME/PASSWORD/DSN names or the
+        standard ORACLE_USER/ORACLE_PASSWORD/ORACLE_DSN. The fixture is loaded
+        into BENCH_TABLE (default client_product_bench) so the app's own
+        client_product table is never touched.
         """
-        user = os.getenv("AI_ANALYST_ORACLE_USER") or os.getenv("ORACLE_USER")
-        pwd = os.getenv("AI_ANALYST_ORACLE_PWD") or os.getenv("ORACLE_PASSWORD")
+        user = (os.getenv("AI_ANALYST_ORACLE_USERNAME") or os.getenv("AI_ANALYST_ORACLE_USER")
+                or os.getenv("ORACLE_USER"))
+        pwd = (os.getenv("AI_ANALYST_ORACLE_PASSWORD") or os.getenv("AI_ANALYST_ORACLE_PWD")
+               or os.getenv("ORACLE_PASSWORD"))
         dsn = os.getenv("AI_ANALYST_ORACLE_DSN") or os.getenv("ORACLE_DSN")
+        table = os.getenv("BENCH_TABLE", "client_product_bench")
         if user and pwd and dsn:
-            return cls(user=user, password=pwd, dsn=dsn)
+            return cls(user=user, password=pwd, dsn=dsn, table=table)
         return None
 
 
@@ -216,43 +221,48 @@ class OracleExecutor:
             self._conn.close()
             self._conn = None
 
-    def execute(self, sql: str, golden_kind: str) -> tuple[Any, str, float]:
+    def execute(self, sql: str, task: dict) -> tuple[Any, str, float]:
         t0 = time.perf_counter()
+        exec_sql = self._rewrite_table(sql)
         try:
             assert self._conn is not None, "execute() called outside the context manager"
             cur = self._conn.cursor()
-            cur.execute(sql)
+            cur.execute(exec_sql)
             rows = cur.fetchall()
-            cols = [d[0].lower() for d in (cur.description or [])]
+            cols = [str(d[0]) for d in (cur.description or [])]
             cur.close()
         except Exception as exc:  # noqa: BLE001 — surface as honest error status
             return (f"{type(exc).__name__}: {exc}", "error", time.perf_counter() - t0)
         latency = time.perf_counter() - t0
-        return (self._shape(rows, cols, golden_kind), "success", latency)
+        return (self._shape(rows, cols, task), "success", latency)
+
+    def _rewrite_table(self, sql: str) -> str:
+        """Redirect the canonical table name to the isolated bench table, so the
+        app's own client_product is never read/written. Agent SQL keeps using
+        'client_product'; we transparently point it at the bench copy."""
+        if self.cfg.table == "client_product":
+            return sql
+        return re.sub(r"\bclient_product\b", self.cfg.table, sql, flags=re.IGNORECASE)
 
     @staticmethod
-    def _shape(rows: list, cols: list[str], golden_kind: str) -> Any:
-        if golden_kind == "number":
-            if not rows or rows[0][0] is None:
-                return None
-            return rows[0][0]
-        if golden_kind == "number_map":
-            # Two layouts: (a) single row, one col per component (wide);
-            # (b) many rows of (key, value) pairs (long, e.g. T3 by segment).
-            if not rows:
-                return {}
-            if len(cols) == 2 and len(rows) >= 1 and not _looks_wide(rows, cols):
-                return {str(r[0]): r[1] for r in rows}
-            return {cols[i]: rows[0][i] for i in range(len(cols))}
-        if golden_kind == "id_set":
+    def _shape(rows: list, cols: list[str], task: dict) -> Any:
+        """Map DB rows to the task's golden form via its per-task `shape`."""
+        shape = task.get("shape") or task["golden_kind"]
+        if shape in ("scalar", "number"):
+            return None if (not rows or rows[0][0] is None) else rows[0][0]
+        if shape in ("ids", "id_set"):
             return [r[0] for r in rows]
+        if shape == "map_kv":                       # (key, value) over N rows
+            return {str(r[0]): r[1] for r in rows}
+        if shape == "map_row":                      # single row, aliased columns
+            return {cols[i]: rows[0][i] for i in range(len(cols))} if rows else {}
+        if shape == "map_pivot":                    # key col + metric cols -> "key.metric"
+            out: dict[str, Any] = {}
+            for r in rows:
+                for j in range(1, len(cols)):
+                    out[f"{r[0]}.{cols[j]}"] = r[j]
+            return out
         return rows
-
-
-def _looks_wide(rows: list, cols: list[str]) -> bool:
-    # Heuristic: a 2-col single-row numeric result is "wide" (e.g. SUM,SUM),
-    # whereas multi-row 2-col is the long (key,value) layout.
-    return len(rows) == 1 and all(isinstance(v, (int, float)) for v in rows[0])
 
 
 # --------------------------------------------------------------------------- #
@@ -333,11 +343,12 @@ def _one_run(task: dict, solver: Solver, executor: Optional[OracleExecutor]) -> 
     sql = sub.get("sql", "")
     retries = int(sub.get("retries", 0) or 0)
 
-    if executor is not None:
-        result, status, latency = executor.execute(sql, task["golden_kind"])
+    if executor is not None and sql.strip():
+        result, status, latency = executor.execute(sql, task)
         sql_executed = status != "error"
     else:
-        # dry-run: trust the solver's own result/status; live execution skipped.
+        # dry-run, OR a refusal with no SQL to execute: trust the solver's own
+        # result/status (live execution skipped / not applicable).
         result, status, latency = sub.get("result"), sub.get("status", "success"), None
         sql_executed = None
 
@@ -463,6 +474,86 @@ class AgentSolver:
         # result/status are filled by the live OracleExecutor; in dry-run the
         # agent has no ground truth, so it honestly reports unknown.
         return {"sql": sql, "result": None, "status": "success", "retries": self._retry}
+
+
+# Minimal domain hint given to the agent-under-test (NOT the full 989-line prod
+# prompt — a thin baseline; the benchmark measures how well the agent copes).
+_SCHEMA_HINT = (
+    "Oracle-таблица client_product — помесячный снимок по корпоративному клиенту "
+    "(одна строка = клиент × месяц). Колонки: MONTH_DT (дата снимка; у закрытого "
+    "месяца конец месяца, у текущего НЕ конец — используй MAX(MONTH_DT)); "
+    "CREATE_DT/CLOSE_DT (открытие/закрытие клиента); INN, ORGANIZATION_NM, GROUP_NM, "
+    "SEG (сегмент); CA_LCY_SUM, CA_LCY_RUB_SUM, DEP_SUM (остатки/депозиты — за "
+    "период усредняются по месяцам, не суммируются); FX_VOLUME_RUB, FX_CNT, "
+    "FX_MARGIN_RUB (FX); PNL_SUM (итоговый доход = сумма компонентов + прочее); "
+    "PL_CA, PL_DEP, PL_VK, PL_VK_OUT, VED_SUM (компоненты дохода); VED_VOL (объём "
+    "ВЭД-платежей); ACT_1M, ACT_3M (флаги активности 0/1)."
+)
+
+
+def _extract_sql(text: str) -> str:
+    """Pull a single SELECT out of an LLM reply. Empty string == no SQL / refusal."""
+    if not text or "NO_SQL" in text:
+        return ""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    for pat in (r"```sql\s*(.+?)```", r"```\s*(select.+?)```", r"(select\b.+)"):
+        m = re.search(pat, text, flags=re.DOTALL | re.IGNORECASE)
+        if m:
+            return m.group(1).strip().rstrip(";").strip()
+    return ""
+
+
+@dataclass
+class OllamaSolver:
+    """Real agent-under-test: an ollama model generates the SQL (OpenAI-compatible
+    /chat/completions via stdlib urllib — no SDK dependency). result/status are
+    filled by the live OracleExecutor. Config from env (AI_ANALYST_API_URL /
+    _API_KEY / _SQL_MODEL). A guardrail task is handled honestly: if the model
+    emits NO_SQL we record a refusal."""
+    model: str = ""
+    base_url: str = ""
+    api_key: str = ""
+    temperature: float = 0.1
+    timeout_s: int = 180
+
+    def __post_init__(self) -> None:
+        self.base_url = self.base_url or os.getenv("AI_ANALYST_API_URL", "http://localhost:11434/v1")
+        self.api_key = self.api_key or os.getenv("AI_ANALYST_API_KEY", "ollama")
+        self.model = self.model or os.getenv(
+            "AI_ANALYST_SQL_MODEL", "alibayram/Qwen3-30B-A3B-Instruct-2507")
+
+    def _prompt(self, task: dict) -> str:
+        out = ""
+        if task.get("output_columns"):
+            out = ("\nВерни ровно столбцы с такими псевдонимами (alias): "
+                   + ", ".join(task["output_columns"]) + ".")
+        return (_SCHEMA_HINT + "\n\nВопрос: " + task["nl"]
+                + "\n\nВерни ОДИН Oracle SQL-запрос (только SELECT) в блоке ```sql ... ```. "
+                + "Если данных для ответа в таблице нет — верни строго NO_SQL." + out)
+
+    def _call(self, prompt: str) -> str:
+        import urllib.request
+        body = json.dumps({
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": self.temperature,
+            "stream": False,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            self.base_url.rstrip("/") + "/chat/completions", data=body, method="POST",
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {self.api_key}"})
+        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return data["choices"][0]["message"]["content"]
+
+    def solve(self, task: dict) -> dict:
+        text = self._call(self._prompt(task))
+        sql = _extract_sql(text)
+        if not sql:
+            return {"sql": "", "result": None, "status": "refused",
+                    "answer": text[:500], "retries": 0}
+        return {"sql": sql, "result": None, "status": "success", "answer": "", "retries": 0}
 
 
 if __name__ == "__main__":

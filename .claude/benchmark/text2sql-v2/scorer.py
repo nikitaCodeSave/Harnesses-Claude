@@ -60,7 +60,13 @@ def _axis1(task, result) -> bool:
     if kind == "number_map":
         if not isinstance(result, dict):
             return False
-        return all(k in result and _num_ok(result[k], gv, tol) for k, gv in golden.items())
+        # Case-insensitive key match: Oracle upper-cases column aliases, golden
+        # keys may be lower/mixed (e.g. "q3", "International.avg_pnl").
+        low = {str(k).lower(): v for k, v in result.items()}
+        return all(
+            str(k).lower() in low and _num_ok(low[str(k).lower()], gv, tol)
+            for k, gv in golden.items()
+        )
     if kind == "id_set":
         try:
             return {int(x) for x in result} == {int(x) for x in golden}

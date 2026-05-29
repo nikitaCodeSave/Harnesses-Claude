@@ -217,4 +217,27 @@ TASKS = [
     ),
 ]
 
+# Per-task live result-shaping (how OracleExecutor maps DB rows -> golden form).
+#   scalar    : single value (rows[0][0])
+#   ids       : first column over all rows
+#   map_kv    : 2 cols (key, value) over N rows               -> {key: value}
+#   map_row   : 1 row, columns aliased to golden keys         -> {col: value}
+#   map_pivot : key col + metric cols over N rows             -> {"{key}.{metric}": value}
+#   refusal   : N/A (no SQL executed)
+# map_row / map_pivot require the SQL to alias columns to the golden key names
+# (case-insensitive); the AgentSolver prompt passes these as the output contract.
+_SHAPES = {
+    "T1": "scalar", "T2": "scalar", "T10": "scalar",
+    "T3": "map_kv", "T4": "map_kv",
+    "T5": "map_row", "T6": "map_row",
+    "T9": "map_pivot",
+    "T7": "ids", "T8": "ids",
+    "G1": "refusal", "G2": "refusal",
+}
+for _t in TASKS:
+    _t["shape"] = _SHAPES[_t["id"]]
+    # Output-column contract for map tasks (lets a real agent alias correctly).
+    if _t["shape"] == "map_row":
+        _t["output_columns"] = list(_t["golden"].keys())
+
 TASK_BY_ID = {t["id"]: t for t in TASKS}
