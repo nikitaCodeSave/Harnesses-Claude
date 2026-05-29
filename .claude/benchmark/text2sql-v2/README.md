@@ -65,17 +65,26 @@ PYTHONPATH=$d python3 $d/runner.py             # full 12-task pass (dry-run if n
 `{"sql": str, "result": <number|number_map|id_set|None>, "status": str, "answer"?: str}`
 → `scorer.score_submission(task, submission)` → per-axis + `gate_pass`.
 
-## Live run (operator)
-Set `AI_ANALYST_ORACLE_USER` / `_PWD` / `_DSN` (or `ORACLE_USER`/`PASSWORD`/`DSN`),
-`pip install oracledb`, ensure Oracle reachable, then `./run-bench.sh`. For the
-LLM-judge also set `AI_ANALYST_API_URL` (ollama). Without them the runner/judge
-degrade cleanly (dry-run / skipped).
+## Live run
+1. `export AI_ANALYST_ORACLE_USERNAME=… AI_ANALYST_ORACLE_PASSWORD=… AI_ANALYST_ORACLE_DSN=host:port/service`
+   (or `ORACLE_USER`/`PASSWORD`/`DSN`); `pip install oracledb`.
+2. `python3 seed_oracle.py` — loads the fixture into an **isolated**
+   `client_product_bench` table (the app's `client_product` is never touched;
+   the executor transparently redirects SQL to the bench table).
+3. Reference plumbing check: `python3 -c "import runner; print(runner.run_benchmark(solver=runner.ReferenceSolver(), repeats=1)['summary'])"`.
+4. Real agent-under-test: `OllamaSolver` (ollama via `AI_ANALYST_API_URL` /
+   `AI_ANALYST_SQL_MODEL`) or your own `Solver.solve`. For the LLM-judge set the
+   same ollama env. Without a stack, runner/judge degrade (dry-run / skipped).
 
-## Known limitation (live mode)
-`OracleExecutor._shape` maps DB rows to golden shape heuristically. For wide
-`number_map` tasks whose golden carries **derived** keys not in the SQL output
-(T5 `delta`/`delta_pct`, T6 `PNL_TOTAL`) or unaliased SUM columns, live execution
-needs per-task column aliasing / a shaper hint so result keys match golden keys.
-Dry-run (reference result = golden) is unaffected. This is the main item to close
-before a full live run. Plugging a real agent: implement `Solver.solve` (see
-`AgentSolver`).
+Result shaping is **per-task** (`tasks.py` `shape`: scalar / ids / map_kv /
+map_row / map_pivot); `number_map` keys match case-insensitively (Oracle
+upper-cases aliases). `map_row`/`map_pivot` tasks pass an `output_columns`
+contract to the agent so aliases line up with golden keys.
+
+## Live baseline (2026-05-29)
+ReferenceSolver against the real Oracle XE: **12/12 gate_pass, 12/12 stable**.
+A real ollama agent (`Qwen3-30B-A3B-Instruct`, thin schema hint): **5/12** — passes
+easy lookups (T1/T2/T7/T10) and the weather-refusal (G2), fails the domain traps
+(T3/T9 direct-AVG-on-balance, T4/T5/T6/T8) and **fabricates** the no-data credit
+question (G1). See `../reports/2026-05-29-text2sql-v2-ollama-baseline/`. This is
+the discrimination a quality benchmark must show.

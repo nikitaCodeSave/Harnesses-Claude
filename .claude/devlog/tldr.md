@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #59 · 2026-05-29 · text2sql v2 live run ollama baseline
+
+**Tags:** benchmark, feature
+
+Оператор: «выполняй самостоятельно» по двум остаткам бенчмарка v2 — (1) закрыть live-mode _shape для wide number_map с производными ключами; (2) подключить реального агента (AgentSolver) + поднять docker-Oracle+ollama. Оператор подтвердил креды (.env)…
+
+[→ entries/0059-text2sql-v2-live-run-ollama-baseline.md](entries/0059-text2sql-v2-live-run-ollama-baseline.md)
+
+---
+
 ## #58 · 2026-05-29 · text2sql benchmark v2 full build and integration
 
 **Tags:** benchmark, feature, multi-agent
