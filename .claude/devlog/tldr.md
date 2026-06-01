@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #65 · 2026-06-01 · Fresh-context verification global principle
+
+**Tags:** harness, principle, critique, verification
+
+Оператор: вывод #62 (ценность critique — в свежем неякорённом контексте, не в premortem- ритуале) — это ключевой workflow-point работы с Claude Code, не менее важный, чем структурно зафиксированный подход к разработке (TDD/BDD/DDD/…). Проверка глобального слоя выявила реальный…
+
+[→ entries/0065-fresh-context-verification-global-principle.md](entries/0065-fresh-context-verification-global-principle.md)
+
+---
+
 ## #64 · 2026-06-01 · sync-docs retired into docs-discipline rule
 
 **Tags:** harness, docs, skills, retire
