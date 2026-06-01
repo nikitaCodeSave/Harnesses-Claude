@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #68 · 2026-06-01 · claude-code-harness skill de-versioned
+
+**Tags:** harness, principle, coherence, skills
+
+Тот же model-agnostic триаж (#66/#67, [[feedback_model_agnostic_skills]]), теперь по глобальному канону ~/.claude/skills/claude-code-harness/ — он едет в другие проекты, поэтому version-привязки тут аукаются шире всего.
+
+[→ entries/0068-claude-code-harness-skill-de-versioned.md](entries/0068-claude-code-harness-skill-de-versioned.md)
+
+---
+
 ## #67 · 2026-06-01 · Foundational principle model-agnostic
 
 **Tags:** harness, principle, coherence, docs
