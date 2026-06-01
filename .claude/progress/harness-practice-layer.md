@@ -5,7 +5,11 @@
 **Бенчмарк качества text2sql v2 построен и прогнан вживую** (#57-59): 12 задач, 9 осей, реальный
 Oracle+ollama. **A/B harness-vs-noharness обвязка + проба** (#60-61): n=1 показал delta −1 (шум) —
 single-shot не выявляет ценность practice-слоя (подтверждает #52). Всё закоммичено на main.
-**Открытый главный трек: мульти-сессийный замер** (где continuity реально задействован).
+**Главный трек ЗАКРЫТ на directional-уровне (#63):** мульти-сессийный A/B (3 стадии ×
+отдельный `claude --print`, harness vs noharness, primed/unprimed, n=1). Итог — continuity-
+**аппарат** (хук + канонические `.claude/{devlog,progress}`) **не задействуется**: unprimed не
+самозапускается, primed модель пишет свободный `SESSION_NOTES.md` мимо хука (обе руки). delta
+final 0 / +1 (шум). Подтверждает #52/#61 с continuity-стороны; инвариантных правок нет.
 
 ## Большая картина
 Эмпирика (devlog #52): на single-shot greenfield harness = overhead (×2.6 cost, ×2 turns,
@@ -101,4 +105,6 @@ test-system-guard.sh`, 29/29) + фикс реального false-positive (`-gu
 судить КАЧЕСТВО тестов, не pass/fail. Single-shot зануляет ценность слоя. Инфра: `.claude/benchmark/`
 (Oracle `ai-analyst-oracle`, Ollama). Полный handoff-промпт — в этом файле выше + devlog #50–53.
 
-NEXT: мульти-сессийный бенчмарк practice-слоя (3 столба готовы — нужен замер ценности; single-shot её зануляет). Предложить сценарий (сессия N ← devlog 1..N-1, судить качество), получить апрув, исполнить.
+NEXT: главный трек закрыт (#63 — continuity-аппарат обходится). Опц. follow-up'ы если возвращаться:
+(1) явно инструктировать писать в `.claude/progress` и мерить read-side хука; (2) Opus-4.8 build-модель
+(sonnet-4-6 мог сильнее опираться на аппарат — не проверено); (3) n≥3 для power. Все — opt-in, не блокеры.

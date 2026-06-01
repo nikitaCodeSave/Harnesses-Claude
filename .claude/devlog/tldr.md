@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #63 · 2026-06-01 · Multi-session A/B: continuity-аппарат обходится стороной
+
+**Tags:** benchmark, harness, measurement, continuity
+
+Главный открытый трек (#52/#61): single-shot систематически зануляет continuity-столб (#54) — весь build в одном контексте, переносить нечего. Замер: разбить build NL→SQL- аналитика на 3 стадии, каждая = отдельный claude --print --no-session-persistence в одном persisted…
+
+[→ entries/0063-multi-session-a-b-continuity.md](entries/0063-multi-session-a-b-continuity.md)
+
+---
+
 ## #62 · 2026-05-30 · Critique-layer A/B: fresh-context — это рычаг, не premortem-ритуал
 
 **Tags:** benchmark, harness, measurement, critique, discovery-critic
