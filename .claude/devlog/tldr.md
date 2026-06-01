@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #66 · 2026-06-01 · tdd coherence model-agnostic rules
+
+**Tags:** harness, tdd, testing, principle, coherence
+
+Аудит согласованности: как глобальный tdd skill ложится во flow и используются ли результативные практики. Вердикт — в основном когерентно: tdd = глубокое разворачивание §5 (принцип в CLAUDE.md дёшево-всегда, методология в skill on-demand), evidence-grounded…
+
+[→ entries/0066-tdd-coherence-model-agnostic-rules.md](entries/0066-tdd-coherence-model-agnostic-rules.md)
+
+---
+
 ## #65 · 2026-06-01 · Fresh-context verification global principle
 
 **Tags:** harness, principle, critique, verification
