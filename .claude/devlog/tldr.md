@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #67 · 2026-06-01 · Foundational principle model-agnostic
+
+**Tags:** harness, principle, coherence, docs
+
+Продолжение #66 / [[feedback_model_agnostic_skills]]: harness-практики не привязывать к версии модели. Sweep по live-guidance выявил stale + version-bound foundational principle: в одних live-доках он был «под Opus 4.7» (устарел), в других «под Opus 4.8» — рассогласование, и…
+
+[→ entries/0067-foundational-principle-model-agnostic.md](entries/0067-foundational-principle-model-agnostic.md)
+
+---
+
 ## #66 · 2026-06-01 · tdd coherence model-agnostic rules
 
 **Tags:** harness, tdd, testing, principle, coherence

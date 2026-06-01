@@ -18,13 +18,14 @@ inventory компонентов и retire-рекомендаций смотри
 
 ## Foundational principle
 
-**Минимум обвязки → максимум продуктивности под Opus 4.7.**
+**Минимум обвязки → максимум продуктивности под способной моделью.**
+(Принцип model-agnostic — не пере-привязывай к версии; re-grounded на Opus 4.8.)
 
 > «As models improve, developers should strip away unnecessary scaffolding
 > rather than accumulate complexity» — Rajasekaran, Anthropic (March 2026)
 
 Каждое расширение harness'а кодирует assumption «модель не умеет X». Если
-Opus 4.7 делает X нативно, или X покрывается project CLAUDE.md / built-in'ами,
+модель делает X нативно, или X покрывается project CLAUDE.md / built-in'ами,
 компонент **не добавляется**. Single-incident в invariant не превращается;
 pattern требует multi-source evidence или N≥3 повторяющейся эмпирики.
 
@@ -247,7 +248,7 @@ expected lifetime (например, durable decision сохраняется в 
    Или **duplicate of built-in capability** / **self-description main
    thread'а**? Если второе — отвергнуть.
 2. **Evidence threshold**: есть ли empirical evidence (N≥3 incidents
-   или multi-source) что Opus 4.7 не делает X нативно? Single-incident
+   или multi-source) что модель не делает X нативно? Single-incident
    → недостаточно.
 3. **Lazy layer**: положено ли знание в самый ленивый слой, где оно
    ещё имеет смысл?
