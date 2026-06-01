@@ -223,8 +223,8 @@ class OracleExecutor:
 
     def execute(self, sql: str, task: dict) -> tuple[Any, str, float]:
         t0 = time.perf_counter()
-        exec_sql = self._rewrite_table(sql)
         try:
+            exec_sql = self._rewrite_table(sql)
             assert self._conn is not None, "execute() called outside the context manager"
             cur = self._conn.cursor()
             cur.execute(exec_sql)
@@ -239,10 +239,17 @@ class OracleExecutor:
     def _rewrite_table(self, sql: str) -> str:
         """Redirect the canonical table name to the isolated bench table, so the
         app's own client_product is never read/written. Agent SQL keeps using
-        'client_product'; we transparently point it at the bench copy."""
+        'client_product'; we transparently point it at the bench copy.
+
+        The replacement is a callable (not a string) so a bench-table name
+        containing regex-replacement metacharacters (a backslash or a `\\g<N>`
+        group ref from a misconfigured env var) is substituted literally rather
+        than interpreted as a re.sub template — which would raise re.error or
+        silently expand a backreference."""
         if self.cfg.table == "client_product":
             return sql
-        return re.sub(r"\bclient_product\b", self.cfg.table, sql, flags=re.IGNORECASE)
+        return re.sub(r"\bclient_product\b", lambda _m: self.cfg.table, sql,
+                      flags=re.IGNORECASE)
 
     @staticmethod
     def _shape(rows: list, cols: list[str], task: dict) -> Any:

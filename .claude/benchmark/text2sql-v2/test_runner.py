@@ -231,6 +231,18 @@ def test_table_rewrite_isolation():
           noop._rewrite_table("SELECT 1 FROM client_product") == "SELECT 1 FROM client_product")
 
 
+# (k) bench_table is operator-env-controlled; a value with regex-replacement
+# metacharacters (backslash / group ref) must be substituted LITERALLY, not
+# interpreted as a re.sub replacement template (which would raise re.error or
+# silently expand \g<0>). Regression for the fresh-context-critic A/B finding.
+def test_rewrite_table_literal_replacement():
+    ex = runner.OracleExecutor(runner.OracleConfig(
+        user="u", password="p", dsn="d", table=r"bench\1tbl"))
+    out = ex._rewrite_table("SELECT * FROM client_product WHERE x = 1")
+    check("k: regex-meta bench table substituted literally (no re.error)",
+          out == r"SELECT * FROM bench\1tbl WHERE x = 1")
+
+
 # (j) shaping is robust to a malformed agent result (wrong column count) — must
 # NOT raise (untrusted agent SQL); the task just scores wrong.
 def test_shape_robust_to_wrong_arity():
@@ -271,6 +283,7 @@ def run() -> int:
         test_shape_map_pivot()
         test_shape_derived_keys_t5()
         test_table_rewrite_isolation()
+        test_rewrite_table_literal_replacement()
         test_shape_robust_to_wrong_arity()
         test_extract_sql()
     finally:

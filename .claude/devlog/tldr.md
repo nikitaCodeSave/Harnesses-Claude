@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #62 · 2026-05-30 · Critique-layer A/B: fresh-context — это рычаг, не premortem-ритуал
+
+**Tags:** benchmark, harness, measurement, critique, discovery-critic
+
+Бриф по практикам 4.8 советует «убирать скаффолдинг, который модели больше не нужен» и A/B-тестить critique/discovery-обвязку. Вопрос: субсумирует ли нативный self-check Opus 4.8 слой discovery-critic / /critique / discovery-gate.sh. Дизайн (по выбору оператора): seeded-defect…
+
+[→ entries/0062-critique-layer-a-b-fresh-context-premortem.md](entries/0062-critique-layer-a-b-fresh-context-premortem.md)
+
+---
+
 ## #61 · 2026-05-29 · A/B harness vs noharness single-build probe
 
 **Tags:** benchmark, harness, measurement
