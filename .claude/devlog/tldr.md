@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #64 · 2026-06-01 · sync-docs retired into docs-discipline rule
+
+**Tags:** harness, docs, skills, retire
+
+Аудит глобальных ~/.claude/skills/ на предмет неактуальных под Opus 4.8 / расходящихся с выводами исследований. 7 скиллов; разбор по ролям.
+
+[→ entries/0064-sync-docs-retired-into-docs-discipline-rule.md](entries/0064-sync-docs-retired-into-docs-discipline-rule.md)
+
+---
+
 ## #63 · 2026-06-01 · Multi-session A/B: continuity-аппарат обходится стороной
 
 **Tags:** benchmark, harness, measurement, continuity
