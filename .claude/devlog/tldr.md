@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #69 · 2026-06-01 · Harness bundle validation audit fixture
+
+**Tags:** harness, measurement, validation, skills
+
+Оператор: провести валидацию на тестовом проекте — работает ли связка claude-code-harness skill + ~/.claude/CLAUDE.md корректно и повышает ли качество (после арка #65–#68). По нашему правилу [[feedback_test_iterations_via_worktree]]: судить по acceptance против реального target…
+
+[→ entries/0069-harness-bundle-validation-audit-fixture.md](entries/0069-harness-bundle-validation-audit-fixture.md)
+
+---
+
 ## #68 · 2026-06-01 · claude-code-harness skill de-versioned
 
 **Tags:** harness, principle, coherence, skills
