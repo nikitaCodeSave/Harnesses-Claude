@@ -1,6 +1,6 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-05-29
+last-updated: 2026-06-09
 status: active
 supersedes: archive/workflow-2026-05-10.md
 ---
@@ -10,16 +10,20 @@ supersedes: archive/workflow-2026-05-10.md
 > **«Harness matters more than the model — review your configuration every 3-6 months because instructions tuned for older models constrain newer ones.»** — [claude.com/blog/how-claude-code-works-in-large-codebases](https://www.claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start) (2026-05-14, first-party).
 >
 > Этот doc — **тонкий spine**: decision tree поверх built-ins, не дублирующий их описание. Slice-docs см. в [§ Routing](#routing).
+>
+> Plan→Work→Review здесь — **execution-ядро**. Полный human-facing lifecycle (старт/контракт → требования/PRD → дизайн/ADR → Plan→Work→Review → continuity/guardrails) — [../../WORKFLOW.md](../../WORKFLOW.md).
 
 ## Spine: Plan → Work → Review
 
 ```
+[ контракт · PRD-lite · ADR ]                   ← upstream на новом/нетривиальном проекте (WORKFLOW.md §1-3)
+       ↓
 PLAN     →  WORK              →  REVIEW
 понять   →  implement         →  verify vs criteria
 + страт. →  test-driven cycle →  /review (+ /ultrareview для high-stakes)
 ```
 
-Default для **нетривиальной** задачи. Trivial (typo / formatting / one-liner) — пропускает Plan, идёт Work → Review.
+Default для **нетривиальной** задачи. Trivial (typo / formatting / one-liner) — пропускает Plan, идёт Work → Review. **Cold start (новый проект):** `/init` (repo-state → CLAUDE.md) + bootstrap canonical docs (ARCHITECTURE/CODE-MAP/GLOSSARY/CONVENTIONS/ADR/RUNBOOKS — нативно, read-before-write, per `docs-discipline.md`) + контракт (стек / mode / acceptance / verification / DENY) — детали в [../../WORKFLOW.md](../../WORKFLOW.md) §1-3.
 
 ### Plan
 - Acceptance criteria explicit (что = «done»)
@@ -49,12 +53,13 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 | Long-running iterative refinement | `/ralph-loop` plugin (canonical Ralph pattern) | [workflow-async.md](workflow-async.md) |
 | Async / background watch | `Monitor` tool (v2.1.98+) | [workflow-async.md](workflow-async.md) |
 | Parallel feature branches | `-w` worktree + `claude agents` dispatch flags | [workflow-orchestration.md](workflow-orchestration.md) |
-| Codebase-scale sweep / migration / multi-angle convergence (local) | **dynamic workflow** `/workflow` (`ultracode`); find→refute→converge | [multi-agent.md](multi-agent.md) |
+| Codebase-scale sweep / migration / multi-angle convergence (local) | **dynamic workflow** (keyword `ultracode`); find→refute→converge | [multi-agent.md](multi-agent.md) |
 | Heavy planning | `/ultraplan` (cloud, 3 A/B variants) | [workflow-cloud-offload.md](workflow-cloud-offload.md) |
 | Bug-hunt sweep (cloud fleet) | `/ultrareview` (cloud multi-agent fleet) | [workflow-cloud-offload.md](workflow-cloud-offload.md) |
 | Scheduled / event-triggered | `Routines` (Anthropic web) | [workflow-cloud-offload.md](workflow-cloud-offload.md) |
 | Independent verifications | parallel subagents (built-in `general-purpose`) | [multi-agent.md](multi-agent.md) |
 | Commit / PR plumbing | `/commit` / `/commit-push-pr` plugin | [builtins-inventory.md](builtins-inventory.md) |
+| Старт нового проекта / scaffolding canonical docs | `/init` + bootstrap canonical docs (нативно, `docs-discipline.md`) | [../../WORKFLOW.md](../../WORKFLOW.md) §1-3 |
 | Harness self-improvement | measurement loop + retire ritual | [workflow-evolution.md](workflow-evolution.md) |
 
 ## When workflow.md alone не покрывает
@@ -68,11 +73,12 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 | «Когда переучить harness под новую модель» | [workflow-evolution.md](workflow-evolution.md) |
 | «Subagent дисциплина: когда spawn, когда нет» | [multi-agent.md](multi-agent.md) |
 | «Что взять из community и arXiv, не дублируя» | [external-sources.md](external-sources.md) |
+| «Полный lifecycle от старта/контракта/PRD/ADR до пайплайна (human-facing)» | [../../WORKFLOW.md](../../WORKFLOW.md) |
 
 ## Default effort under Opus 4.8
 
 - **`high`** — Anthropic default для Opus 4.8 на agentic coding (на 4.7 было `xhigh`; `high` на 4.8 тратит ~те же токены что `xhigh` на 4.7, но качественнее). Не понижай на `medium` для нетривиальной работы без explicit reason.
-- **`xhigh`** — для трудных и long-running async задач; **`ultracode`** (setting, не tier) = `xhigh` + auto dynamic-workflow orchestration.
+- **`xhigh`** — для трудных и long-running async задач; **`ultracode`** — **trigger word, не отдельный режим/tier** (per [«A harness for every task»](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code)): shorthand-сигнал «напиши dynamic workflow», поднимает orchestration к xhigh-уровню. Голое «workflow» больше не триггерит (rename 2.1.160).
 - Adaptive thinking ON by default. Fixed thinking budgets retired в Opus 4.8.
 
 ## Anti-patterns (cite-anchored)
@@ -84,7 +90,7 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 | Vibe coding (one-shot без Plan) | SonarSource 16.4% conceptual-bug rate | Plan → Work → Review default |
 | Single end-session validation | blakecrosley 35% → 4% false-completion | task-gate + session-gate (two-gate) |
 | Multi-agent для *most* coding | Anthropic explicit "ill-suited" (single-agent default) | Main thread; для scope>1 контекста — built-in dynamic workflow, не кастомный pipeline |
-| Кастомная оркестрация там, где есть built-in dynamic workflow | built-ins-first | `/workflow` / `ultracode` |
+| Кастомная оркестрация там, где есть built-in dynamic workflow | built-ins-first | keyword `ultracode` |
 | Sampling params (`top_p`/`temperature`/`top_k`) на Opus 4.8 | HTTP 400 from Anthropic | Omit entirely |
 | Понижение effort на `medium` для нетривиальной работы без обоснования | 4.8 default = `high` | Stay at `high`+ для agentic coding |
 

@@ -37,6 +37,6 @@ Hook smoke tests covered в Tier 0 (`static-checks.sh`). Tier 2 — non-applicab
 | Component | Type | Trigger set | Negative set | Roadmap |
 |-----------|------|:-----------:|:------------:|---------|
 | devlog | skill | ✓ | ✓ | full auto runner |
-| project-docs-bootstrap | skill | pending | pending | scaffolding |
+| ~~project-docs-bootstrap~~ | skill | — | — | RETIRED 2026-06 (staleness A/B: no lift over native) |
 | deliverable-planner | agent | pending | pending | corpus design |
 | meta-creator | agent | pending | pending | corpus design |

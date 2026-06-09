@@ -1,6 +1,6 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-05-29
+last-updated: 2026-06-09
 ---
 
 # Claude Code harness principles
@@ -10,7 +10,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 ## Foundational
 
 - **Минимум обвязки → максимум продуктивности под способной моделью** (re-grounded на Opus 4.8; принцип model-agnostic — не пере-привязывай к версии). Anthropic: *«As models improve, developers should strip away unnecessary scaffolding rather than accumulate complexity»* — [Harness Design for Long-Running Apps](https://www.anthropic.com/engineering/harness-design-long-running-apps).
-- **Single-agent first; spawn fewer subagents by default**. Под способной моделью один main thread остаётся дефолтом для most coding. Bounded fan-out — через built-in **dynamic workflows** (`/workflow`), не кастомную обвязку, и только когда scope превышает один контекст (см. Subagents).
+- **Single-agent first; spawn fewer subagents by default**. Под способной моделью один main thread остаётся дефолтом для most coding. Bounded fan-out — через built-in **dynamic workflows** (keyword `ultracode`), не кастомную обвязку, и только когда scope превышает один контекст (см. Subagents).
 - **Adaptive thinking; effort default `high` (Opus 4.8)**. На 4.8 дефолтный effort tier — `high` (на 4.7 был `xhigh`); `xhigh` рекомендуется для трудных и long-running async задач. Model сама decides when to reason deeply; fixed thinking budgets deprecated.
 - **1M context — constraint, не resource to ignore**. *«Context rot — steady degradation of model performance as the window gets full — kicks in well before the hard limit»* — [Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents). Opus 4.8 заметно надёжнее на long-context и при восстановлении после compaction (GraphWalks 1M F1 ~40%→~68%), но context rot сохраняется — bigger ≠ free. Эмпирический pre-rot порог ~256–400K ([Chroma «Context Rot»](https://research.trychroma.com/context-rot), operational data Manus [Phil Schmid Part 2](https://philschmid.de/context-engineering-part-2)) — **pending re-measurement под 4.8**; компактифицируй *до* входа в зону деградации, не у потолка. State живёт на диске (git history, devlog, MEMORY.md), не аккумулируется в context.
 - **Verification — highest-leverage practice**. *«Claude performs dramatically better when it can verify its own work — run tests, compare screenshots, validate outputs. Without clear success criteria, it might produce something that looks right but actually doesn't work»* — Best Practices.
@@ -18,7 +18,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 ## Components inventory (current state)
 
-- **Skills** (action-only, workflow-templates): `devlog`, `project-docs-bootstrap`, `update-plan-progress`. SKILL.md ≤500 строк. Каноничное знание о дизайне harness'а — глобальный `~/.claude/skills/claude-code-harness/`.
+- **Skills** (action-only, workflow-templates): `devlog`, `update-plan-progress`. SKILL.md ≤500 строк. Каноничное знание о дизайне harness'а — глобальный `~/.claude/skills/claude-code-harness/`. (`project-docs-bootstrap` ретайрнут 2026-06 — staleness A/B n=2: нет лифта над native + WORKFLOW.md §3 + docs-discipline.)
 - **Custom agents** (в `.claude/agents/`): `meta-creator`, `security-reviewer`, `discovery-critic` (Evaluator-нода, opt-in через `/critique`).
 - **Built-in agents** (5): `Explore` (read-only research), `Plan` (architect-level planning), `general-purpose` (open-ended), `statusline-setup` (UI), `claude-code-guide` (вопросы про Claude Code).
 - **Hooks**: `session-context` (SessionStart), `stop-validation` + `discovery-gate` (Stop, advisory), `loop-protected-guard` (PreToolUse, активен при `LOOP_MODE=1`), `cost-warn` (UserPromptSubmit).
@@ -29,14 +29,14 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 - **Built-ins first**. Перед созданием custom — `claude agents`. Дублирование built-in (`Explore`/`Plan`/`general-purpose`/`statusline-setup`/`claude-code-guide`) — anti-pattern.
 - **Spawn justified ТОЛЬКО**: (а) context isolation (search-heavy / broad codebase scan загрязнит main), (б) parallelism (independent verifications сходящиеся в main), (в) auto-compact rescue (редко при 1M).
-- **Single-agent default; bounded fan-out когда scope превышает один контекст**. Most coding — single thread (*«Most coding tasks involve fewer truly parallelizable tasks than research»* — [Multi-Agent Research System](https://www.anthropic.com/engineering/multi-agent-research-system)). Что изменилось под 4.8: Anthropic ship'нул **dynamic workflows** как first-party bounded-fan-out примитив (`/workflow`, `ultracode`) — по built-ins-first роутим к нему для codebase-scale sweep / миграции / trust-critical верификации (find→refute→converge), НЕ переизобретаем оркестрацию кастомной машинерией. Стоит заметно больше токенов — не дефолт; verify ROI до fan-out.
+- **Single-agent default; bounded fan-out когда scope превышает один контекст**. Most coding — single thread (*«Most coding tasks involve fewer truly parallelizable tasks than research»* — [Multi-Agent Research System](https://www.anthropic.com/engineering/multi-agent-research-system)). Что изменилось под 4.8: Anthropic ship'нул **dynamic workflows** как first-party bounded-fan-out примитив (keyword `ultracode`, или просто попроси) — по built-ins-first роутим к нему для codebase-scale sweep / миграции / trust-critical верификации (find→refute→converge), НЕ переизобретаем оркестрацию кастомной машинерией. Стоит заметно больше токенов — не дефолт; verify ROI до fan-out. First-party обоснование — [«A harness for every task» (Shihipar & Bidasaria, 2 июня 2026)](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code): изолированные субагенты структурно лечат три failure-mode длинных/параллельных прогонов — **agentic laziness**, **self-preferential bias** (ровно почему §8 fresh-context ≠ self-recheck), **goal drift**.
 - **Subagent isolation для high-stakes — opt-in допустимо**. Patterns: Planner→Generator→Evaluator (canonical Anthropic для long tasks, Rajasekaran 2026 — теперь нативно покрывается dynamic workflows на CLI-подписке, без API), TDD triad (test-writer/implementer/refactorer), Driver-Navigator (Opus+Sonnet). Cost-threshold per Rajasekaran: *«worth the cost когда task sits beyond what current model does reliably solo»*. **Mandatory** pipeline за каждую задачу — anti-pattern.
 - **Model assignment**: main/lead = Opus 4.8; reasoning subagent = Sonnet 4.6; grunt (file scans, log filtering) = Haiku 4.5. Agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) — experimental, off by default.
 - **Custom agent justified только**: специализированный domain (security-reviewer, accessibility-auditor), restricted tool set enforcing policy, persistent memory isolation. Orchestration / general-purpose work — main thread.
 
 ## Skills (Agent Skills)
 
-- **Action-skills only**. Workflow-templates для конкретной операции (`devlog`, `project-docs-bootstrap`). Self-описывающие skills (повторяют CLAUDE.md о role main thread'а) — anti-pattern.
+- **Action-skills only**. Workflow-templates для конкретной операции (`devlog`, `update-plan-progress`). Self-описывающие skills (повторяют CLAUDE.md о role main thread'а) — anti-pattern.
 - **Frontmatter required**: `name` (lowercase, hyphens, ≤64 chars), `description` (когда применять, обязательно включать trigger-контекст).
 - **Optional**: `allowed-tools`, `model`, `paths` (glob для auto-load), `disable-model-invocation`, `user-invocable`.
 - **SKILL.md ≤500 строк**. Длинный reference content — в `references/` subfolder, читается on-demand.
@@ -63,9 +63,10 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 ## Settings & permissions
 
-- **Permissions model** (3-layer, evaluated `deny` → `ask` → `allow`): `Tool`, `Tool(command *)`, `Tool(regex:pattern)`, `MCP(server:tool)`.
+- **Permissions model** (3-layer, evaluated `deny` → `ask` → `allow`): `Tool`, `Tool(command *)`, `Tool(regex:pattern)`, `MCP(server:tool)`. Native hardening 2.1.160–166 расширяет слой (ручной deny остаётся минимальным): glob в deny-tool-name (`"*"`), `WebFetch(domain:)` override preapproved-хостов, `~`/`$HOME`-path deny также блокирует Bash, Read-deny прячет из Glob/Grep, `acceptEdits` спрашивает перед code-executing config-файлами (`.npmrc`/`.bazelrc`/`.devcontainer/` …).
 - **defaultMode**: `default` / `plan` (review-before-execute) / `auto` (classifier-based) / `acceptEdits` (rare) / `dontAsk` (production scripts) / `bypassPermissions` (explicit intent).
 - **Settings hierarchy**: local > project > user > managed-policy. Arrays concat, objects deep-merge.
+- **Quarantine pattern для untrusted-content fan-out** ([«A harness for every task»](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code)): в triage/research workflow'ах субагенты, читающие untrusted public content (web / issues / email), **лишаются high-privilege действий** — acting выполняют отдельные субагенты. Privilege-separation против prompt-injection; применять, когда fan-out обрабатывает недоверенный вход.
 - **Security boundary этого harness'а**: permissions whitelist (deny/ask/allow) + глобальный `system-guard.sh` (PreToolUse, DENY catastrophic команд — verified: заблокировал `rm -rf` в devlog #50). Secret-detection и обычные safety checks делает сам Opus 4.8 нативно — не дублируются harness-скриптом (см. memory `native_capabilities_take_precedence`). OS-level sandbox optional.
 - Source: [Settings documentation](https://docs.claude.com/en/docs/claude-code/settings).
 
@@ -79,7 +80,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 ## Documentation
 
 - **CLAUDE.md как indexer, не store**. Ссылается на `docs/ARCHITECTURE.md` / `docs/CODE-MAP.md` / `docs/GLOSSARY.md` (project layer); `.claude/docs/` (harness layer); `.claude/rules/` (always-loaded invariants). Цель: ≤200 строк.
-- **Project docs layout** (создаётся `project-docs-bootstrap` skill в target-проектах): `docs/ARCHITECTURE.md`, `docs/CODE-MAP.md`, `docs/GLOSSARY.md`, `docs/CONVENTIONS.md`, `docs/ADR/`, `docs/RUNBOOKS/`. Read-before-write — каждый doc отражает реальное состояние, не template.
+- **Project docs layout** (bootstrap нативно под Opus 4.8 — рычаг `WORKFLOW.md` §3 + `docs-discipline.md`): `docs/ARCHITECTURE.md`, `docs/CODE-MAP.md`, `docs/GLOSSARY.md`, `docs/CONVENTIONS.md`, `docs/ADR/`, `docs/RUNBOOKS/`. Read-before-write — каждый doc отражает реальное состояние, не template.
 - **Harness docs** (этого pack'а): `.claude/docs/principles.md` (этот файл, current state), `workflow.md`, `multi-agent.md`, `benchmark.md`. Archive layer (`.claude/docs/archive/`) — frozen historical snapshot.
 - **Live vs archive**: active docs редактируются inline для evolve; archive — frozen, изменяется только через structural migrations.
 - 6 invariants в `.claude/rules/docs-discipline.md`: doc-with-code rule / CLAUDE.md как indexer / live vs archive / owner+last-updated / glossary first-use / ADR для non-trivial decisions.

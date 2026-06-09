@@ -8,6 +8,66 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #75 · 2026-06-09 · Prune global skills delete project-docs-bootstrap and archived-skills
+
+**Tags:** harness, cleanup
+
+После retire project-docs-bootstrap в лабе (#74) — чистка глобального ~/.claude/skills/. Глобальный слой срабатывает во всех проектах, поэтому редундантный/баговый скилл там вреднее, чем в лабе. ~/.claude НЕ под git → удаления необратимы; перед каждым — явное подтверждение…
+
+[→ entries/0075-prune-global-skills-delete-project-docs-bootstrap-and-archiv.md](entries/0075-prune-global-skills-delete-project-docs-bootstrap-and-archiv.md)
+
+---
+
+## #74 · 2026-06-09 · Retire project-docs-bootstrap skill — staleness A/B shows no lift
+
+**Tags:** adr, harness, cleanup
+
+После аудита и фикса скилла project-docs-bootstrap (#73) встал вопрос: чинить дальше / переписать / ретайрнуть. Применён ритуал staleness (WORKFLOW.md §125) на эмпирике (не теорией — feedback_empirical_over_theoretical_dismiss): даёт ли скилл воспроизводимый материальный лифт…
+
+[→ entries/0074-retire-project-docs-bootstrap-skill-staleness-a-b-shows-no-l.md](entries/0074-retire-project-docs-bootstrap-skill-staleness-a-b-shows-no-l.md)
+
+---
+
+## #73 · 2026-06-09 · Audit fix project-docs-bootstrap skill detect-then-prescribe regression
+
+**Tags:** docs, harness, bugfix
+
+Скрупулёзный multi-agent аудит скилла project-docs-bootstrap (4 независимых аудитора по осям refs / actuality / harness-rules / coherence + fresh-context refuter на каждый finding) выявил регрессию уже однажды исправленного бага: скилл безусловно вписывал в артефакты…
+
+[→ entries/0073-audit-fix-project-docs-bootstrap-skill-detect-then-prescribe.md](entries/0073-audit-fix-project-docs-bootstrap-skill-detect-then-prescribe.md)
+
+---
+
+## #72 · 2026-06-09 · WORKFLOW.md lifecycle expansion + spine sync
+
+**Tags:** docs, workflow, lifecycle, sync
+
+После актуализации #71 оператор попросил сводный плейбук «разработки проекта с Claude Code с самого начала»: как обсуждать проект, фиксировать требования, решать проектные задачи, переходить к разработке, PRD, тестирование, общий пайплайн. Затем — «расширить WORKFLOW.md» и…
+
+[→ entries/0072-workflow-md-lifecycle-expansion-spine-sync.md](entries/0072-workflow-md-lifecycle-expansion-spine-sync.md)
+
+---
+
+## #71 · 2026-06-09 · Actualize → CC 2.1.169 + harness for every task + arXiv
+
+**Tags:** harness, maintenance, versioning, sources, workflows, memory
+
+Оператор: «проведи анализ интернет-источников — может появились обновления по Claude Code и агентной разработке; выполни все шаги и изучи статьи с arXiv». Baseline — devlog #70 (2026-06-07, срез на 2.1.168 + 3 источника), всего 2 дня назад. Research-пасс (4 параллельных…
+
+[→ entries/0071-actualize-cc-2-1-169-harness-for-every-task-arxiv.md](entries/0071-actualize-cc-2-1-169-harness-for-every-task-arxiv.md)
+
+---
+
+## #70 · 2026-06-07 · Actualize harness → CC 2.1.168 + 3 fresh sources
+
+**Tags:** harness, maintenance, versioning, hooks, sources
+
+Оператор: «актуализируй состояние на начало сессии — вышла масса обновлений Claude Code и статей по агентной разработке». Бинарь на машине = 2.1.168, а harness-доки отставали: native-capabilities.md (canonical срез) — 2.1.154-era, lab-доки (builtins-inventory.md, все…
+
+[→ entries/0070-actualize-harness-cc-2-1-168-3-fresh-sources.md](entries/0070-actualize-harness-cc-2-1-168-3-fresh-sources.md)
+
+---
+
 ## #69 · 2026-06-01 · Harness bundle validation audit fixture
 
 **Tags:** harness, measurement, validation, skills

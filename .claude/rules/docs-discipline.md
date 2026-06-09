@@ -2,11 +2,11 @@
 
 7 правил поддержки проектной документации, инвариантных для любого стека. Расширяется проектным CLAUDE.md, не заменяется.
 
-См. также `.claude/skills/project-docs-bootstrap/` — bootstrap canonical layout (одноразовая операция; этот rule — ongoing discipline).
+Bootstrap canonical layout (`docs/ARCHITECTURE.md` / `CODE-MAP.md` / `GLOSSARY.md` / `CONVENTIONS.md` / `ADR/` / `RUNBOOKS/`) — нативно под Opus 4.8 (read-before-write, реальное содержимое не boilerplate; рычаг — `WORKFLOW.md` §3). Этот rule — ongoing discipline поверх bootstrap'а.
 
 1. **Doc-with-code rule**. PR, меняющий архитектуру / добавляющий top-level dir / вводящий domain-термин / устанавливающий новую convention — обязан обновить соответствующий doc в **том же** PR. Reviewer (включая Claude) отклоняет PR при отсутствии doc-update.
 
-   **Mapping diff → документ** (классифицируй каждый изменённый файл по характеру правки; один файл может попасть в несколько строк). Под Opus 4.8 это нативная работа main thread'а из git diff — **отдельный skill не нужен** (`sync-docs` ретайрнут в `~/.claude/_archived-skills/`; его ядро — эта таблица):
+   **Mapping diff → документ** (классифицируй каждый изменённый файл по характеру правки; один файл может попасть в несколько строк). Под Opus 4.8 это нативная работа main thread'а из git diff — **отдельный skill не нужен** (`sync-docs` ретайрнут и hard-deleted 2026-06; его ядро — эта таблица):
 
    | Категория изменения | Признак в diff | Документ |
    |---|---|---|
@@ -18,7 +18,7 @@
    | Операционная процедура | новый деплой / миграция / recovery-сценарий | `RUNBOOKS/` |
    | Архитектурное решение | выбор lib A vs B, протокол, осознанный отказ от refactor'а | `ADR/` (порог — rule #6) |
 
-   Правь **только затронутые разделы**, не весь документ; при frontmatter `last-updated` — обнови дату (rule #4). Эскалация (не «чинить» молча): расхождение 3+ модулей с `ARCHITECTURE.md` — это уже re-bootstrap (`/project-docs-bootstrap`), а не sync; противоречие между `ARCHITECTURE.md` и `CLAUDE.md`; `CLAUDE.md` дублирует содержимое `docs/` (нарушение rule #2).
+   Правь **только затронутые разделы**, не весь документ; при frontmatter `last-updated` — обнови дату (rule #4). Эскалация (не «чинить» молча): расхождение 3+ модулей с `ARCHITECTURE.md` — это уже re-bootstrap (перечитать код, переписать canonical docs целиком, read-before-write), а не точечный sync; противоречие между `ARCHITECTURE.md` и `CLAUDE.md`; `CLAUDE.md` дублирует содержимое `docs/` (нарушение rule #2).
 
 2. **CLAUDE.md как indexer, не store**. CLAUDE.md ссылается на `docs/ARCHITECTURE.md` / `docs/CODE-MAP.md` / `docs/GLOSSARY.md` / etc., но не дублирует их содержимое. Цель: проектный CLAUDE.md ≤ 200 строк. Длиннее — split в `docs/` или paths-scoped rules.
 
