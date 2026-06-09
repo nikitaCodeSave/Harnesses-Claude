@@ -12,7 +12,7 @@ session-count: 7
 - **Last session**: 2026-06-10 (Session 7 — верификация F4 + lab-инициированный security-аудит)
 - **Current phase**: Phase C/D чередуются — следующая продуктовая сессия: F4-hardening (Unicode) → F5 SGR-агент
 - **Next entry point**: dogfood — «начни сессию по ритуалу» (возьмёт F4-hardening из Next steps п.0); D.2 — копилка 3
-- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (87 passed); F4 проверен независимым аудитом — найден Unicode-обход (долг)
+- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (91 passed); F4 проверен независимым аудитом — найден Unicode-обход (долг)
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -48,7 +48,7 @@ session-count: 7
 
 | Артефакт | Метрика | Target | Hit |
 |---|---|---|---|
-| Механическая верификация F4 | 5 коммитов red→green, оракул 87 passed, devlog #5, passes=F1–F4, дерево чистое | отчёт сессии 3 правдив | ✅ |
+| Механическая верификация F4 | 5 коммитов red→green, оракул 91 passed, devlog #5, passes=F1–F4, дерево чистое | отчёт сессии 3 правдив | ✅ |
 | validate_sql тесты | 59 collected (progress говорил «55» — параметризация) | ≥корпус | ✅ |
 | Lab security-рефьютер (независимый) | REFUTED: Unicode-обход денлиста (fullwidth `＿`, ZWSP), подтверждён запуском | найти обход | НАШЁЛ ❌→долг |
 | Запись в dogfood | F4-hardening наверх Next steps + Audit log + journal (387f3ef) | долг в очереди | ✅ |
