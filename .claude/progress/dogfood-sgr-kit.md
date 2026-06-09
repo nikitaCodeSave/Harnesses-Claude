@@ -206,7 +206,7 @@ session-count: 6
 | M2 | наблюдений в harness-journal.md | 12 (3×4) | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 1 (D.1, devlog #79) | 1 на ~5 сессий C | ✅ |
 | M4 | фич в features.json со `passes:true` | 3 из 6 (F1–F3) + hardening закрыт | растёт монотонно | ✅ |
-| M5 | кандидатов в копилке D-цикла | 1 (.env: secret-bearing vs dev-only, operator feedback после D.1) | ≥1 к D.2 | ✅ |
+| M5 | кандидатов в копилке D-цикла | 2 (.env secret-bearing vs dev-only; kit-артефакты под .claude/ — чистый product-root, operator preference ×2) | ≥1 к D.2 | ✅ |
 
 ## Risks status
 
