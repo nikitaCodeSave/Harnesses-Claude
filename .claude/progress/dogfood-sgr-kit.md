@@ -2,17 +2,17 @@
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-09
 status: in-progress
-session-count: 4
+session-count: 5
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
 
 ## Quick state
 
-- **Last session**: 2026-06-09 (Session 4 — 3-агентный fresh-context аудит F2)
+- **Last session**: 2026-06-09 (Session 5 — continuity-fix dogfood'а по сигналу оператора)
 - **Current phase**: Phase C — build-цикл (2 продуктовых сессии из ~5 до первого D-цикла)
 - **Next entry point**: C.3 — F2-hardening + F3 (search_fields) в dogfood-репо
-- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (20 passed); integration 1 passed против живого Oracle (независимый прогон)
+- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (20 passed); SessionStart-hook теперь отдаёт devlog + Quick state (проверено прогоном hook'а)
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -36,6 +36,39 @@ session-count: 4
 - [ ] D.1 — первая lab-сессия: журнал → правки skill'а + devlog
 
 ## Sessions log
+
+### Session 5 — 2026-06-09 (continuity-fix по сигналу оператора)
+
+**Done & measured**
+
+| Артефакт | Метрика | Target | Hit |
+|---|---|---|---|
+| Devlog dogfood'а | 3 backfill-записи (#1 bootstrap, #2 F1, #3 F2+аудит), index rebuilt | эпизодика существует | ✅ |
+| Progress-файл | `claude-progress.md` → `.claude/progress/build.md` + однострочный Quick state | hook видит | ✅ |
+| SessionStart-hook прогон | additionalContext = 3 devlog-заголовка + Quick state с фактами | непустой | ✅ |
+| CLAUDE.md dogfood | ритуал: devlog-шаг + сквозная нумерация; карта «где живёт состояние»; 75 строк | ≤200 | ✅ |
+
+**Discovered**
+- Оператор зашёл в dogfood-репо и НЕ УВИДЕЛ continuity («нет devlog, прогресс одним
+  файлом в корне, непонятно как продолжать») — при том что ритуал технически работал.
+  Двойная находка: (а) **kit-кандидат #6** — kit кладёт прогресс в root-файл, невидимый
+  глобальному SessionStart-hook'у, и не заводит devlog → конфликт с трёхслойной
+  continuity (§6); (б) **легитимность для оператора** — kit обязан делать состояние
+  видимым человеку, не только агенту (карта «где живёт состояние» в CLAUDE.md).
+- **Kit-кандидат #7** (из журнала F2-сессии): поле `preconditions` у фич в ledger
+  (F2 требовал поднятый Oracle — сейчас это неявно).
+- Оператор подтвердил: транскрипты dogfood-сессий доступны в ~/.claude/projects/ —
+  использовать в D-цикле как сырьё (mining наблюдений сверх журнала).
+
+**Blockers**
+- (none)
+
+**Scope changes**
+- (none)
+
+**Next session targets** (measurable)
+- [ ] C.3: F2-hardening закрыт + F3 `passes:true` (та же команда «по ритуалу»)
+- [ ] D.1 готов к старту после F3/F4: копилка ≥7 кандидатов уже набрана
 
 ### Session 4 — 2026-06-09 (3-агентный fresh-context аудит F2)
 
@@ -168,7 +201,7 @@ session-count: 4
 | M2 | наблюдений в harness-journal.md | 9 (3+3+3) | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 0 | 1 на ~5 сессий C | pending |
 | M4 | фич в features.json со `passes:true` | 2 из 6 (F1, F2) | растёт монотонно | ✅ |
-| M5 | кандидатов в копилке D-цикла | 5 (2×donors/oracle s0, verify-контракт s1, аудит-ритм s2, нумерация сессий s2) | ≥1 к D.1 | ✅ |
+| M5 | кандидатов в копилке D-цикла | 7 (+kit↔continuity s5, +preconditions s5) | ≥1 к D.1 | ✅ |
 
 ## Risks status
 
