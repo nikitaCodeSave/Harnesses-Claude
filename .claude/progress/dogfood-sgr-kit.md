@@ -2,17 +2,17 @@
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-10
 status: in-progress
-session-count: 8
+session-count: 9
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
 
 ## Quick state
 
-- **Last session**: 2026-06-10 (Session 8 — верификация F4-hardening; Unicode-обход закрыт, проверено своим прогоном)
-- **Current phase**: Phase C/D чередуются — следующая продуктовая сессия: F5 SGR-агент (high-stakes, решает D1)
-- **Next entry point**: dogfood — «начни сессию по ритуалу» (F5); на F5 — внешний аудит. D.2 — копилка 4
-- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (100 passed); 5 Unicode-payload'ов BLOCKED, легитимный SQL проходит (свой прогон)
+- **Last session**: 2026-06-10 (Session 9 — внешний 3-агентный аудит F5: STANDS/CONFIRMED/CLEAN, анти-паттерн избегнут)
+- **Current phase**: milestone 1 почти закрыт (5/6) — остался F6 (CLI e2e); затем D.2
+- **Next entry point**: dogfood — «начни сессию по ритуалу» (F6); D.2 — 4 кандидата готовы
+- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (114 passed); F5 wiring подтверждён внешним аудитом
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -41,6 +41,34 @@ session-count: 8
 - [ ] D.2 — после F5/F6 или по накоплению журнала
 
 ## Sessions log
+
+### Session 9 — 2026-06-10 (3-агентный внешний аудит F5 — central thesis validated)
+
+**Done & measured**
+
+| Аудитор (fresh context, refute) | Вердикт | Ключевое |
+|---|---|---|
+| Архитектурный рефьютер | STANDS | 4 ГРАНУЛЯРНЫХ tool (не 1 монолит); LLM владеет потоком (NextStepTools discriminator, не if-цепочка); ExecuteSqlTool re-validates (defense-in-depth); guard итераций энфорсится |
+| Evidence-executor | CONFIRMED | sgr-agent-core 0.7.0 реально импортируется; 14 F5-тестов pass; mock-LLM гоняет настоящий loop (model_validate схемы, не заглушка); оракул 114 passed |
+| Process-auditor | CLEAN | red→green без ослабления; scope чист; D1 в ARCHITECTURE; доноры нетронуты; долги F2/F4 закрыты; ритуал соблюдён |
+
+**Discovered**
+- **Центральный тезис переписи подтверждён внешне**: F5 НЕ воспроизвёл «1 агент + 1 tool».
+  Это главный риск-критерий dogfood'а — снят независимым аудитом, не самоотчётом.
+- Кросс-проверка аудиторов: архитектурный приписал validate_sql +17 к F5, процессный
+  уточнил — это NFKC из F4-hardening (диапазон cf01e55..HEAD захватывал обе фичи).
+  Регрессии нет; аудиторы поймали неточность друг друга — ценность 3 углов.
+- F5 сам нашёл дефект upstream sgr-agent-core 0.7.0 (max_iterations не энфорсится) и
+  закрыл сабклассом — D1 «upstream PyPI» выбран с открытыми глазами.
+
+**Blockers** — (none)
+
+**Scope changes** — (none — milestone 1: 5/6, остался F6 CLI e2e)
+
+**Next session targets** (measurable)
+- [ ] F6 `passes:true` (CLI e2e против живого Oracle+ollama; риск: structured-output qwen3)
+- [ ] D.2 после F6: 4 кандидата готовы к влитию в bootstrap-checklist
+- [ ] M2: ≥1 наблюдение journal
 
 ### Session 8 — 2026-06-10 (верификация F4-hardening)
 
@@ -266,7 +294,7 @@ session-count: 8
 | M1 | dogfood-сессий проведено | 4 (session 0 + F1 + F2 + s2:hardening/F3) | — (счётчик) | ✅ |
 | M2 | наблюдений в harness-journal.md | 12 (3×4) | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 1 (D.1, devlog #79) | 1 на ~5 сессий C | ✅ |
-| M4 | фич в features.json со `passes:true` | 4 из 6 (F1–F4) + 2 hardening закрыты (F2,F4) | растёт монотонно | ✅ |
+| M4 | фич в features.json со `passes:true` | 5 из 6 (F1–F5) + 2 hardening | растёт монотонно | ✅ |
 | M5 | кандидатов в копилке D-цикла | 4 (.env policy; артефакты под .claude/; внешний vs self Evaluator; handoff-заметка требует re-verify) | ≥1 к D.2 | ✅ |
 
 ## Risks status
