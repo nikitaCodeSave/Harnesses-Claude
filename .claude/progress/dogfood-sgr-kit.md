@@ -2,17 +2,17 @@
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-09
 status: in-progress
-session-count: 5
+session-count: 6
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
 
 ## Quick state
 
-- **Last session**: 2026-06-09 (Session 5 — continuity-fix dogfood'а по сигналу оператора)
-- **Current phase**: Phase C — build-цикл (2 продуктовых сессии из ~5 до первого D-цикла)
-- **Next entry point**: C.3 — F2-hardening + F3 (search_fields) в dogfood-репо
-- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (20 passed); SessionStart-hook теперь отдаёт devlog + Quick state (проверено прогоном hook'а)
+- **Last session**: 2026-06-09 (Session 6 — **D.1 выполнен**: 7 находок журнала влиты в bootstrap-checklist, devlog #79)
+- **Current phase**: Phase C/D чередуются — следующая продуктовая сессия: F4 validate_sql (high-stakes, Evaluator обязателен по ledger)
+- **Next entry point**: C.4 — F4 в dogfood-репо («начни сессию по ритуалу»); D.2 — после F5/F6 или по сигналу журнала
+- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (32 passed); сессия 2 верифицирована механически
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -32,8 +32,13 @@ session-count: 5
 
 ### Phase C — build-цикл (0/n, n = по features.json)
 
-### Phase D — feedback-циклы (0/n, каждые ~5 сессий C)
-- [ ] D.1 — первая lab-сессия: журнал → правки skill'а + devlog
+### Phase D — feedback-циклы (1/n)
+- [x] D.1 — 2026-06-09, раньше плана (3 продуктовых сессии, 12 наблюдений, тревога
+      оператора): 5 evidence-grounded правок bootstrap-checklist (donors-deny, domain
+      oracle + negative cases, verify-контракты + preconditions, progress в .claude/ +
+      devlog-слой + нумерация, периодический аудит принятых фич). dot-claude a831215,
+      devlog #79. Копилка кандидатов очищена (7/7 влиты).
+- [ ] D.2 — после F5/F6 или по накоплению журнала
 
 ## Sessions log
 
@@ -197,11 +202,11 @@ session-count: 5
 
 | ID | Metric | Last measured | Target | Status |
 |---|---|---|---|---|
-| M1 | dogfood-сессий проведено | 3 (session 0 + F1 + F2) | — (счётчик) | ✅ |
-| M2 | наблюдений в harness-journal.md | 9 (3+3+3) | ≥1/сессию | ✅ |
-| M3 | D-циклов (журнал → правки skill'а) | 0 | 1 на ~5 сессий C | pending |
-| M4 | фич в features.json со `passes:true` | 2 из 6 (F1, F2) | растёт монотонно | ✅ |
-| M5 | кандидатов в копилке D-цикла | 7 (+kit↔continuity s5, +preconditions s5) | ≥1 к D.1 | ✅ |
+| M1 | dogfood-сессий проведено | 4 (session 0 + F1 + F2 + s2:hardening/F3) | — (счётчик) | ✅ |
+| M2 | наблюдений в harness-journal.md | 12 (3×4) | ≥1/сессию | ✅ |
+| M3 | D-циклов (журнал → правки skill'а) | 1 (D.1, devlog #79) | 1 на ~5 сессий C | ✅ |
+| M4 | фич в features.json со `passes:true` | 3 из 6 (F1–F3) + hardening закрыт | растёт монотонно | ✅ |
+| M5 | кандидатов в копилке D-цикла | 0 (7/7 влиты в D.1) | ≥1 к D.2 | ✅ |
 
 ## Risks status
 

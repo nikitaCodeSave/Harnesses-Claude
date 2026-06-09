@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #79 · 2026-06-09 · D-cycle 1: dogfood journal folded into bootstrap-checklist
+
+**Tags:** harness, dogfood, skills
+
+Первый feedback-цикл dogfood-трека (#78), запущен раньше плана (~5 сессий): после 3 продуктовых сессий AI_analyst_sgr копилка набрала 7+ подтверждённых находок, а оператор сформулировал тревогу «kit не реализует полную пред-подготовку, структура нарушена». Тревога подтвердилась…
+
+[→ entries/0079-d-cycle-1-dogfood-journal-folded-into-bootstrap-checklist.md](entries/0079-d-cycle-1-dogfood-journal-folded-into-bootstrap-checklist.md)
+
+---
+
 ## #78 · 2026-06-09 · Grill зон роста: dogfood-план SGR + ~/.claude под git
 
 **Tags:** adr, harness, dogfood
