@@ -2,17 +2,17 @@
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-10
 status: in-progress
-session-count: 7
+session-count: 8
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
 
 ## Quick state
 
-- **Last session**: 2026-06-10 (Session 7 — верификация F4 + lab-инициированный security-аудит)
-- **Current phase**: Phase C/D чередуются — следующая продуктовая сессия: F4-hardening (Unicode) → F5 SGR-агент
-- **Next entry point**: dogfood — «начни сессию по ритуалу» (возьмёт F4-hardening из Next steps п.0); D.2 — копилка 3
-- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (91 passed); F4 проверен независимым аудитом — найден Unicode-обход (долг)
+- **Last session**: 2026-06-10 (Session 8 — верификация F4-hardening; Unicode-обход закрыт, проверено своим прогоном)
+- **Current phase**: Phase C/D чередуются — следующая продуктовая сессия: F5 SGR-агент (high-stakes, решает D1)
+- **Next entry point**: dogfood — «начни сессию по ритуалу» (F5); на F5 — внешний аудит. D.2 — копилка 4
+- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (100 passed); 5 Unicode-payload'ов BLOCKED, легитимный SQL проходит (свой прогон)
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -41,6 +41,37 @@ session-count: 7
 - [ ] D.2 — после F5/F6 или по накоплению журнала
 
 ## Sessions log
+
+### Session 8 — 2026-06-10 (верификация F4-hardening)
+
+**Done & measured**
+
+| Артефакт | Метрика | Target | Hit |
+|---|---|---|---|
+| F4-hardening закрыт | `_normalize()` = NFKC + strip{Cf,Mn}; red→green (a270886→318eab1); 100 passed | Unicode-обход закрыт | ✅ |
+| Свой прогон 5 payload'ов | fullwidth/zwsp/ZWNJ/combining/soft-hyphen — все BLOCKED | все REJECT | ✅ |
+| Контроль легитимности | кириллица в литерале + plain COUNT — проходят | не over-block | ✅ |
+
+**Discovered**
+- **§8 развёрнут на саму лабораторию**: сессия 4 не доверилась МОЕЙ хэндофф-заметке
+  «NFKC закрывает оба payload'а» — проверила запуском, и оказалось неверно (NFKC не
+  трогает U+200B, Cf). Моя «проверенная» заметка была looks-done-ловушкой (я прогнал
+  только fullwidth, про zwsp домыслил). Минимальный набор найден батареей векторов, не
+  угадан → вскрылся 3-й класс (combining). **Kit-кандидат D.2 (4-й):** хэндофф-заметка
+  с «проверено/fix известен» обязана быть re-verified потребляющей сессией — assertion
+  ≠ execution; фиксы в Next steps формулировать как «воспроизвести → закрыть», не как
+  готовое решение.
+- Сессия 4 — образцовая по §5/§8: эмпирика до имплементации, батарея вместо догадки,
+  guard на легитимный случай (кириллица) в том же red-коммите.
+
+**Blockers** — (none)
+
+**Scope changes** — (none)
+
+**Next session targets** (measurable)
+- [ ] F5 `passes:true` (решает D1, записать форму зависимости в ARCHITECTURE.md)
+- [ ] F5 — внешний (лабораторный) аудит wiring агента, не self-orchestrated
+- [ ] M2: ≥1 наблюдение journal
 
 ### Session 7 — 2026-06-10 (верификация F4 + независимый security-аудит)
 
@@ -235,8 +266,8 @@ session-count: 7
 | M1 | dogfood-сессий проведено | 4 (session 0 + F1 + F2 + s2:hardening/F3) | — (счётчик) | ✅ |
 | M2 | наблюдений в harness-journal.md | 12 (3×4) | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 1 (D.1, devlog #79) | 1 на ~5 сессий C | ✅ |
-| M4 | фич в features.json со `passes:true` | 3 из 6 (F1–F3) + hardening закрыт | растёт монотонно | ✅ |
-| M5 | кандидатов в копилке D-цикла | 3 (.env policy; kit-артефакты под .claude/; security-Evaluator должен быть внешним, не self-orchestrated) | ≥1 к D.2 | ✅ |
+| M4 | фич в features.json со `passes:true` | 4 из 6 (F1–F4) + 2 hardening закрыты (F2,F4) | растёт монотонно | ✅ |
+| M5 | кандидатов в копилке D-цикла | 4 (.env policy; артефакты под .claude/; внешний vs self Evaluator; handoff-заметка требует re-verify) | ≥1 к D.2 | ✅ |
 
 ## Risks status
 
