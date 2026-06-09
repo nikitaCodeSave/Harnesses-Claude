@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #78 · 2026-06-09 · Grill зон роста: dogfood-план SGR + ~/.claude под git
+
+**Tags:** adr, harness, dogfood
+
+Оператор: «мы очень далеки от готового kit для старта нового проекта» — при том, что #77 в тот же день записал «WINNER NEW decisively». Grill-сессия вскрыла: разрыв не в содержании kit'а, а в том, что он ни разу не прожил реальный продукт — вся валидация синтетическая…
+
+[→ entries/0078-grill-dogfood-sgr-claude-git.md](entries/0078-grill-dogfood-sgr-claude-git.md)
+
+---
+
 ## #77 · 2026-06-09 · Add long-running build kit to claude-code-harness Bootstrap
 
 **Tags:** feature, harness
