@@ -2,17 +2,17 @@
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-10
 status: in-progress
-session-count: 9
+session-count: 10
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
 
 ## Quick state
 
-- **Last session**: 2026-06-10 (Session 9 — внешний 3-агентный аудит F5: STANDS/CONFIRMED/CLEAN, анти-паттерн избегнут)
-- **Current phase**: milestone 1 почти закрыт (5/6) — остался F6 (CLI e2e); затем D.2
-- **Next entry point**: dogfood — «начни сессию по ритуалу» (F6); D.2 — 4 кандидата готовы
-- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (114 passed); F5 wiring подтверждён внешним аудитом
+- **Last session**: 2026-06-10 (Session 10 — внешний аудит F6: e2e grounding CONFIRMED живьём; MILESTONE 1 ЗАКРЫТ)
+- **Current phase**: milestone 1 завершён (6/6) → **D.2 готов** (5 кандидатов); затем scope milestone 2 с оператором
+- **Next entry point**: D.2 — влить 5 кандидатов в bootstrap-checklist + сводный devlog milestone 1
+- **Live test status**: dogfood — 120 unit passed + 5 integration passed (живой Oracle+ollama, 86s); golden-числа переисполнены независимо — совпали до копейки
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -41,6 +41,34 @@ session-count: 9
 - [ ] D.2 — после F5/F6 или по накоплению журнала
 
 ## Sessions log
+
+### Session 10 — 2026-06-10 (внешний аудит F6 — milestone 1 закрыт)
+
+**Done & measured**
+
+| Аудитор (fresh context) | Вердикт | Ключевое |
+|---|---|---|
+| Evidence-executor (исполнил живой стек) | CONFIRMED | golden-SQL переисполнен прямо на Oracle — совпал до копейки; CLI `analyst` работает; negative-case отказывает без SQL; 5 integration passed (86s = реальный LLM) |
+| Process-auditor (без исполнения) | VIOLATIONS→adjudicated | вердикт «числа недоказаны/журнал лжёт» — ПЕРЕОЦЕНКА (числа верны, доказано исполнением); валидное зерно: провенанс golden-чисел не закреплён артефактом |
+
+**Discovered**
+- **Сильнейшая методологическая находка трека**: аудитор, читавший ТОЛЬКО артефакты,
+  вынес более жёсткий и частично НЕВЕРНЫЙ вердикт, чем тот, кто ИСПОЛНИЛ. Артефактов в
+  одиночку не хватило для доверия к e2e — качество F6 подтвердил живой прогон, не git.
+  **Kit-кандидат D.2 (5-й):** для e2e/grounding-фич verify должен требовать сохранённого
+  артефакта-провенанса (вывод прямого SQL рядом с golden-тестом), И аудит должен
+  ИСПОЛНЯТЬ, а не только читать. Подтверждает приоритет executor-аудита над reader-аудитом.
+- **Центральный итог dogfood**: пустое репо → работающий NL→SQL SGR-агент за 6 фич/10
+  сессий; e2e даёт ответы, grounded до копейки против живого Oracle. Анти-паттерн
+  «1 агент + 1 tool» избегнут (S9). Разрыв «нет готового kit» закрыт эмпирически.
+
+**Blockers** — (none)
+
+**Scope changes** — milestone 1 завершён (6/6); milestone 2 (подвопросы/графики/merge) — scope с оператором
+
+**Next session targets** (measurable)
+- [ ] D.2: 5 кандидатов влиты в bootstrap-checklist (dot-claude commit) + сводный devlog milestone 1
+- [ ] Решение оператора: scope milestone 2 / упаковка kit (plugin/template) теперь, когда содержание доказано
 
 ### Session 9 — 2026-06-10 (3-агентный внешний аудит F5 — central thesis validated)
 
@@ -294,8 +322,8 @@ session-count: 9
 | M1 | dogfood-сессий проведено | 4 (session 0 + F1 + F2 + s2:hardening/F3) | — (счётчик) | ✅ |
 | M2 | наблюдений в harness-journal.md | 12 (3×4) | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 1 (D.1, devlog #79) | 1 на ~5 сессий C | ✅ |
-| M4 | фич в features.json со `passes:true` | 5 из 6 (F1–F5) + 2 hardening | растёт монотонно | ✅ |
-| M5 | кандидатов в копилке D-цикла | 4 (.env policy; артефакты под .claude/; внешний vs self Evaluator; handoff-заметка требует re-verify) | ≥1 к D.2 | ✅ |
+| M4 | фич в features.json со `passes:true` | 6 из 6 — MILESTONE 1 ЗАКРЫТ + 2 hardening | растёт монотонно | ✅ |
+| M5 | кандидатов в копилке D-цикла | 5 (.env policy; артефакты под .claude/; внешний vs self Evaluator; re-verify handoff; executor-аудит > reader + golden-провенанс) | ≥1 к D.2 | ✅ |
 
 ## Risks status
 
