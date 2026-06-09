@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #76 · 2026-06-09 · Sync canonical claude-code-harness skill with factory knowledge
+
+**Tags:** harness, docs
+
+После prune глобальных skills (#75) — проверка: соответствует ли глобальный канон ~/.claude/skills/claude-code-harness/ последнему выводу «фабрики» (devlog #70–#75). Аудит выявил, что survivors (devlog/grill/tdd) конформны (tdd даже точно совпал с де-догматизированным §5), но…
+
+[→ entries/0076-sync-canonical-claude-code-harness-skill-with-factory-knowle.md](entries/0076-sync-canonical-claude-code-harness-skill-with-factory-knowle.md)
+
+---
+
 ## #75 · 2026-06-09 · Prune global skills delete project-docs-bootstrap and archived-skills
 
 **Tags:** harness, cleanup
