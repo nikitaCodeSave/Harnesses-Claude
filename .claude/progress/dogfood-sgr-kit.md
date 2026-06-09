@@ -2,17 +2,17 @@
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-09
 status: in-progress
-session-count: 2
+session-count: 3
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
 
 ## Quick state
 
-- **Last session**: 2026-06-09 (Session 2)
-- **Current phase**: Phase B — старт dogfood'а (5/5 done) → вход в Phase C (build-цикл)
-- **Next entry point**: C.1 — фича F1 (Settings) в `~/PROJECTS/AI_analyst_for_work/AI_analyst_sgr` (сессия там, не здесь)
-- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (ruff + 1 smoke test)
+- **Last session**: 2026-06-09 (Session 3 — верификация dogfood-сессии 1)
+- **Current phase**: Phase C — build-цикл (1 продуктовая сессия из ~5 до первого D-цикла)
+- **Next entry point**: C.2 — фича F2 (Oracle connector) в dogfood-репо; требует донорский dev-стек (`AI_analyst_migration/dev/run-dev.sh`)
+- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (13 passed)
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -36,6 +36,36 @@ session-count: 2
 - [ ] D.1 — первая lab-сессия: журнал → правки skill'а + devlog
 
 ## Sessions log
+
+### Session 3 — 2026-06-09 (верификация dogfood-сессии 1 / F1)
+
+**Done & measured**
+
+| Артефакт | Метрика | Target | Hit |
+|---|---|---|---|
+| F1 Settings в dogfood | `passes:true`, 12 unit-тестов, TDD (red-коммит 7537eb1 → green 377f2df) | verify-шаги F1 | ✅ |
+| Оракул dogfood | ORACLE GREEN, 13 passed, рабочее дерево чистое | exit 0 | ✅ |
+| harness-journal | +3 наблюдения за сессию 1 (2 kit-помог, 1 kit-не-хватило) | ≥1/сессию | ✅ |
+| claude-progress dogfood | Decisions пополнен (env без префикса, все 7 переменных обязательны, пустая строка = отсутствие) | handoff живой | ✅ |
+
+**Discovered**
+- Ритуал отработал как задуман: старт работы ~2 мин без уточняющих вопросов; red-коммит
+  тестов до имплементации органично совместился с commit-per-feature (2 коммита на фичу).
+- Артефакт прошлой сессии (.env.example) сыграл роль зафиксированного решения — сессия 1
+  не переобсуждала env-нейминг. Подтверждение «файл = authoritative state».
+- Новый кандидат в kit (3-й): verify-шаги фич должны нести явный контракт
+  (required/default), иначе каждая сессия делает молчаливые микрорешения. → копилка D-цикла.
+
+**Blockers**
+- (none)
+
+**Scope changes**
+- (none)
+
+**Next session targets** (measurable)
+- [ ] C.2: F2 Oracle connector — `passes:true` (unit с mock + integration `SELECT 1 FROM dual`)
+- [ ] Dev-стек поднят: docker Oracle XE отвечает, `.env` заполнен
+- [ ] M2: ≥1 наблюдение в journal за сессию
 
 ### Session 2 — 2026-06-09
 
@@ -104,10 +134,10 @@ session-count: 2
 
 | ID | Metric | Last measured | Target | Status |
 |---|---|---|---|---|
-| M1 | dogfood-сессий проведено | 1 (session 0) | — (счётчик) | ✅ |
-| M2 | наблюдений в harness-journal.md | 3 | ≥1/сессию | ✅ |
+| M1 | dogfood-сессий проведено | 2 (session 0 + F1) | — (счётчик) | ✅ |
+| M2 | наблюдений в harness-journal.md | 6 (3+3) | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 0 | 1 на ~5 сессий C | pending |
-| M4 | фич в features.json со `passes:true` | 0 из 6 | растёт монотонно | pending |
+| M4 | фич в features.json со `passes:true` | 1 из 6 (F1) | растёт монотонно | ✅ |
 
 ## Risks status
 
