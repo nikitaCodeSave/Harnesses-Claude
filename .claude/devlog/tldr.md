@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #77 · 2026-06-09 · Add long-running build kit to claude-code-harness Bootstrap
+
+**Tags:** feature, harness
+
+Анонс Fable 5 (Mythos-class, tier над Opus) заострил, что ценность способной модели максимальна на «longer and more complex tasks» — а значит критерий успеха bootstrap'а глобального skill'а claude-code-harness это «проект выдержит длинную автономную разработку», а не «есть…
+
+[→ entries/0077-add-long-running-build-kit-to-claude-code-harness-bootstrap.md](entries/0077-add-long-running-build-kit-to-claude-code-harness-bootstrap.md)
+
+---
+
 ## #76 · 2026-06-09 · Sync canonical claude-code-harness skill with factory knowledge
 
 **Tags:** harness, docs
