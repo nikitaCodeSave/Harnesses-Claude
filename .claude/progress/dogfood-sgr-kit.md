@@ -2,17 +2,17 @@
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-09
 status: in-progress
-session-count: 3
+session-count: 4
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
 
 ## Quick state
 
-- **Last session**: 2026-06-09 (Session 3 — верификация dogfood-сессии 1)
-- **Current phase**: Phase C — build-цикл (1 продуктовая сессия из ~5 до первого D-цикла)
-- **Next entry point**: C.2 — фича F2 (Oracle connector) в dogfood-репо; требует донорский dev-стек (`AI_analyst_migration/dev/run-dev.sh`)
-- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (13 passed)
+- **Last session**: 2026-06-09 (Session 4 — 3-агентный fresh-context аудит F2)
+- **Current phase**: Phase C — build-цикл (2 продуктовых сессии из ~5 до первого D-цикла)
+- **Next entry point**: C.3 — F2-hardening + F3 (search_fields) в dogfood-репо
+- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (20 passed); integration 1 passed против живого Oracle (независимый прогон)
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -36,6 +36,36 @@ session-count: 3
 - [ ] D.1 — первая lab-сессия: журнал → правки skill'а + devlog
 
 ## Sessions log
+
+### Session 4 — 2026-06-09 (3-агентный fresh-context аудит F2)
+
+**Done & measured**
+
+| Артефакт | Метрика | Target | Hit |
+|---|---|---|---|
+| Evidence-executor | init.sh 20 passed; `pytest -m integration` 1 passed против живого ai-analyst-oracle; независимый SELECT 1 FROM dual через код проекта — OK | CONFIRMED/REFUTED | CONFIRMED ✅ |
+| Process-auditor | red→green без ослабления тестов (git diff пуст по tests/), scope чистый, доноры нетронуты; 1 MED: нумерация сессий (F1 и F2 обе «session 1») | CLEAN/VIOLATIONS | CLEAN (1 MED) ✅ |
+| Code-refuter | 1 HIGH (cursor.description=None → сырой TypeError мимо OracleQueryError) + 1 MED (тест не фиксирует использование пула) | REFUTED/STANDS | REFUTED ❌→учтено |
+| Итог в dogfood | Audit log + F2-hardening в claude-progress (коммит c38cae5); passes:true сохранён (verify-шаги выполнены, дефект за их пределами) | долг зафиксирован | ✅ |
+
+**Discovered**
+- **Сильнейший lab-сигнал трека**: fresh-context аудит нашёл HIGH-дефект в фиче, которую
+  авторская сессия довела до «все тесты зелёные, integration живой». Повтор паттерна
+  devlog #62/#65 уже на dogfood: оракул ловит «работает ли», судья — «правильно ли».
+  Кандидат в kit (4-й): периодический независимый аудит не только для high-stakes фич.
+- Нумерация сессий в журнале — слабое место конвенции kit'а (обе фичи «session 1»);
+  конвенция уточнена в dogfood Decisions. Кандидат-микроправка ритуала (5-й).
+
+**Blockers**
+- (none)
+
+**Scope changes**
+- (none)
+
+**Next session targets** (measurable)
+- [ ] C.3: F2-hardening закрыт (guard + тест пула, оба red→green), F3 `passes:true`
+- [ ] M2: ≥1 наблюдение в journal за сессию
+- [ ] Копилка D-цикла: ≥5 кандидатов (сейчас 5) — при 5 сессиях Phase C можно стартовать D.1
 
 ### Session 3 — 2026-06-09 (верификация dogfood-сессии 1 / F1)
 
@@ -134,10 +164,11 @@ session-count: 3
 
 | ID | Metric | Last measured | Target | Status |
 |---|---|---|---|---|
-| M1 | dogfood-сессий проведено | 2 (session 0 + F1) | — (счётчик) | ✅ |
-| M2 | наблюдений в harness-journal.md | 6 (3+3) | ≥1/сессию | ✅ |
+| M1 | dogfood-сессий проведено | 3 (session 0 + F1 + F2) | — (счётчик) | ✅ |
+| M2 | наблюдений в harness-journal.md | 9 (3+3+3) | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 0 | 1 на ~5 сессий C | pending |
-| M4 | фич в features.json со `passes:true` | 1 из 6 (F1) | растёт монотонно | ✅ |
+| M4 | фич в features.json со `passes:true` | 2 из 6 (F1, F2) | растёт монотонно | ✅ |
+| M5 | кандидатов в копилке D-цикла | 5 (2×donors/oracle s0, verify-контракт s1, аудит-ритм s2, нумерация сессий s2) | ≥1 к D.1 | ✅ |
 
 ## Risks status
 
