@@ -11,7 +11,7 @@ session-count: 6
 
 - **Last session**: 2026-06-09 (Session 6 — **D.1 выполнен**: 7 находок журнала влиты в bootstrap-checklist, devlog #79)
 - **Current phase**: Phase C/D чередуются — следующая продуктовая сессия: F4 validate_sql (high-stakes, Evaluator обязателен по ledger)
-- **Next entry point**: C.4 — F4 в dogfood-репо («начни сессию по ритуалу»); D.2 — после F5/F6 или по сигналу журнала
+- **Next entry point**: C.4 — F4 в dogfood-репо («начни сессию по ритуалу»); D.2 — после F5/F6 (в копилке уже 1: политика .env secret-bearing vs dev-only)
 - **Live test status**: dogfood `./init.sh` → ORACLE GREEN (32 passed); сессия 2 верифицирована механически
 - **Open blockers**: 0
 
@@ -206,7 +206,7 @@ session-count: 6
 | M2 | наблюдений в harness-journal.md | 12 (3×4) | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 1 (D.1, devlog #79) | 1 на ~5 сессий C | ✅ |
 | M4 | фич в features.json со `passes:true` | 3 из 6 (F1–F3) + hardening закрыт | растёт монотонно | ✅ |
-| M5 | кандидатов в копилке D-цикла | 0 (7/7 влиты в D.1) | ≥1 к D.2 | ✅ |
+| M5 | кандидатов в копилке D-цикла | 1 (.env: secret-bearing vs dev-only, operator feedback после D.1) | ≥1 к D.2 | ✅ |
 
 ## Risks status
 
