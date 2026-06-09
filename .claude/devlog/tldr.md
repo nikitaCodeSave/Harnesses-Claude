@@ -8,6 +8,26 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #81 · 2026-06-10 · D-cycle 2: milestone-1 closeout, 5 findings folded into kit
+
+**Tags:** harness, dogfood, skills
+
+Второй feedback-цикл dogfood-трека (#78/#79), запущен по сигналу оператора «D.2 сейчас» после закрытия milestone 1. Dogfood AI_analyst_sgr прошёл путь пустое-репо → работающий NL→SQL SGR-агент за 6 фич / 10 сессий: отвечает на русском, генерирует SQL, исполняет на живом Oracle…
+
+[→ entries/0081-d-cycle-2-milestone-1-closeout-5-findings-folded-into-kit.md](entries/0081-d-cycle-2-milestone-1-closeout-5-findings-folded-into-kit.md)
+
+---
+
+## #80 · 2026-06-10 · Docs freshness audit: link fixes, 2.1.170 delta, archive moves
+
+**Tags:** docs, harness
+
+Аудит актуальности .claude/docs/ после вчерашнего re-ground на CC 2.1.169: CLI уже 2.1.170, один док пропустил актуализацию, два point-in-time дока лежали в живом слое. Сверены даты, версии, перекрёстные ссылки и упоминания ретайрнутых компонентов во всех 13 доках.
+
+[→ entries/0080-docs-freshness-audit-link-fixes-2-1-170-delta-archive-moves.md](entries/0080-docs-freshness-audit-link-fixes-2-1-170-delta-archive-moves.md)
+
+---
+
 ## #79 · 2026-06-09 · D-cycle 1: dogfood journal folded into bootstrap-checklist
 
 **Tags:** harness, dogfood, skills

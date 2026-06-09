@@ -2,7 +2,7 @@
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-10
 status: in-progress
-session-count: 10
+session-count: 11
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
@@ -10,8 +10,8 @@ session-count: 10
 ## Quick state
 
 - **Last session**: 2026-06-10 (Session 10 — внешний аудит F6: e2e grounding CONFIRMED живьём; MILESTONE 1 ЗАКРЫТ)
-- **Current phase**: milestone 1 завершён (6/6) → **D.2 готов** (5 кандидатов); затем scope milestone 2 с оператором
-- **Next entry point**: D.2 — влить 5 кандидатов в bootstrap-checklist + сводный devlog milestone 1
+- **Current phase**: milestone 1 завершён (6/6), **D.2 выполнен** (5 находок влиты, devlog #81); развилка с оператором — milestone 2 vs упаковка kit
+- **Next entry point**: решение оператора — scope milestone 2 (подвопросы/графики/merge) ИЛИ упаковка kit (plugin/template), содержание доказано
 - **Live test status**: dogfood — 120 unit passed + 5 integration passed (живой Oracle+ollama, 86s); golden-числа переисполнены независимо — совпали до копейки
 - **Open blockers**: 0
 
@@ -38,7 +38,10 @@ session-count: 10
       oracle + negative cases, verify-контракты + preconditions, progress в .claude/ +
       devlog-слой + нумерация, периодический аудит принятых фич). dot-claude a831215,
       devlog #79. Копилка кандидатов очищена (7/7 влиты).
-- [ ] D.2 — после F5/F6 или по накоплению журнала
+- [x] D.2 — 2026-06-10, по сигналу оператора после milestone 1: 5 evidence-grounded правок
+      bootstrap-checklist (.env secret vs dev-only; артефакты под .claude/; re-verify
+      handoff-заметок; внешний > self Evaluator; executor-аудит > reader + golden-провенанс).
+      dot-claude baaabd1, devlog #81. Копилка очищена (5/5 влиты).
 
 ## Sessions log
 
@@ -321,9 +324,9 @@ session-count: 10
 |---|---|---|---|---|
 | M1 | dogfood-сессий проведено | 4 (session 0 + F1 + F2 + s2:hardening/F3) | — (счётчик) | ✅ |
 | M2 | наблюдений в harness-journal.md | 12 (3×4) | ≥1/сессию | ✅ |
-| M3 | D-циклов (журнал → правки skill'а) | 1 (D.1, devlog #79) | 1 на ~5 сессий C | ✅ |
+| M3 | D-циклов (журнал → правки skill'а) | 2 (D.1 #79: 7 находок; D.2 #81: 5 находок) | 1 на ~5 сессий C | ✅ |
 | M4 | фич в features.json со `passes:true` | 6 из 6 — MILESTONE 1 ЗАКРЫТ + 2 hardening | растёт монотонно | ✅ |
-| M5 | кандидатов в копилке D-цикла | 5 (.env policy; артефакты под .claude/; внешний vs self Evaluator; re-verify handoff; executor-аудит > reader + golden-провенанс) | ≥1 к D.2 | ✅ |
+| M5 | кандидатов в копилке D-цикла | 0 (5/5 влиты в D.2 #81) | накопление к D.3 | ✅ |
 
 ## Risks status
 
