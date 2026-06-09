@@ -1,18 +1,18 @@
 ---
 plan: .claude/plans/dogfood-sgr-kit.md
-last-updated: 2026-06-09
+last-updated: 2026-06-10
 status: in-progress
-session-count: 6
+session-count: 7
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
 
 ## Quick state
 
-- **Last session**: 2026-06-09 (Session 6 — **D.1 выполнен**: 7 находок журнала влиты в bootstrap-checklist, devlog #79)
-- **Current phase**: Phase C/D чередуются — следующая продуктовая сессия: F4 validate_sql (high-stakes, Evaluator обязателен по ledger)
-- **Next entry point**: C.4 — F4 в dogfood-репо («начни сессию по ритуалу»); D.2 — после F5/F6 (в копилке уже 1: политика .env secret-bearing vs dev-only)
-- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (32 passed); сессия 2 верифицирована механически
+- **Last session**: 2026-06-10 (Session 7 — верификация F4 + lab-инициированный security-аудит)
+- **Current phase**: Phase C/D чередуются — следующая продуктовая сессия: F4-hardening (Unicode) → F5 SGR-агент
+- **Next entry point**: dogfood — «начни сессию по ритуалу» (возьмёт F4-hardening из Next steps п.0); D.2 — копилка 3
+- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (87 passed); F4 проверен независимым аудитом — найден Unicode-обход (долг)
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -41,6 +41,36 @@ session-count: 6
 - [ ] D.2 — после F5/F6 или по накоплению журнала
 
 ## Sessions log
+
+### Session 7 — 2026-06-10 (верификация F4 + независимый security-аудит)
+
+**Done & measured**
+
+| Артефакт | Метрика | Target | Hit |
+|---|---|---|---|
+| Механическая верификация F4 | 5 коммитов red→green, оракул 87 passed, devlog #5, passes=F1–F4, дерево чистое | отчёт сессии 3 правдив | ✅ |
+| validate_sql тесты | 59 collected (progress говорил «55» — параметризация) | ≥корпус | ✅ |
+| Lab security-рефьютер (независимый) | REFUTED: Unicode-обход денлиста (fullwidth `＿`, ZWSP), подтверждён запуском | найти обход | НАШЁЛ ❌→долг |
+| Запись в dogfood | F4-hardening наверх Next steps + Audit log + journal (387f3ef) | долг в очереди | ✅ |
+
+**Discovered**
+- **§8 подтверждён на dogfood**: сессия 3 сама заказала Evaluator (по ledger) — он поймал
+  критичный класс (опасные Oracle-функции), но ПРОПУСТИЛ Unicode-обход; полностью внешний
+  лаб-рефьютер его нашёл. Evaluator внутри авторской сессии частично анкорится → для
+  security внешний контекст строго сильнее. Kit-кандидат D.2 (3-й).
+- Сессия 3 сильна по процессу: re-verify фикса 2-м прогоном поймал собственную регрессию
+  (over-block), TDD без ослабления, долг F2 не забыт.
+
+**Blockers** — (none)
+
+**Scope changes** — (none)
+
+**Next session targets** (measurable)
+- [ ] F4-hardening закрыт (NFKC + Unicode-тесты, red→green); Unicode-payload'ы → REJECT
+- [ ] F5 `passes:true` (решает D1) или явный прогресс
+- [ ] M2: ≥1 наблюдение journal
+
+### Session 6 — 2026-06-09 (D.1 — см. Phase D checklist; влитие 7 находок в bootstrap-checklist, devlog #79)
 
 ### Session 5 — 2026-06-09 (continuity-fix по сигналу оператора)
 
@@ -206,7 +236,7 @@ session-count: 6
 | M2 | наблюдений в harness-journal.md | 12 (3×4) | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 1 (D.1, devlog #79) | 1 на ~5 сессий C | ✅ |
 | M4 | фич в features.json со `passes:true` | 3 из 6 (F1–F3) + hardening закрыт | растёт монотонно | ✅ |
-| M5 | кандидатов в копилке D-цикла | 2 (.env secret-bearing vs dev-only; kit-артефакты под .claude/ — чистый product-root, operator preference ×2) | ≥1 к D.2 | ✅ |
+| M5 | кандидатов в копилке D-цикла | 3 (.env policy; kit-артефакты под .claude/; security-Evaluator должен быть внешним, не self-orchestrated) | ≥1 к D.2 | ✅ |
 
 ## Risks status
 
