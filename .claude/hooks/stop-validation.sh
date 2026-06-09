@@ -5,8 +5,10 @@
 #   - phantom-test detection (Claude утверждает «тесты pass» без session execution)
 #   - phantom-completion detection (Claude декларирует «готово» при провале lint/type-check)
 #   - silent-regression detection (test-count drop vs last logged baseline)
-# Four independent gates: tests / lint / types / regression. Каждый advisory: log + stderr warning.
-# Hook НЕ блокирует session end (exit 0 always).
+# Four independent gates: tests / lint / types / regression. Каждый advisory: log + stderr warning
+# + (2.1.163+) hookSpecificOutput.additionalContext — feeds Claude the failure and keeps the turn
+#   going so it can fix it, WITHOUT a hard block (loop-guarded: stops re-feeding after 2 prior fails).
+# Hook НЕ блокирует session end (exit 0 always); additionalContext = nudge, not gate.
 set -uo pipefail
 
 LOG_DIR="${CLAUDE_PROJECT_DIR:-.}/.claude/memory"
@@ -206,8 +208,38 @@ FAILURES=()
 [[ "$LINT_STATUS"       == "fail" ]] && FAILURES+=("lint:$LINT_REASON")
 [[ "$TYPES_STATUS"      == "fail" ]] && FAILURES+=("types:$TYPES_REASON")
 [[ "$REGRESSION_STATUS" == "fail" ]] && FAILURES+=("regression:$REGRESSION_REASON")
-if [[ ${#FAILURES[@]} -gt 0 ]]; then
-    (IFS=', '; echo "stop-validation: phantom-completion check failed — ${FAILURES[*]}. Files changed: $FILE_COUNT. Re-run manually." >&2)
+
+if [[ ${#FAILURES[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+FAIL_MSG=$(IFS=', '; echo "stop-validation: phantom-completion check failed — ${FAILURES[*]}. Files changed: $FILE_COUNT.")
+# Human-visible record always.
+echo "$FAIL_MSG Re-run manually." >&2
+
+# Loop-guard: if the prior 2 logged decisions were already "fail", don't keep
+# feeding additionalContext — the failure is likely unfixable this turn, and
+# re-feeding (which keeps the turn going) could spin. Degrade to stderr-only.
+PRIOR_FAILS=0
+if [[ -s "$LOG_FILE" ]] && command -v jq >/dev/null 2>&1; then
+    PRIOR_FAILS=$(tac "$LOG_FILE" 2>/dev/null \
+        | jq -r '.decision' 2>/dev/null \
+        | awk 'NR<=2{if($0=="fail")c++} END{print c+0}' || echo 0)
+fi
+
+# Stop hook (2.1.163+): emitting hookSpecificOutput.additionalContext feeds Claude
+# the failure and keeps the turn going WITHOUT being labeled a hook error — so the
+# advisory actually reaches Claude (stderr+exit0 alone may not). Feed-and-continue,
+# never a hard block (harness invariant: nudge, don't gate).
+if [[ "$PRIOR_FAILS" -lt 2 ]]; then
+    CTX="$FAIL_MSG These gates ran independently after you stopped — the work is not verified done. Fix the failing gate(s) and re-run, or explain why the failure is expected."
+    if command -v jq >/dev/null 2>&1; then
+        jq -cn --arg c "$CTX" \
+            '{hookSpecificOutput:{hookEventName:"Stop",additionalContext:$c}}'
+    else
+        esc=${CTX//\\/\\\\}; esc=${esc//\"/\\\"}
+        printf '{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"%s"}}\n' "$esc"
+    fi
 fi
 
 # Stop hook exit codes: 0 allow, 2 force-continue. Advisory — never force.

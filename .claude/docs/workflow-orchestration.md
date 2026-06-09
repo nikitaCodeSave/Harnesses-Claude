@@ -1,10 +1,10 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-05-18
+last-updated: 2026-06-07
 status: active
 ---
 
-# Orchestration workflow — Claude Code 2.1.143
+# Orchestration workflow — Claude Code 2.1.169
 
 > Operational layer для **parallel sessions / worktrees / dispatch flags / multi-process coordination**. Сюда идём когда задача требует больше одного thread'а в полёте — но без cloud-offload (см. [workflow-cloud-offload.md](workflow-cloud-offload.md)).
 >
@@ -79,6 +79,7 @@ State: `~/.claude/worktrees/` + git's `.git/worktrees/`.
 - Worktree сессии разделяют git history → плохо для concurrent merges
 - `.claude/` shared между worktrees (config inherited), но `~/.claude/projects/<slug>/` отдельный
 - Auto-cleanup если agent сделал no changes (per Agent tool description)
+- **`EnterWorktree` switches between Claude-managed worktrees mid-session** (v2.1.157); managed worktrees оставляются **unlocked** при finish, так что `git worktree remove`/`prune` их чистят (v2.1.157)
 
 ---
 
@@ -105,6 +106,10 @@ claude agents dispatch <agent> \
 - **Background sessions preserve model+effort after waking** (v2.1.143)
 - **Background sessions honor `permissions.defaultMode`** из settings.json (v2.1.142)
 - **`Shift+Tab`** в attached agent session cycles modes включая auto (v2.1.143)
+- **`settings.json` `agent` field honored** для dispatched sessions; `--agent <name>` override (v2.1.157)
+- **`claude agents --json` adds `waitingFor`** — на чём заблокирована waiting-session (e.g. permission prompt, v2.1.162); rows show `done/total` при fan-out (v2.1.161). **v2.1.169:** `--json` теперь включает blocked/just-dispatched sessions + поля `id` и `state`; флаг `--all` добавляет completed — точнее observability фронта fan-out'а.
+- **Cross-session `SendMessage` relay не несёт user-authority** (v2.1.166) — receiver отклоняет relayed permission requests, auto mode их блокирует. Security-инвариант для любого multi-session fan-out.
+- **Background sessions заранее знают про shared-checkout block** (v2.1.169) — до `EnterWorktree` edits в shared checkout заблокированы, и сессии об этом сообщается заранее (нет впустую отклонённого первого edit). Усиливает worktree-isolation-first discipline выше.
 
 ### When to dispatch vs single CLI
 

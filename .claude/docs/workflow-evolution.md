@@ -1,10 +1,10 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-05-18
+last-updated: 2026-06-07
 status: active
 ---
 
-# Harness evolution workflow — Claude Code 2.1.143
+# Harness evolution workflow — Claude Code 2.1.169
 
 > **«Harness matters more than the model»** — first-party doctrine, 2026-05-14. Это doc про то, **когда и как** harness переучивается под новые модели и накопленную empirics.
 >

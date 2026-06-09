@@ -1,12 +1,12 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-05-18
-version-targeted: claude-code 2.1.143
+last-updated: 2026-06-07
+version-targeted: claude-code 2.1.169
 ---
 
-# Built-ins inventory — Claude Code 2.1.143
+# Built-ins inventory — Claude Code 2.1.169
 
-> ⚠️ **2.1.143-era snapshot (Opus 4.7).** Актуальный срез built-ins (v2.1.154+ / Opus 4.8: 5 субагентов, dynamic workflows, agent teams, effort default `high`, `ultracode`) — каноничный `~/.claude/skills/claude-code-harness/references/native-capabilities.md`. Этот lab-doc сохранён ради CC-2.1.x slash-command/flag-детализации; pending consolidation.
+> ⚠️ **Lab-doc, не canonical.** Каноничный current-срез built-ins (Opus 4.8 / v2.1.169: 5 субагентов, dynamic workflows, agent teams, effort default `high`, `ultracode`) — `~/.claude/skills/claude-code-harness/references/native-capabilities.md`. Этот файл сохранён ради CC-2.1.x slash-command/flag-детализации; ядро таблиц = 2.1.143-snapshot (Opus 4.7), а дельты 2.1.144→169 вынесены в [§ Delta 2.1.144 → 2.1.169](#delta-211144--211169). Pending consolidation.
 >
 > Live snapshot того, что Claude Code 2.1.143 даёт «из коробки». **Versioned doc** — переписывается каждый minor release (см. [§ Re-evaluation triggers](#re-evaluation-triggers)).
 >
@@ -18,9 +18,27 @@ Inventory из 4 слоёв:
 1. **Slash-commands** (`/foo` interactive) — 22 core + 8 Research Preview + plugin-provided
 2. **CLI flags & subcommands** (`claude --flag` / `claude subcommand`) — 35+ flags, 9 subcommands
 3. **Built-in tools** (deferred — load via `ToolSearch select:`) — Task*/Cron*/Send*/Schedule*/Team*/Enter*Worktree/LSP
-4. **Built-in agents** (`Agent({subagent_type})`) — Explore / Plan / general-purpose / statusline-setup / **claude-code-guide** (5 в v2.1.154+; dynamic workflows `/workflow` + agent teams `TeamCreate` добавлены post-2.1.143)
+4. **Built-in agents** (`Agent({subagent_type})`) — Explore / Plan / general-purpose / statusline-setup / **claude-code-guide** (5 в v2.1.154+; dynamic workflows (keyword `ultracode`) + agent teams `TeamCreate` добавлены post-2.1.143)
 
 Marketplaces установлены: `anthropics/skills`, `anthropics/claude-plugins-official` (**renamed** from `claude-code-plugins`), `chrome-devtools-plugins`, `firebase`.
+
+---
+
+## Delta 2.1.144 → 2.1.169
+
+Ядро таблиц ниже — 2.1.143-snapshot. Что изменилось к 2.1.169 (canonical current срез — `native-capabilities.md`):
+
+- **Built-in subagents:** типов по-прежнему **5** (новых не добавлено). `/agents` = "Manage agent configurations" (типы), `claude agents` = "Manage background agents" (sessions) — не путать.
+- **Dynamic workflows** (research preview, v2.1.154+): trigger keyword **`workflow` → `ultracode`** (2.1.160) — голое "workflow" больше не триггерит; `/config` "Workflow keyword trigger" toggle (2.1.157).
+- **Hooks:** `Stop`/`SubagentStop` могут вернуть `hookSpecificOutput.additionalContext` (feed-and-continue без error-label, 2.1.163); `if: "Bash(...)"` больше не over-fire на `$()`/`$VAR`.
+- **Slash:** `/plugin list [--enabled|--disabled]` (2.1.163); autocomplete-клик теперь **заполняет** строку, не запускает сразу (Enter to run, 2.1.162); `/effort` подтверждает persistence.
+- **CLI flags:** `--fallback-model` теперь и в interactive (2.1.166); `--tools` с явными `Grep`/`Glob` реально включает dedicated search tools (2.1.162); `claude agents --json` добавил `waitingFor`; `--agent <name>` override для dispatched sessions, `claude plugin init <name>` (2.1.157).
+- **settings.json:** `fallbackModel` (до 3 ordered, 2.1.166); managed `requiredMinimumVersion`/`requiredMaximumVersion` (2.1.163); `agent` field honored для `claude agents` (2.1.157).
+- **Permissions hardening:** glob в deny-tool-name (`"*"`, 2.1.166); `WebFetch(domain:)` override preapproved hosts (2.1.162); `~`/`$HOME`-path deny также блокирует Bash (2.1.163); Read-deny прячет файлы из Glob/Grep (2.1.162); `acceptEdits` спрашивает перед code-executing config-файлами + shell-startup (2.1.160).
+- **Fan-out:** упавший Bash в parallel-batch не отменяет siblings (2.1.161); cross-session `SendMessage` relay не несёт user-authority (2.1.166).
+- **MCP:** `claude mcp` не печатает secrets (2.1.161); per-server `timeout` < 1000 ms больше не abort'ит каждый call (2.1.162).
+- **Plugins:** в `.claude/skills` авто-загрузка без marketplace (2.1.157).
+- **2.1.169 (Jun 8):** `--safe-mode` / `CLAUDE_CODE_SAFE_MODE` (старт с отключёнными CLAUDE.md/plugins/skills/hooks/MCP — clean A/B baseline для «модель vs harness»); `disableBundledSkills` / `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS` (прячет bundled skills/workflows/built-in slash-команды от модели — context-budget); `/cd` (смена cwd без слома prompt-cache); `claude agents --json` теперь включает blocked/just-dispatched + поля `id`/`state`, флаг `--all` для completed; background-сессии заранее знают, что shared-checkout edits заблокированы до `EnterWorktree`; порог «CLAUDE.md too long» масштабируется от context-window модели; untrusted project settings не могут задать OTEL client-cert path без trust-confirmation; `/workflows` открывается mid-turn.
 
 ---
 
@@ -295,4 +313,5 @@ Precedence (highest → lowest):
 - arXiv [2604.14228 — Dive into Claude Code](https://arxiv.org/abs/2604.14228) — independently reverse-engineered primitives map
 - [Anthropic April 23 postmortem](https://www.anthropic.com/engineering/april-23-postmortem) — effort default rollback (Opus 4.7 = xhigh)
 - [Code w/ Claude 2026 keynote — Simon Willison live-blog](https://simonwillison.net/2026/May/6/code-w-claude-2026/)
-- Live evidence: `claude --version` (2.1.143), `claude --help`, `claude plugin list`, `claude --print "/help"`
+- [code.claude.com/docs/en/changelog](https://code.claude.com/docs/en/changelog) — per-version 2.1.155→169 (delta section)
+- Live evidence: `claude --version` (**2.1.169**), `claude --help`, `claude plugin list`, `claude --print "/help"`

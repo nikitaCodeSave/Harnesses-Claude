@@ -1,10 +1,10 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-05-18
+last-updated: 2026-06-07
 status: active
 ---
 
-# Async & background workflow — Claude Code 2.1.143
+# Async & background workflow — Claude Code 2.1.169
 
 > Operational layer для **non-blocking** работы: фоновые watch-процессы, scheduled tasks, inter-agent communication, recurring loops. Сюда заглядываем когда agent не должен сидеть и ждать.
 >
@@ -50,7 +50,7 @@ Anti-pattern: `bash sleep` loops для wait. Всегда Monitor.
 | Situation | Primitive | Why |
 |-----------|-----------|-----|
 | Long-running build/test, нужен output как готов | `Monitor` | Event-driven, 200ms batching |
-| Multiple parallel checks (lint+test+typecheck) | parallel `Agent` calls + main thread integrate | Standard fan-out — см. [multi-agent.md](multi-agent.md) §7.1 |
+| Multiple parallel checks (lint+test+typecheck) | parallel `Agent` calls + main thread integrate | Standard fan-out — см. [multi-agent.md](multi-agent.md) §7.1. **С 2.1.161 упавший Bash в parallel tool-batch не отменяет siblings** — каждый tool возвращает результат независимо |
 | «Wake up tomorrow at 9am и check X» | `ScheduleWakeup` или `Routines` (cloud) | Schedule-driven |
 | Recurring task («каждые 10мин check PR status») | `/loop` self-pacing | Adaptive interval |
 | Inter-agent коммуникация мид-task | `SendMessage(to: agentId)` | Mid-flight handoff |
@@ -162,6 +162,10 @@ Cron-локально хорош когда нужно on-machine state (file ch
 ### Don't overuse
 
 Most sub-agents fire-and-forget (single Agent call → result back). **SendMessage только когда need mid-flight handoff** — most spawn lifecycles линейные.
+
+### Security (2.1.166)
+
+Cross-session `SendMessage` relays **больше не несут user-authority**: receiver отклоняет relayed permission requests, auto mode их блокирует. Не закладывайся на то, что message от другой сессии может авторизовать привилегированное действие.
 
 ---
 

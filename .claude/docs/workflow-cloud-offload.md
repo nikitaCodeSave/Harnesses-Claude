@@ -1,10 +1,10 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-05-18
+last-updated: 2026-06-07
 status: active
 ---
 
-# Cloud-offload workflow — Claude Code 2.1.143
+# Cloud-offload workflow — Claude Code 2.1.169
 
 > Operational layer для **cloud-side execution** heavy phases: `/ultraplan`, `/ultrareview`, `Routines`. Local CLI становится **coordination layer**; cloud runs the fleet.
 >
