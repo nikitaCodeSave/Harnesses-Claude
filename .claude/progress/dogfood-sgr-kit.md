@@ -2,17 +2,17 @@
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-09
 status: in-progress
-session-count: 1
+session-count: 2
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
 
 ## Quick state
 
-- **Last session**: 2026-06-09
-- **Current phase**: Phase A — инфраструктура (4/4 done) → вход в Phase B
-- **Next entry point**: B.1 — создать пустой репозиторий SGR-переписи, сессия 0 Bootstrap
-- **Live test status**: n/a (dogfood-репо ещё не существует)
+- **Last session**: 2026-06-09 (Session 2)
+- **Current phase**: Phase B — старт dogfood'а (5/5 done) → вход в Phase C (build-цикл)
+- **Next entry point**: C.1 — фича F1 (Settings) в `~/PROJECTS/AI_analyst_for_work/AI_analyst_sgr` (сессия там, не здесь)
+- **Live test status**: dogfood `./init.sh` → ORACLE GREEN (ruff + 1 smoke test)
 - **Open blockers**: 0
 
 ## Phase checklist
@@ -23,12 +23,12 @@ session-count: 1
 - [x] A.3 — гигиена лаб-репо: devlog #77 закоммичен, ветка ff-merged в main, запушено
 - [x] A.4 — devlog #78 + план + этот progress-файл
 
-### Phase B — старт dogfood'а (0/5)
-- [ ] B.1 — пустой репозиторий SGR-переписи
-- [ ] B.2 — сессия 0: Bootstrap (CLAUDE.md ≤200 строк + settings.json)
-- [ ] B.3 — Phase 5 kit: init.sh green baseline, features.json, progress, ритуал, Evaluator-строка
-- [ ] B.4 — harness-journal.md + журнал-строка в ритуале
-- [ ] B.5 — Plan-сессия milestone 1
+### Phase B — старт dogfood'а (5/5 done)
+- [x] B.1 — пустой репозиторий SGR-переписи (`AI_analyst_for_work/AI_analyst_sgr`, git init)
+- [x] B.2 — сессия 0: Bootstrap (CLAUDE.md 70 строк + settings.json, доноры read-only через deny)
+- [x] B.3 — Phase 5 kit: init.sh → ORACLE GREEN, features.json (6 фич), claude-progress.md, ритуал, Evaluator-строка
+- [x] B.4 — harness-journal.md + журнал-строка в ритуале (3 наблюдения session 0)
+- [x] B.5 — milestone 1 в features.json + docs/ARCHITECTURE.md (инверсия «пайплайн → агент», D1/D2)
 
 ### Phase C — build-цикл (0/n, n = по features.json)
 
@@ -36,6 +36,40 @@ session-count: 1
 - [ ] D.1 — первая lab-сессия: журнал → правки skill'а + devlog
 
 ## Sessions log
+
+### Session 2 — 2026-06-09
+
+**Done & measured**
+
+| Артефакт | Метрика | Target | Hit |
+|---|---|---|---|
+| Dogfood-репо `AI_analyst_sgr` | 2 коммита session 0 | ≥1 commit | ✅ |
+| CLAUDE.md dogfood'а | 70 строк | ≤200 | ✅ |
+| Оракул `./init.sh` | exit 0, «ORACLE GREEN», 1 test passed | exit 0 | ✅ |
+| `features.json` | валидный JSON, 6 фич `passes:false` | ≥1 фича | ✅ |
+| `harness-journal.md` | 3 наблюдения session 0 (1 kit-помог, 2 kit-не-хватило) | ≥1/сессию | ✅ |
+| Phase 7 verify | `claude --print` в репо корректно отвечает по CLAUDE.md | загрузка подтверждена | ✅ |
+
+**Discovered**
+- Разведка доноров (3 параллельных Explore): оригинал = 8-шаговый пайплайн с зашитыми
+  LLM-вызовами; провал _sgr = весь пайплайн за одним MCP-tool `analyst_ask` при
+  агенте-проводнике. Целевая архитектура — инверсия: reasoning-части пайплайна
+  становятся reasoning'ом SGR-агента, детерминированные — гранулярными tools.
+- Кандидаты в bootstrap-checklist уже из session 0 (см. harness-journal): (а) deny-паттерн
+  для read-only доноров при rewrite-проектах; (б) domain-оракул (golden questions) для
+  не-web продуктов — Phase 5 упоминает только browser-automation.
+
+**Blockers**
+- (none)
+
+**Scope changes**
+- B.5 выполнен внутри session 0 (features.json + ARCHITECTURE.md), отдельная
+  Plan-сессия не понадобилась — milestone 1 определился из донорской разведки.
+
+**Next session targets** (measurable)
+- [ ] C.1: фича F1 (Settings) в dogfood-репо — её verify-шаги пройдены, `passes:true`, commit
+- [ ] M2: ≥1 наблюдение в harness-journal.md за сессию
+- [ ] Для F2+: dev-стек поднят (`dev/run-dev.sh` донора), `SELECT 1 FROM dual` проходит
 
 ### Session 1 — 2026-06-09
 
@@ -70,10 +104,10 @@ session-count: 1
 
 | ID | Metric | Last measured | Target | Status |
 |---|---|---|---|---|
-| M1 | dogfood-сессий проведено | 0 | — (счётчик) | pending |
-| M2 | наблюдений в harness-journal.md | n/a | ≥1/сессию | pending |
+| M1 | dogfood-сессий проведено | 1 (session 0) | — (счётчик) | ✅ |
+| M2 | наблюдений в harness-journal.md | 3 | ≥1/сессию | ✅ |
 | M3 | D-циклов (журнал → правки skill'а) | 0 | 1 на ~5 сессий C | pending |
-| M4 | фич в features.json со `passes:true` | n/a | растёт монотонно | pending |
+| M4 | фич в features.json со `passes:true` | 0 из 6 | растёт монотонно | pending |
 
 ## Risks status
 
