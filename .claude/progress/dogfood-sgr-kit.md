@@ -1,8 +1,8 @@
 ---
 plan: .claude/plans/dogfood-sgr-kit.md
 last-updated: 2026-06-10
-status: in-progress
-session-count: 11
+status: completed
+session-count: 12
 ---
 
 # Прогресс: Dogfood SGR-переписи через Bootstrap + long-running build kit
@@ -10,8 +10,8 @@ session-count: 11
 ## Quick state
 
 - **Last session**: 2026-06-10 (Session 10 — внешний аудит F6: e2e grounding CONFIRMED живьём; MILESTONE 1 ЗАКРЫТ)
-- **Current phase**: milestone 1 завершён (6/6), **D.2 выполнен** (5 находок влиты, devlog #81); развилка с оператором — milestone 2 vs упаковка kit
-- **Next entry point**: решение оператора — scope milestone 2 (подвопросы/графики/merge) ИЛИ упаковка kit (plugin/template), содержание доказано
+- **Current phase**: ТРЕК ЗАВЕРШЁН — kit упакован как plugin v1.0.0 (devlog #82). Содержание доказано (milestone 1 + 2 D-цикла), форма доставлена (marketplace dot-claude).
+- **Next entry point**: трек закрыт. Опционально вне трека: milestone 2 продукта (подвопросы/графики/merge) — это уже продуктовая разработка, не валидация kit'а. Per rule #7 — конвертировать в devlog можно, но #78–#82 уже покрывают арку.
 - **Live test status**: dogfood — 120 unit passed + 5 integration passed (живой Oracle+ollama, 86s); golden-числа переисполнены независимо — совпали до копейки
 - **Open blockers**: 0
 

@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #82 · 2026-06-10 · Package claude-code-harness as installable plugin v1.0.0
+
+**Tags:** harness, dogfood, skills, packaging
+
+Финал dogfood-трека (#78–#81). Исходный запрос оператора — «готовый kit для старта нового проекта» — имел две части: содержание (доказано dogfood'ом: пустое репо → работающий NL→SQL SGR-агент за 6 фич, grounded e2e, анти-паттерн избегнут) и форму (упаковка, отложенная в grill Q5…
+
+[→ entries/0082-package-claude-code-harness-as-installable-plugin-v1-0-0.md](entries/0082-package-claude-code-harness-as-installable-plugin-v1-0-0.md)
+
+---
+
 ## #81 · 2026-06-10 · D-cycle 2: milestone-1 closeout, 5 findings folded into kit
 
 **Tags:** harness, dogfood, skills
