@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #83 · 2026-06-10 · Regulation v1 Phase 1: operator playbook + /external-audit formalized, battle-tested on milestone-1 SGR
+
+**Tags:** harness, regulation, external-audit, agents, dogfood
+
+Трек «Регламент v1» (план .claude/plans/standard-v1-regulation.md), Phase 1 — сборка содержания. Цель сессии: R1 (operator playbook), R2 (/external-audit как формализованный 3-ролевой протокол + боевой verify), R3 (harness-evolution reference). Phase 0 закрыт в сессии 1 (D1–D5…
+
+[→ entries/0083-regulation-v1-phase-1-operator-playbook-external-audit-forma.md](entries/0083-regulation-v1-phase-1-operator-playbook-external-audit-forma.md)
+
+---
+
 ## #82 · 2026-06-10 · Package claude-code-harness as installable plugin v1.0.0
 
 **Tags:** harness, dogfood, skills, packaging
