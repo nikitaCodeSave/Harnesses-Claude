@@ -1,6 +1,6 @@
 ---
 owner: @harness
-last-updated: 2026-06-09
+last-updated: 2026-06-10
 ---
 
 # Memory layers (harness reference)
@@ -20,7 +20,7 @@ last-updated: 2026-06-09
 | L2 episodic | session summaries, recurring patterns | `~/.claude/projects/<hash>/memory/MEMORY.md` + per-topic `.md` | cross-session, user-scoped | user |
 | L3 durable artifacts | what happened, why | `.claude/devlog/entries/*.md` + `index.json` | cross-session, в git | repo |
 | L4 semantic / decisions | architectural rationale | `.claude/docs/principles.md` (active), `.claude/docs/archive/` (frozen) | cross-session, в git | repo |
-| inter-agent | filesystem blackboard | `PREMORTEM.md` → `EVIDENCE.md` → `CRITIC.md` через [discovery-critic](.claude/agents/discovery-critic.md) | per-deliverable, transient | repo |
+| inter-agent | filesystem blackboard | `PREMORTEM.md` → `EVIDENCE.md` → `CRITIC.md` через [discovery-critic](../agents/discovery-critic.md) | per-deliverable, transient | repo |
 
 ## Curation rituals
 

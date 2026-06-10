@@ -128,6 +128,7 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 
 **Harness foundation** — читать перед расширением:
 - `.claude/docs/principles.md` — harness principles (Anthropic-canonical evidence-based)
+- `.claude/docs/harness-architecture.md` — evergreen reference: слои компонентов, context-бюджеты, границы
 - `.claude/docs/external-sources.md` — каталог внешних источников (T1-T7 rubric) для research-pass
 - `.claude/docs/multi-agent.md` — multi-agent дисциплина, on-demand при делегировании
 - `.claude/docs/benchmark.md` — 4-layer benchmark methodology

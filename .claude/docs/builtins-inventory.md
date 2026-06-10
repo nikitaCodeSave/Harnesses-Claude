@@ -1,12 +1,12 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-06-07
-version-targeted: claude-code 2.1.169
+last-updated: 2026-06-10
+version-targeted: claude-code 2.1.170
 ---
 
-# Built-ins inventory — Claude Code 2.1.169
+# Built-ins inventory — Claude Code 2.1.170
 
-> ⚠️ **Lab-doc, не canonical.** Каноничный current-срез built-ins (Opus 4.8 / v2.1.169: 5 субагентов, dynamic workflows, agent teams, effort default `high`, `ultracode`) — `~/.claude/skills/claude-code-harness/references/native-capabilities.md`. Этот файл сохранён ради CC-2.1.x slash-command/flag-детализации; ядро таблиц = 2.1.143-snapshot (Opus 4.7), а дельты 2.1.144→169 вынесены в [§ Delta 2.1.144 → 2.1.169](#delta-211144--211169). Pending consolidation.
+> ⚠️ **Lab-doc, не canonical.** Каноничный current-срез built-ins (Opus 4.8 / v2.1.169: 5 субагентов, dynamic workflows, agent teams, effort default `high`, `ultracode`) — `~/.claude/skills/claude-code-harness/references/native-capabilities.md`. Этот файл сохранён ради CC-2.1.x slash-command/flag-детализации; ядро таблиц = 2.1.143-snapshot (Opus 4.7), а дельты 2.1.144→170 вынесены в [§ Delta 2.1.144 → 2.1.170](#delta-211144--211170). Pending consolidation.
 >
 > Live snapshot того, что Claude Code 2.1.143 даёт «из коробки». **Versioned doc** — переписывается каждый minor release (см. [§ Re-evaluation triggers](#re-evaluation-triggers)).
 >
@@ -24,9 +24,9 @@ Marketplaces установлены: `anthropics/skills`, `anthropics/claude-plu
 
 ---
 
-## Delta 2.1.144 → 2.1.169
+## Delta 2.1.144 → 2.1.170
 
-Ядро таблиц ниже — 2.1.143-snapshot. Что изменилось к 2.1.169 (canonical current срез — `native-capabilities.md`):
+Ядро таблиц ниже — 2.1.143-snapshot. Что изменилось к 2.1.170 (canonical current срез — `native-capabilities.md`):
 
 - **Built-in subagents:** типов по-прежнему **5** (новых не добавлено). `/agents` = "Manage agent configurations" (типы), `claude agents` = "Manage background agents" (sessions) — не путать.
 - **Dynamic workflows** (research preview, v2.1.154+): trigger keyword **`workflow` → `ultracode`** (2.1.160) — голое "workflow" больше не триггерит; `/config` "Workflow keyword trigger" toggle (2.1.157).
@@ -39,6 +39,7 @@ Marketplaces установлены: `anthropics/skills`, `anthropics/claude-plu
 - **MCP:** `claude mcp` не печатает secrets (2.1.161); per-server `timeout` < 1000 ms больше не abort'ит каждый call (2.1.162).
 - **Plugins:** в `.claude/skills` авто-загрузка без marketplace (2.1.157).
 - **2.1.169 (Jun 8):** `--safe-mode` / `CLAUDE_CODE_SAFE_MODE` (старт с отключёнными CLAUDE.md/plugins/skills/hooks/MCP — clean A/B baseline для «модель vs harness»); `disableBundledSkills` / `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS` (прячет bundled skills/workflows/built-in slash-команды от модели — context-budget); `/cd` (смена cwd без слома prompt-cache); `claude agents --json` теперь включает blocked/just-dispatched + поля `id`/`state`, флаг `--all` для completed; background-сессии заранее знают, что shared-checkout edits заблокированы до `EnterWorktree`; порог «CLAUDE.md too long» масштабируется от context-window модели; untrusted project settings не могут задать OTEL client-cert path без trust-confirmation; `/workflows` открывается mid-turn.
+- **2.1.170 (Jun 9):** релиз **Claude Fable 5** (Mythos-class, доступ с этой версии); фикс несохранявшихся транскриптов при запуске из VS Code integrated terminal / shell с унаследованными CC env-vars. Harness-relevant изменений нет; workflow-доки, таргетящие 2.1.169, остаются валидными. Fable 5 vs Opus 4.8 A/B (2026-06-09, 3 задачи): ничья — blanket-switch модели не делаем.
 
 ---
 

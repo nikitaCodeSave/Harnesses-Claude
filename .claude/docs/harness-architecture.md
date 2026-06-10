@@ -1,6 +1,6 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-05-14
+last-updated: 2026-06-10
 ---
 
 # Harness architecture (evergreen reference)
@@ -8,8 +8,8 @@ last-updated: 2026-05-14
 Покрывает: как устроены компоненты harness'а Claude Code, в каком слое
 живёт какое знание, какие границы они защищают и какие бюджеты тратят.
 
-Это reference doc — описывает **рамку**, не конкретный state. Для текущего
-inventory компонентов и retire-рекомендаций смотри `audit/<date>-component-audit.md`.
+Это reference doc — описывает **рамку**, не конкретный state. Point-in-time
+inventory компонентов и retire-рекомендации — `archive/<date>-component-audit.md`.
 
 Связанные документы:
 - `principles.md` — active principles (current state).
