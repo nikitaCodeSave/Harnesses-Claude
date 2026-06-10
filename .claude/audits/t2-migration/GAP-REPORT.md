@@ -103,3 +103,20 @@
 
 ---
 *Счёт: 24 gap'а = 5 safe-additive + 13 reversible-edit + 6 destructive (операторские решения). Read-only аудит: в проект записан только этот файл.*
+
+---
+
+## Closure — 2026-06-10 (решения оператора делегированы, исполнено мультиагентным workflow)
+
+| Корзина | Статус |
+|---|---|
+| A (G1-G5) | ✅ применена, commit `8755bb1`; pre-existing red оракула закрыт отдельно (`cd2db92`: тест 0.7→0.5 вслед за bbf49e7) |
+| B (G6-G18) | ✅ 12/13, commit `6525025`; **G16 отклонена оператором** (devlog-формат работает — QoL, не дефект) |
+| C (D1-D6) | ✅ D1/D2/D4/D5 retire с переносом контента; D3 — DEPRECATED-метка (удаление после цикла без использования); D6 cleanup |
+| G12 | ✅ GUIDE.md 546→139 строк; CLAUDE.md 72 строки |
+
+Verify: `./init.sh` GREEN (1398 passed); ноль живых ссылок на удалённые компоненты
+(verifier-грep); JSON-конфиги валидны. Итог слоя: agents 7→3, skills 13→11 (1 deprecated).
+Хвост для следующего code-touch PR: docstring `application/agent.py:5` — «8-шагового pipeline».
+Эмпирическая проверка D2 — первая реальная задача через обновлённый `/implement`
+(см. `.claude/progress/d2-tdd-agents-retired.md`).

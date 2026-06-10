@@ -7,7 +7,7 @@ session-count: 4
 
 # Прогресс: Регламент v1 — сборка и тестирование единого стандарта
 
-## Quick state — Регламент v1 RELEASED (plugin v1.3.0, tag создан, dot-claude 5f9734e, devlog #86): Phase 3 закрыта T1✅ T2✅(корзина A; B/C ждут approve) T3✅(confirmed_with_debt) T4✅(confirmed_with_debt, 0 blockers) + Phase 4 D.3 fold выполнен (2 major + 7 minor T4-находок в канон, 3 T3-journal находки в канон, strip: нечего удалять) · ОСТАЛОСЬ ОПЕРАТОРУ: (1) push dot-claude main + теги v1.2.0/v1.3.0; (2) approve корзин B/C gap-report'а migration + ревью незакоммиченной корзины A в working tree; (3) 1-строчный фикс pre-existing red в migration (test_settings 0.5≠0.7) — тогда init.sh зелёный; (4) push lab · блокеров нет
+## Quick state — ТРЕК ЗАКРЫТ ПОЛНОСТЬЮ (devlog #87): все операторские хвосты исполнены по делегации 2026-06-10 — push dot-claude (main+теги v1.2.0/v1.3.0) и lab сделаны; migration: тест-фикс 0.7→0.5 (cd2db92, вслед за намеренным bbf49e7 — init.sh GREEN 1398 passed), корзина A закоммичена (8755bb1), корзины B+C закрыты workflow'ом и закоммичены (6525025: 12/13 B — G16 отклонена; C: agents 7→3, skills 13→11, GUIDE 546→139 строк), closure в gap-report (ac8780a); prompt-regress major-долг закрыт F1.1 red→green (22/22, 3 коммита) · DoD 6/6 ✅ · единственное, что НЕ сделано намеренно: push migration (прод-репо рабочего бота — за оператором) + хвост docstring agent.py:5 для следующего code-touch PR · эмпирическая проверка D2 = первая реальная задача через новый /implement
 
 ## Phase checklist
 

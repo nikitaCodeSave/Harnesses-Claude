@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #87 · 2026-06-10 · Regulation v1: B C F1.1
+
+**Tags:** harness, regulation, cleanup, workflow
+
+После релиза v1.3.0 (#86) оставались хвосты, зарезервированные за оператором. Оператор делегировал «оставшиеся размышления и решения от моего лица» — решения приняты и исполнены в той же сессии (Workflow №4: 5 последовательных стейджей на migration ∥ debt-фикс prompt-regress; 6…
+
+[→ entries/0087-regulation-v1-b-c-f1-1.md](entries/0087-regulation-v1-b-c-f1-1.md)
+
+---
+
 ## #86 · 2026-06-10 · Regulation v1 released: T2-T4 v1.3.0
 
 **Tags:** harness, regulation, release, plugin, workflow
