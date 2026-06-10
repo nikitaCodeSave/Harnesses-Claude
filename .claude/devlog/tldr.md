@@ -8,6 +8,26 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #85 · 2026-06-10 · Regulation v1 T1: smoke passed, /external-audit + 3 роли упакованы в плагин (v1.2.0)
+
+**Tags:** harness, regulation, plugin, external-audit, test
+
+Phase 3 T1 трека «Регламент v1»: доказать установку kit'а на чистый профиль одной командой с сохранённым провенансом и эмпирически решить отложенный с Phase 2 вопрос — паковать ли /external-audit + 3 agent-роли внутрь plugin-дира (конфликт «git-clone автозагрузка корня vs plugin…
+
+[→ entries/0085-regulation-v1-t1-smoke-passed-external-audit-3-v1-2-0.md](entries/0085-regulation-v1-t1-smoke-passed-external-audit-3-v1-2-0.md)
+
+---
+
+## #84 · 2026-06-10 · Regulation v1 Phase 1→2: portable paths (R4), audit-role resolution fix (R6), plugin v1.1.0
+
+**Tags:** harness, regulation, plugin, hooks, external-audit
+
+Трек «Регламент v1» (план .claude/plans/standard-v1-regulation.md, прогресс .claude/progress/standard-v1.md). После Phase 1 R1–R3 (#83) оставался R4 (гигиена путей) и Phase 2 (упаковка). Session 2 нашла функц. дефект ключевой фичи: agents из ~/.claude/agents/ НЕ резолвятся как…
+
+[→ entries/0084-regulation-v1-phase-1-2-portable-paths-r4-audit-role-resolut.md](entries/0084-regulation-v1-phase-1-2-portable-paths-r4-audit-role-resolut.md)
+
+---
+
 ## #83 · 2026-06-10 · Regulation v1 Phase 1: operator playbook + /external-audit formalized, battle-tested on milestone-1 SGR
 
 **Tags:** harness, regulation, external-audit, agents, dogfood
