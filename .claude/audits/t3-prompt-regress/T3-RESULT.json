@@ -1,0 +1,62 @@
+{
+ "boot": {
+  "created_files": [
+   "/home/nikita/PROJECTS/prompt-regress/CLAUDE.md",
+   "/home/nikita/PROJECTS/prompt-regress/init.sh",
+   "/home/nikita/PROJECTS/prompt-regress/pyproject.toml",
+   "/home/nikita/PROJECTS/prompt-regress/.gitignore",
+   "/home/nikita/PROJECTS/prompt-regress/promptdiff/__init__.py",
+   "/home/nikita/PROJECTS/prompt-regress/tests/test_smoke.py",
+   "/home/nikita/PROJECTS/prompt-regress/.claude/settings.json",
+   "/home/nikita/PROJECTS/prompt-regress/.claude/features.json",
+   "/home/nikita/PROJECTS/prompt-regress/.claude/progress/build.md",
+   "/home/nikita/PROJECTS/prompt-regress/.claude/harness-journal.md",
+   "/home/nikita/PROJECTS/prompt-regress/.claude/devlog/entries/0001-bootstrap-harness-phase5-kit.md"
+  ],
+  "oracle_cmd": "./init.sh",
+  "oracle_green": true,
+  "features_seeded": 4,
+  "journal_observations": [
+   "features.json без канонической схемы: checklist Phase 5.2 называет поля description/steps/passes, контракт оператора дал title/acceptance/verify — имена полей пришлось выбирать самому (взял операторские + id/preconditions); kit'у нужен один canonical schema-пример features.json",
+   "No-empty-tests guard описан только для vitest (--passWithNoTests); для pytest эквивалента-флага нет (пустой набор = exit 5), рецепт выведен самостоятельно — smoke-тест tests/test_smoke.py + комментарий в init.sh; kit'у не хватает per-runner рецепта guard'а",
+   "Конфликт контракта и checklist'а не разрешён playbook'ом: оператор сказал «deny не нужен», но checklist «Rewrite-with-donors» требует механический read-only-pin донора (продукт — rewrite dev/-скриптов соседа, F1-smoke читает его CSV) — следовал checklist'у (deny Edit/Write); заодно путь донора из контракта (AI_analyst_migration/) не существовал verbatim — реальный AI_analyst_for_work/AI_analyst_migration/ найден detect-then-prescribe; playbook не говорит, что делать при расхождении контракта с диском"
+  ],
+  "notes": "Bootstrap по operator-playbook §1 + §2 (Phase 5 kit) выполнен в /home/nikita/PROJECTS/prompt-regress. Commit 49cefce 'bootstrap: harness + Phase 5 kit' (root commit, 11 файлов). Оракул ./init.sh GREEN: venv создан (Python 3.12.3), pytest установлен, 1 passed (smoke). Phase 7 verify: claude --print \"what is the project's stack?\" ответил по CLAUDE.md (Python 3.12 / stdlib-only / pytest / promptdiff). F1 в features.json — полная спека оператора (7 вердиктов, urezанный 4-колоночный CSV, utf-8-sig, exit 1/0/2, smoke на реальных CSV донора по реальному пути /home/nikita/PROJECTS/AI_analyst_for_work/AI_analyst_migration/dev/validation/results/); F2–F4 кратко; все passes:false, preconditions:[]. Донор закреплён read-only механически в settings.json. Никаких hooks/agents/skills/commands не создано (Phase 6 stop). harness-journal.md содержит 3 наблюдения — сырьё для D-цикла."
+ },
+ "feat": {
+  "committed": "2 commits: 4a7eb18 (F1 RED: failing tests committed before implementation) + c328f5a (F1 GREEN: implementation + docs/features.json/progress/journal/devlog)",
+  "exit_codes_verified": true,
+  "feature_id": "F1",
+  "journal_observations": [
+   "Acceptance умолчал о вырожденном следствии собственных правил: на 4-колоночном прод-экспорте (нет subquestion_answer) per_subquestion = сплошной BOTH_ERROR (smoke: 13 BOTH_ERROR / 0 BOTH_OK / 0 SQL_CHANGED), при осмысленном per_question; донор ведёт себя идентично — реализовано буквально. Kit-урок: просить оператора задавать ожидаемый порядок величин smoke-чисел в verify.",
+   "Smoke-команда контракта 'python -m promptdiff' vs реальность venv: исполнено через .venv/bin/python (per-tool resolve); session-start ritual мог бы явно фиксировать '.venv resolve для всех команд'.",
+   "В остальном kit без зазора: verify-списка F1 хватило для RED-набора из 17 тестов без уточняющих вопросов; donor read-only pin не мешал smoke-чтению."
+  ],
+  "notes": "Strict TDD исполнен: RED зафиксирован (ModuleNotFoundError: promptdiff.__main__, 16 тестов заблокированы на collection) и закоммичен ДО реализации; GREEN = promptdiff/compare.py (stdlib-only порт verdict-ядра донорского compare_runs.py: 7 вердиктов, pairing по normalized original_question + позиции subq, SQL-diff lower+collapse-whitespace) + promptdiff/__main__.py (subcommand compare, --baseline/--candidate/--out/--md). ./init.sh: 18 passed GREEN. features.json: F1 passes:true (оба verify-шага исполнены, не прочитаны); F2-F4 не тронуты. Донор read-only — записей в него нет. Ничего сверх acceptance F1 не добавлено (--md реализован, т.к. входит в acceptance-CLI).",
+  "red_first": true,
+  "smoke_real_files": "exit 0 на baseline-prod-prompt-old.csv vs BUCKETING-fix-prod.csv (оба файла существуют, read-only); /tmp/promptdiff-smoke.json: 32 вопроса / 36 подвопросов; per_question: SQL_CHANGED=10, BASELINE_ONLY=20, ITER1_ONLY=2, ERROR_NEW=0; per_subquestion: BOTH_ERROR=13, BASELINE_ONLY=21, ITER1_ONLY=2 (BOTH_ERROR ожидаем: 4-col экспорт без subquestion_answer, поведение идентично донору)",
+  "tests_passed": 17,
+  "tests_total": 17
+ },
+ "evalr": {
+  "verdict": "confirmed_with_debt",
+  "findings": [
+   {
+    "severity": "major",
+    "summary": "CI exit-code gate is silently inert on the 4-column truncated prod export: a candidate that completely loses generated_sql exits 0, not 1. Missing subquestion_answer makes is_subq_error() true on BOTH sides, so the verdict is BOTH_ERROR (never ERROR_NEW), and question-level degrades to SQL_CHANGED. Spec-literal and donor-identical, and the journal documents the BOTH_ERROR degeneracy — but not this sharper consequence that the headline CI regression gate cannot fire at subquestion level on one of the two supported input formats.",
+    "evidence": "Probe: 4-col baseline 'Q1,1,SELECT 1 FROM t,answer one' vs candidate 'Q1,1,,answer one' → per_question SQL_CHANGED=1, per_subquestion BOTH_ERROR=1, EXIT=0. Reproduced on real donor CSVs (/home/nikita/PROJECTS/AI_analyst_for_work/AI_analyst_migration/dev/validation/results/): 13/13 subquestions BOTH_ERROR, ERROR_NEW structurally unreachable. Code: /home/nikita/PROJECTS/prompt-regress/promptdiff/compare.py is_subq_error() line 103 ('return not (sub.get(\"answer\") or \"\").strip()')."
+   },
+   {
+    "severity": "minor",
+    "summary": "RED commit message says '16 tests blocked at collection' but tests/test_compare.py contains 17 test functions (GREEN message correctly says 17). Cosmetic inconsistency in the audit trail only.",
+    "evidence": "git show 4a7eb18 message vs grep -c 'def test' tests/test_compare.py = 17."
+   },
+   {
+    "severity": "minor",
+    "summary": "_join_sql joins with ';\\n' while donor uses ';\\n\\n'. Behaviorally immaterial — both sides pass through normalize() (lower + collapse-whitespace) before comparison — but it is a literal divergence from the donor port.",
+    "evidence": "/home/nikita/PROJECTS/prompt-regress/promptdiff/compare.py line 83 vs donor compare_runs.py line ~127. All other verdict rules (ERROR_STATUSES, is_question_error, is_subq_error, compute_*_verdict, pairing by normalized question + subquestion position, VERDICT_ORDER sort) match verbatim."
+   }
+  ],
+  "reproduced": "Ran ./init.sh (18 passed, GREEN) and own /tmp mini-CSVs through .venv/bin/python -m promptdiff compare: empty-SQL candidate → ERROR_NEW/exit 1; identical → exit 0; missing path → exit 2; BOM, 4-col CSV, extra subquestion → ITER1_ONLY, case/whitespace-only SQL → BOTH_OK all pass. Diffed donor compare_runs.py (read-only) — verdict logic matches; smoke on real donor CSVs reproduced devlog #2 numbers exactly (32 q/36 subq); git history shows RED commit (tests only, recorded failure) before GREEN; features.json passes=true matches reality; journal filled. Sole surviving debt: exit-code gate cannot fire on 4-col exports (probe: lost SQL → exit 0)."
+ }
+}

@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #86 · 2026-06-10 · Regulation v1 released: T2-T4 v1.3.0
+
+**Tags:** harness, regulation, release, plugin, workflow
+
+Закрытие трека «Регламент v1» (план .claude/plans/standard-v1-regulation.md): после T1 (#85) оставались T2 (легаси-аудит), T3 (n=2), T4 (внешний walkthrough) и Phase 4 (D.3 + релиз). Выполнено за одну сессию тремя мультиагентными workflow с итерацией оркестратора между ними.
+
+[→ entries/0086-regulation-v1-released-t2-t4-v1-3-0.md](entries/0086-regulation-v1-released-t2-t4-v1-3-0.md)
+
+---
+
 ## #85 · 2026-06-10 · Regulation v1 T1: smoke passed, /external-audit + 3 роли упакованы в плагин (v1.2.0)
 
 **Tags:** harness, regulation, plugin, external-audit, test

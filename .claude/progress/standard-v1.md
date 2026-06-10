@@ -7,7 +7,7 @@ session-count: 4
 
 # Прогресс: Регламент v1 — сборка и тестирование единого стандарта
 
-## Quick state — Phase 3 T1 PASSED + Phase 2 ЗАКРЫТА полностью (dot-claude 6036560, tag claude-code-harness--v1.2.0, devlog #85): smoke чистого профиля воспроизведён артефактами (`.claude/audits/t1-smoke/`), отложенный вопрос упаковки решён эмпирикой — commands+agents перенесены ВНУТРЬ plugin-дира, роли резолвятся нативно как `subagent_type` (R6 закрыт), bonus-фикс невалидного YAML frontmatter команды · next: T2 (audit-режим на AI_analyst_migration) ∥ T3 (n=2 prompt-validation) · блокеров нет · push dot-claude (commit+tag) — за оператором
+## Quick state — Регламент v1 RELEASED (plugin v1.3.0, tag создан, dot-claude 5f9734e, devlog #86): Phase 3 закрыта T1✅ T2✅(корзина A; B/C ждут approve) T3✅(confirmed_with_debt) T4✅(confirmed_with_debt, 0 blockers) + Phase 4 D.3 fold выполнен (2 major + 7 minor T4-находок в канон, 3 T3-journal находки в канон, strip: нечего удалять) · ОСТАЛОСЬ ОПЕРАТОРУ: (1) push dot-claude main + теги v1.2.0/v1.3.0; (2) approve корзин B/C gap-report'а migration + ревью незакоммиченной корзины A в working tree; (3) 1-строчный фикс pre-existing red в migration (test_settings 0.5≠0.7) — тогда init.sh зелёный; (4) push lab · блокеров нет
 
 ## Phase checklist
 
@@ -37,14 +37,38 @@ session-count: 4
 - [x] T1 smoke чистого профиля — PASSED с правками; провенанс: `.claude/audits/t1-smoke/`
       (10 логов + T1-REPORT.md); 3 чистых профиля, bootstrap по quick start сработал
       (skill-триггер доказан transcript'ом); v1.2.0 re-smoke: Skills 2 / Agents 3 — 2026-06-10
-- [ ] T2 Audit-режим на AI_analyst_migration (gap-report → approve → правки; только .claude/+docs)
-- [ ] T3 n=2: prompt-validation тулза (новый репо из боли dev/-скриптов migration), journal обязателен
-- [ ] T4 внешний walkthrough-аудит регламента (свежая сессия, исполнением)
+- [x] T2 Audit-режим на AI_analyst_migration — gap-report 24 гэпа (5 A / 13 B / 6 C) в
+      `migration/.claude/audit/gap-report-2026-06-10.md` + lab `.claude/audits/t2-migration/`;
+      корзина A применена (G1 permissions, G2 init.sh-оракул, G3 features.json, G4 progress/,
+      G5 gitignore) БЕЗ коммитов, оракул identical до/после (1397 passed + 1 pre-existing fail
+      на HEAD: test_settings response_temperature 0.5≠0.7 — НЕ от правок); scope-чист по git diff;
+      **корзины B (13 reversible) и C (6 destructive per-component) — ЖДУТ approve оператора** —
+      2026-06-10
+- [x] T3 n=2: prompt-regress (`~/PROJECTS/prompt-regress`) — bootstrap по playbook (commit 49cefce)
+      → F1 promptdiff compare строгим TDD (RED-коммит 4a7eb18 до реализации → GREEN c328f5a,
+      17/17, smoke на реальных прод-CSV, exit-code контракт 1/0/2) → fresh-context Evaluator:
+      **confirmed_with_debt** (major: CI-gate нем на 4-кол. экспорте — долг в progress
+      «reproduce→close»); harness-journal: 6 наблюдений «kit-не-хватило» — 3 уже зафолжены в канон
+      (dot-claude 8b809be: canonical features.json schema, per-runner empty-suite guard,
+      contract-vs-disk rule) — 2026-06-10
+- [x] T4 внешний walkthrough-аудит — 2 наивных исполнителя (новый проект ∥ легаси,
+      исполнением: bootstrap+Phase 5+TDD-микрофича / fabricated-легаси+audit-режим+§5-§7)
+      → adjudication R2: **confirmed_with_debt, 0 blockers**, 2 major + 10 minor, 0 dismissed;
+      `AUDIT-VERDICT.json` + `T4-REPORT.md` в `.claude/audits/t4-walkthrough/` — 2026-06-10
 
-### Phase 4 — D.3 и релиз (0/3)
-- [ ] Находки T1–T4 → правки канона + devlog
-- [ ] Финальный bump + tag + сводный devlog «Регламент v1 released»
-- [ ] Strip-ревизия добавленного
+### Phase 4 — D.3 и релиз (3/3 done)
+- [x] Находки T1–T4 → канон: T4 2 major (README→playbook entry-point; approval-gate headless
+      резолюция) + 7 minor (Phase 0 git-guard, Phase 7 crisp criteria, §2 ledger ownership,
+      §3 PATH-hygiene, §4 SKILL.md routing, external-audit legacy-branch + ROLE_DIR role-files
+      + plugin-list pre-flight, harness-evolution journal-less trigger); 1 minor skipped как
+      single-incident (src-layout/conftest — watch). T3-journal 3 находки зафолжены ранее
+      (8b809be) — 2026-06-10
+- [x] Финальный bump v1.2.0→v1.3.0 синхронно, оба манифеста validate, tag
+      `claude-code-harness--v1.3.0`, re-smoke на чистом профиле (лог 11: Skills 2 / Agents 3),
+      commit dot-claude 5f9734e + сводный devlog #86 — 2026-06-10
+- [x] Strip-ревизия: всё добавленное в Phase 1 использовано (playbook = объект T4,
+      harness-evolution = источник §6-§7 walker'ов, /external-audit = боевой прогон + T1,
+      ROLE_DIR fallback = страховка локальных ролей) — удалять нечего — 2026-06-10
 
 ## Sessions log
 
@@ -158,6 +182,29 @@ migration) ИСКЛЮЧЁН из трека** — security-находка про
       отдельными сессиями (только `.claude/`+CLAUDE.md+docs; ветка/бэкап; оракул до/после)
 - [ ] T3 (∥ T2): bootstrap n=2 prompt-validation тулзы строго по playbook, journal обязателен
 - [ ] push dot-claude commit 6036560 + tag claude-code-harness--v1.2.0 — за оператором
+
+### Session 5 — 2026-06-10 (T2∥T3 → T4 → Phase 4: мультиагентные workflow, релиз v1.3.0)
+
+**Done & measured**
+
+| Артефакт | Метрика | Target | Hit |
+|---|---|---|---|
+| WF1: T2 gap-report (6 read-only аудиторов ∥ + synthesizer) | 24 гэпа (5 A / 13 B / 6 C), per-component вердикты 7 agents + 13 skills; отчёт в migration и lab | gap-report по шаблону SKILL.md | ✅ |
+| WF2a: корзина A применена | 6 файлов ровно по scope (git diff), оракул identical до/после (1397 passed + 1 pre-existing fail HEAD), без коммитов | оракул не хуже + scope чист | ✅ |
+| WF2b: T3 полный цикл | bootstrap 49cefce → F1 RED 4a7eb18 → GREEN c328f5a (17/17, smoke на прод-CSV, exit-коды 1/0/2) → Evaluator confirmed_with_debt | первая фича passes без ручного изобретательства | ✅ |
+| WF3: T4 walkthrough (2 наивных исполнителя ∥ + adjudicator R2) | confirmed_with_debt, 0 blockers, 2 major + 10 minor, 0 dismissed | вердикт по контракту R2 | ✅ |
+| D.3 fold | 2 major + 7 minor T4 + 3 T3-journal → канон (8b809be, 5f9734e); 1 single-incident → watch | gate «single-incident ≠ invariant» соблюдён | ✅ |
+| Релиз | v1.3.0 sync, validate ✔✔, tag, re-smoke чистый профиль (лог 11) | версии синхронны + tag + smoke | ✅ |
+
+**Discovered (главное)**
+- Метрика M-готовности T3: 6 наблюдений «kit-не-хватило» за milestone (3 kit-gap → fold,
+  3 project/single-incident); ручного изобретательства, ломающего цикл, — 0.
+- T4 подтвердил R4-страх оператора ровно там, где ожидался: легибельность точки входа
+  (README не вёл к playbook) — теперь зашита явная секция «Вход в регламент».
+- Pre-existing red в migration (test_settings 0.5≠0.7 на HEAD) — находка оракула G2,
+  не следствие правок; доказывает ценность init.sh немедленно после установки.
+
+**Blockers** — (none) · далее — операторские шаги из Quick state
 
 ## Decisions so far
 

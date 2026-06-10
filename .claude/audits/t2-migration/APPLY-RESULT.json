@@ -1,0 +1,41 @@
+{
+ "oracle_before": ".venv/bin/pytest tests/ -q: 1 failed, 1397 passed, 4 skipped, 27 deselected in 5.86s (единственный fail — pre-existing на HEAD: tests/infrastructure/test_settings.py::TestDefaults::test_default_value[llm.response_temperature], assert 0.5 == 0.7; оба файла committed и не тронуты в working tree)",
+ "oracle_after": ".venv/bin/pytest tests/ -q: 1 failed, 1397 passed, 4 skipped, 27 deselected in 4.89s (тот же единственный pre-existing fail, ноль новых); ./init.sh: исполняется, EXIT=1 — честно пробрасывает тот же pre-existing red; dev-стек не поднят → явный SKIP test-connection (не false-red)",
+ "applied": [
+  {
+   "id": "G1",
+   "what": "permissions-блок добавлен в .claude/settings.json (existing hooks/enabledPlugins сохранены): deny Read(./.env), Read+Edit+Write(./allowed_users.yaml), Read(./data/**), Read(./logs/**), Read(./dev/dump_prod_settings.txt), Bash(git push --force:*); ask git push / Edit(Dockerfile) / Edit(docker-compose.prod.yml) / docker compose prod; allow .venv/bin/pytest, ruff check, git status/diff/log. JSON валиден",
+   "ok": true
+  },
+  {
+   "id": "G2",
+   "what": "Корневой init.sh (13 строк, per-tool resolve: .venv/bin/pytest|python first, PATH fallback; pytest unit-подмножество через addopts -m 'not integration'; dev/test-connection.py только при поднятом docker-compose.dev.yml, иначе явный SKIP; exit code = оракул), chmod +x, прогнан; + одна строка-указатель на оракул в CLAUDE.md (секция «Виртуальная среда и команды»)",
+   "ok": true,
+   "detail": "init.sh механически корректен и прогнан, но EXIT=1 — НЕ зелёный: единственная причина — pre-existing failing test на HEAD (settings.py:57 default response_temperature=0.5 vs тест ждёт 0.7; оба файла committed, в working tree не модифицированы). Починка требует правки проектного кода/теста — вне разрешённых границ корзины A; ослаблять оракул исключением падающего теста — tampering. Red совпадает с baseline ДО; «первая сессия фиксирует зелёный baseline» остаётся за оператором"
+  },
+  {
+   "id": "G3",
+   "what": ".claude/features.json по шаблону эталона AI_analyst_sgr (project/milestone/milestone_goal/rules[]/features[{id,title,description,verify[],passes,preconditions[]}]); засеяны 4 in-flight фичи, все passes:false: F1 промоут sql_generation.txt → прод-baseline (инициатива sql-prompt-quality, N≥30), F2 validate_duplicate_subqueries (продолжение validator-серии #136-#137), F3 multi-month форматы «X-Y»/«X, Y» (отложенное расширение Q26-фикса #135), F4 синхронизация sql_generation_old.txt с прод-deploy. Источники: .claude/plans/giggly-finding-pond.md (секция «Что НЕ входит» = in-flight) + changelog #130-#137 (max id = 137, записи #138 в changelog.json нет). Done-работы (#130-#137 закоммичены) не перенесены",
+   "ok": true
+  },
+  {
+   "id": "G4",
+   "what": "mkdir .claude/progress/ + progress/README.md одной строкой: lifecycle rule #7 (задача >1ч/≥3 decision points → <slug>.md с Quick state, образец AI_analyst_sgr/.claude/progress/build.md, вместо session-handoff в docs/thinking/; при закрытии → devlog-запись + удаление)",
+   "ok": true
+  },
+  {
+   "id": "G5",
+   "what": ".gitignore += .claude/_backups/ — добавлена в секцию «Claude Code (служебные файлы)» сразу после .claude/plans/ и .claude/skill-evals/*-workspace/ (строка ~21). Сам каталог _backups/ не удалялся (D6 — корзина C)",
+   "ok": true
+  }
+ ],
+ "diff_files": [
+  "/home/nikita/PROJECTS/AI_analyst_for_work/AI_analyst_migration/.claude/settings.json (M, +25)",
+  "/home/nikita/PROJECTS/AI_analyst_for_work/AI_analyst_migration/.gitignore (M, +1)",
+  "/home/nikita/PROJECTS/AI_analyst_for_work/AI_analyst_migration/CLAUDE.md (M, +1)",
+  "/home/nikita/PROJECTS/AI_analyst_for_work/AI_analyst_migration/init.sh (new, executable)",
+  "/home/nikita/PROJECTS/AI_analyst_for_work/AI_analyst_migration/.claude/features.json (new)",
+  "/home/nikita/PROJECTS/AI_analyst_for_work/AI_analyst_migration/.claude/progress/README.md (new)"
+ ],
+ "notes": "Scope-проверка по git status --short: все мои изменения — ровно 6 заявленных путей; вне границ ничего не создано/изменено, откатов не потребовалось. Pre-existing операторская работа не тронута: infrastructure/log_setup.py (M, +4 — diff идентичен до/после), untracked dev/* (23 файла), docs/thinking/2026-05-27-q15-implementation-plan.md, .claude/audit/ (gap-report). settings.local.json не тронут (G14 — корзина B). git add/commit/push не выполнялись. ВАЖНО ДЛЯ ОПЕРАТОРА: (1) init.sh красный НЕ из-за корзины A — на HEAD есть pre-existing failing unit-тест (test_settings.py:187 ждёт llm.response_temperature default 0.7, settings.py:57 содержит 0.5; вероятно, рассинхрон коммита #135-эры) — починить = 1-строчная правка кода или теста, вне моих границ; после неё init.sh зелёный (1397 passed подтверждено). (2) В changelog.json max id = 137 — записей #138 не существует, фичи засеяны из #130-#137 + плана. (3) Допущение в G1: «Edit/Write(./allowed_users.yaml)» из Remediation развёрнуто в две правила (Edit + Write); allow git status/diff/log развёрнуты в три отдельных правила — синтаксис permissions не поддерживает слэш-объединение."
+}
