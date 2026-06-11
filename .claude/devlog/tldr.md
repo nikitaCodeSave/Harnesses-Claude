@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #96 · 2026-06-11 · Kit v1.7.0: write-through практик в проекты
+
+**Tags:** canon, kit, bootstrap, workflow, docs
+
+Battle-test плагина на реальном проекте (11062026/granola, 6 сессий, 8 фич) показал разрыв: артефактные практики с механическим каналом доставки (features.json, progress, devlog, red→green из глобального baseline) исполнялись образцово, а практики, жившие текстом в референсах…
+
+[→ entries/0096-kit-v1-7-0-write-through-praktik-v-proekty.md](entries/0096-kit-v1-7-0-write-through-praktik-v-proekty.md)
+
+---
+
 ## #95 · 2026-06-11 · Strip: custom-агенты и skill-дубли built-ins удалены
 
 **Tags:** canon, strip, agents, skills, hooks
