@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #91 · 2026-06-11 · Kit v1.5.0: full first-party re-ground
+
+**Tags:** canon, plugin, release, audit, re-ground
+
+Оператор спросил «вся ли информация плагина актуальна для CLI-подписки и последних моделей/версий CC?». После урока Monitor (devlog #89) ответ дан не по памяти: 3 параллельных fact-checker'а сверили каждый проверяемый claim native-capabilities/evidence-base/discipline с…
+
+[→ entries/0091-kit-v1-5-0-full-first-party-re-ground.md](entries/0091-kit-v1-5-0-full-first-party-re-ground.md)
+
+---
+
 ## #90 · 2026-06-11 · Операторское ревью Регламента v1 пройдено частично
 
 **Tags:** docs, harness
