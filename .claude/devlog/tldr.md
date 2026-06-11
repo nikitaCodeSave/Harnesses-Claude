@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #95 · 2026-06-11 · Strip: custom-агенты и skill-дубли built-ins удалены
+
+**Tags:** canon, strip, agents, skills, hooks
+
+По распоряжению оператора — strip-ревизия лаборатории против свеже-переземлённого инвентаря built-ins (kit v1.6.1): удалить агентов и навыки, дублирующие встроенный функционал. Та же операция, что делалась в dialog_analyzer (F4/F5), теперь над собой.
+
+[→ entries/0095-strip-custom-agenty-i-skill-dubli-built-ins-udaleny.md](entries/0095-strip-custom-agenty-i-skill-dubli-built-ins-udaleny.md)
+
+---
+
 ## #94 · 2026-06-11 · External-audit debt fold: kit v1.6.1
 
 **Tags:** canon, plugin, release, d-cycle, devlog-skill
