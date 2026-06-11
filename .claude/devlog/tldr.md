@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #92 · 2026-06-11 · Kit v1.5.1: clean fair-copy edition
+
+**Tags:** canon, plugin, release, editorial
+
+Оператор: «идеальный чистовой вариант без заметок на полях» — файлы kit'а должны читаться как текущее состояние, без отсылок к тому, что и когда менялось.
+
+[→ entries/0092-kit-v1-5-1-clean-fair-copy-edition.md](entries/0092-kit-v1-5-1-clean-fair-copy-edition.md)
+
+---
+
 ## #91 · 2026-06-11 · Kit v1.5.0: full first-party re-ground
 
 **Tags:** canon, plugin, release, audit, re-ground
