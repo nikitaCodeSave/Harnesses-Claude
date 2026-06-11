@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #93 · 2026-06-11 · Kit v1.6.0: operator handoff footer
+
+**Tags:** canon, plugin, release, ux, d-cycle
+
+Discoverability-gap, два сигнала за день (multi-source → проходит gate D-цикла): 1. Battle-test на dialog_analyzer (watch в memory): audit-сессия не предложила operator-playbook как вход — оператор не узнал про /external-audit и Phase 5 kit. 2. Прямой операторский фидбек: «не…
+
+[→ entries/0093-kit-v1-6-0-operator-handoff-footer.md](entries/0093-kit-v1-6-0-operator-handoff-footer.md)
+
+---
+
 ## #92 · 2026-06-11 · Kit v1.5.1: clean fair-copy edition
 
 **Tags:** canon, plugin, release, editorial
