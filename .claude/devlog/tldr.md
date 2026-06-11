@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #94 · 2026-06-11 · External-audit debt fold: kit v1.6.1
+
+**Tags:** canon, plugin, release, d-cycle, devlog-skill
+
+Оператор прогнал /external-audit на harness-refresh коммите dialog_analyzer (c6902fa) — первый боевой запуск 3-ролевого аудита вне лаборатории. Вердикт confirmed_with_debt; два minor-долга оператор принёс в лабораторию: 1. Обоснование удаления code-reviewer ссылалось на…
+
+[→ entries/0094-external-audit-debt-fold-kit-v1-6-1.md](entries/0094-external-audit-debt-fold-kit-v1-6-1.md)
+
+---
+
 ## #93 · 2026-06-11 · Kit v1.6.0: operator handoff footer
 
 **Tags:** canon, plugin, release, ux, d-cycle
