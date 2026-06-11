@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #97 · 2026-06-11 · Kit v1.8.0: production-grade default + отгружаемая выжимка
+
+**Tags:** canon, kit, bootstrap, docs, workflow
+
+Продолжение #96. Две директивы оператора: (1) kit отгружает самую ценную выжимку workflow файлами в .claude/docs/ проекта — push-канал, доступный каждой сессии без вызова скилла, обновляемый через плагин; (2) дефолтная посадка — production-grade независимо от размера проекта…
+
+[→ entries/0097-kit-v1-8-0-production-grade-default-otgruzhaemaya-vyzhimka.md](entries/0097-kit-v1-8-0-production-grade-default-otgruzhaemaya-vyzhimka.md)
+
+---
+
 ## #96 · 2026-06-11 · Kit v1.7.0: write-through практик в проекты
 
 **Tags:** canon, kit, bootstrap, workflow, docs
