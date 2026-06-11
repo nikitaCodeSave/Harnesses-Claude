@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #88 · 2026-06-11 · Транслитерация кириллицы в slugify devlog-канона
+
+**Tags:** bugfix, devlog, canon, test
+
+Оператор нашёл латентный баг канона: slugify() в rebuild-index.py выбрасывал всё, кроме [a-z0-9], поэтому чисто русский title давал пустой slug и файл не проходил валидацию. Собственный пример из SKILL.md («Добавлена фильтрация по ключевым словам») был невалиден по этому же…
+
+[→ entries/0088-transliteratsiya-kirillitsy-v-slugify-devlog-kanona.md](entries/0088-transliteratsiya-kirillitsy-v-slugify-devlog-kanona.md)
+
+---
+
 ## #87 · 2026-06-10 · Regulation v1: B C F1.1
 
 **Tags:** harness, regulation, cleanup, workflow

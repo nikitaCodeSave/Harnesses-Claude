@@ -71,7 +71,26 @@ def parse_frontmatter(text: str) -> dict | None:
     return out
 
 
+# Кириллица → латиница: без этого чисто русский title даёт пустой slug
+_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+}
+_TRANSLIT_TABLE = str.maketrans(_TRANSLIT)
+
+
 def slugify(s: str, max_len: int = 60) -> str:
+    s = s.lower().translate(_TRANSLIT_TABLE)
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s[:max_len].rstrip("-")
+
+
+def slugify_legacy(s: str, max_len: int = 60) -> str:
+    """Поведение до транслитерации — имена существующих entry-файлов
+    создавались им; валидация принимает оба, переименование не требуется."""
     s = s.lower()
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
     return s[:max_len].rstrip("-")
@@ -161,7 +180,7 @@ def collect_entries() -> tuple[list[dict], list[str]]:
             if fm["id"] != file_id:
                 errors.append(f"{rel}: frontmatter id {fm['id']} != filename id {file_id}")
                 continue
-            if file_slug != expected_slug:
+            if file_slug not in (expected_slug, slugify_legacy(str(fm["title"]))):
                 errors.append(f"{rel}: filename slug '{file_slug}' != slugify(title)='{expected_slug}'")
                 continue
             entries.append({
