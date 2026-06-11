@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #89 · 2026-06-11 · Kit v1.4.0: review-лестница, execution spine, maintainer/consumer split
+
+**Tags:** canon, plugin, release, audit, d-cycle
+
+Перед боевым тестом kit'а на реальном проекте (dialog_analyzer) оператор заказал проверку «всё ли перенесено из лаборатории». Два fresh-context аудита (§8): coverage-refuter — ОПРОВЕРГНУТО (~70-75% покрытия, gap'ы G1–G10), freshness-refuter — стоит с 2 medium. Оператор…
+
+[→ entries/0089-kit-v1-4-0-review-lestnitsa-execution-spine-maintainer-consu.md](entries/0089-kit-v1-4-0-review-lestnitsa-execution-spine-maintainer-consu.md)
+
+---
+
 ## #88 · 2026-06-11 · Транслитерация кириллицы в slugify devlog-канона
 
 **Tags:** bugfix, devlog, canon, test

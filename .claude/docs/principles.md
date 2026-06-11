@@ -47,7 +47,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 - **Use hook когда action must happen every time с zero exceptions**. *«Unlike CLAUDE.md instructions which are advisory, hooks are deterministic and guarantee the action happens»* — Best Practices.
 - **Block-at-decision (PreToolUse), не block-at-write**. PreToolUse инспектирует tool input до execution; `UserPromptSubmit` — инспектирует user prompt content. Avoid blocking mid-thought.
-- **Event types в harness'е**: `SessionStart` (session-context inject), `Stop` (stop-validation + discovery-gate, advisory), `PreToolUse` (loop-protected-guard при LOOP_MODE), `UserPromptSubmit` (cost-warn). Claude Code определяет **31** hook-событие (полный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md`); harness использует 4. Глобальный `system-guard.sh` (PreToolUse, DENY catastrophic) — user-level.
+- **Event types в harness'е**: `SessionStart` (session-context inject), `Stop` (stop-validation + discovery-gate, advisory), `PreToolUse` (loop-protected-guard при LOOP_MODE), `UserPromptSubmit` (cost-warn). Claude Code определяет **30** hook-событий (полный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md`); harness использует 4. Глобальный `system-guard.sh` (PreToolUse, DENY catastrophic) — user-level.
 - **Handler types**: `command` (shell + JSON), `mcp_tool`, `http`. Exit code 0 = allow, 2 = block, other = non-blocking error.
 - Source: [Hooks documentation](https://docs.claude.com/en/docs/claude-code/hooks).
 
