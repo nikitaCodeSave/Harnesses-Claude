@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #90 · 2026-06-11 · Операторское ревью Регламента v1 пройдено частично
+
+**Tags:** docs, harness
+
+Трек «Регламент v1» закрыт агентом (devlog #86/#87); оставался ручной операторский чеклист .claude/progress/operator-review.md — шаги 1–3 обязательные, 10 вопросов В1–В10. Оператор прошёл их 2026-06-11; часть вопросов закрыта решениями, часть осознанно отложена до практики. Файл…
+
+[→ entries/0090-operatorskoe-revyu-reglamenta-v1-proydeno-chastichno.md](entries/0090-operatorskoe-revyu-reglamenta-v1-proydeno-chastichno.md)
+
+---
+
 ## #89 · 2026-06-11 · Kit v1.4.0: review-лестница, execution spine, maintainer/consumer split
 
 **Tags:** canon, plugin, release, audit, d-cycle
