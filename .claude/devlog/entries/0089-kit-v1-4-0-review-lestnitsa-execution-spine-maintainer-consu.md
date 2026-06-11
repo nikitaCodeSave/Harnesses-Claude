@@ -37,7 +37,8 @@ harness-evolution.md (источник сигналов: audit-вердикты,
   плагина; lab-референты помечены «maintainer's lab, не отгружаются» (вкл. marketplace.json
   metadata).
 - **G3–G10**: «Background waiting — no sleep-polling» (механика background Bash +
-  task-notification; Monitor в скилл НЕ внесён — см. находку ниже); quarantine pattern;
+  task-notification; Monitor добавлен патчем v1.4.1 — см. исправленную находку ниже);
+  quarantine pattern;
   subagent brief contract + model assignment в поколение-устойчивой форме («highest/mid/
   fastest tier», mapping = config fact); extension-checklist (lazy layer + retire trigger);
   docs-discipline блок в bootstrap Phase 2 (4 правила + detect-then-prescribe гейт);
@@ -48,13 +49,19 @@ harness-evolution.md (источник сигналов: audit-вердикты,
   недокументированы); grounding-штампы «spot re-verified v2.1.173»; tier «A harness for every
   task» приведён к собственной рубрике (claude.com/blog = T2).
 
-## Ключевая находка прогона
-**`Monitor` tool не существует в 2.1.173** (ToolSearch в main и subagent контекстах — нет).
-Lab-док workflow-async.md называл его «dominant primitive 2026 Q2» — claim помечен ⚠ STALE.
-Grill-агенты поймали блокер в моём же дизайне: первая редакция секции background-waiting
-вносила два новых непроверенных tool-claim'а (TaskOutput/ScheduleWakeup — profile-gated)
-и опровержение никогда-не-сделанного claim'а (Monitor-скобка) — вырезано до наблюдаемой
-механики. Урок: каждый tool-claim в native-capabilities — только из живого инвентаря.
+## Ключевая находка прогона (исправлена оператором в тот же день → патч v1.4.1)
+Изначальный вывод «Monitor tool не существует в 2.1.173» (по отсутствию в живом
+tool-инвентаре main и subagent контекстов) — **ошибочен**. Оператор указал на
+first-party `tools-reference#monitor-tool`: Monitor существует с v2.1.98, а в этом профиле
+невидим из-за `DISABLE_TELEMETRY=1` в settings.json (док прямо называет этот gating; также
+недоступен на Bedrock/Vertex/Foundry). Урок перевёрнут: **отсутствие в живом инвентаре —
+факт профиля/env, не продукта**; авторитет существования — first-party tools-reference,
+живой инвентарь подтверждает только доступность «здесь». Та же страница дала вторую
+поправку: Cron* (session-scoped cron) и ScheduleWakeup (self-paced /loop) теперь
+задокументированы first-party, Task* — обычный session task list (не teams-gated) — хедж
+v1.4.0 устарел в день написания. Всё исправлено патчем v1.4.1. Grill- и verify-агенты
+сделали ту же ошибку (тот же env) — независимость контекста не лечит общий слепой env;
+зафиксировано feedback-memory «tool-inventory-profile-dependent».
 
 ## Verify
 Финальная верификация двумя fresh-context аудиторами по обновлённому скиллу: 17/17 пунктов

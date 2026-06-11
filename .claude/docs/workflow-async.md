@@ -13,7 +13,7 @@ status: active
 ## TL;DR
 
 5 primitives:
-1. **`Monitor` tool** (v2.1.98) — event-driven background watcher. **Replaces polling/sleep loops** (dominant new primitive 2026 Q2). **⚠ STALE (2026-06-11): не наблюдаем в живом tool-инвентаре 2.1.173** — фоновое ожидание теперь: background Bash возвращает output-file path + `<task-notification>` по завершении (re-invoke без polling'а); анти-паттерн bash-sleep остаётся в силе. Re-verify перед цитированием.
+1. **`Monitor` tool** (v2.1.98) — event-driven background watcher. **Replaces polling/sleep loops** (dominant new primitive 2026 Q2). **Availability (2026-06-11, FP tools-reference#monitor-tool)**: недоступен на Bedrock/Vertex/Foundry и при `DISABLE_TELEMETRY` / `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` — на этой машине отсутствует именно поэтому (`DISABLE_TELEMETRY=1` в `~/.claude/settings.json`); fallback — background Bash (output-file path + `<task-notification>` по завершении).
 2. **`Task*` tools** — structured task list (L0 memory layer)
 3. **`Cron*` / `ScheduleWakeup`** — time-based wake
 4. **`SendMessage`** — agent-to-agent mid-flight communication
