@@ -106,7 +106,7 @@ skills:
 | `general-purpose`   | open-ended multi-step research                 | catch-all               |
 | `statusline-setup`  | niche                                          | —                       |
 
-В **нашем harness'е** custom = 3 (`meta-creator`, `security-reviewer`, `discovery-critic` — последний opt-in через `/critique`). Minimal достаточный набор (см. ADR-007 / ADR-011: duplicate built-ins удалены). Built-ins теперь **5** (+`claude-code-guide`). Любое расширение — через симметричное правило (N≥3 промахи).
+В **нашем harness'е** custom-агентов в репо нет — зачистка 2026-06-11 (devlog #95): `meta-creator`/`security-reviewer`/`discovery-critic` удалены как дубли нативной способности, built-in `/security-review` и kit-ритуала `/external-audit`; audit-роли едут плагином `claude-code-harness`. (См. также ADR-007 / ADR-011 — прежние волны удаления дублей.) Built-ins теперь **5** (+`claude-code-guide`). Любое расширение — через симметричное правило (N≥3 промахи).
 
 ---
 

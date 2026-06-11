@@ -57,7 +57,7 @@ Method requires RL (out of scope per CLI constraint), но **principle** пор�
 ### What's missing у нас
 
 Сейчас в harness'е:
-- ✅ Skills add through `meta-creator` agent + manual review
+- ✅ Skills/agents add нативно main thread'ом (skills — через skill-creator plugin) + manual review
 - ✅ Anti-patterns retire через ADR (decisions-2026Q2.md)
 - ❌ **No measurement-driven retire ritual** — skills удаляются по интуиции, не по data
 

@@ -101,11 +101,13 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 
 - skill-creator подключается через marketplace (`anthropics/skills`),
   не форкается локально.
-- Для расширения harness'а используется `meta-creator` агент
-  (создаёт agents/hooks).
+- Расширение harness'а (agents/hooks/commands) main thread делает
+  нативно; skills — через skill-creator plugin. (`meta-creator` агент
+  удалён 2026-06-11 как дубль нативной способности — devlog #95.)
 - `.claude/skills/` содержит ТОЛЬКО action-skills (workflow-templates
-  для конкретных операций main thread'а): `devlog`,
-  `update-plan-progress` (см. ADR-017). `project-docs-bootstrap`
+  для конкретных операций main thread'а): `update-plan-progress`
+  (см. ADR-017). Devlog-skill — глобальный канон `~/.claude/skills/devlog/`;
+  в репо остаётся только project-pin скрипта `.claude/devlog/rebuild-index.py`. `project-docs-bootstrap`
   ретайрнут (staleness A/B n=2 на Opus 4.8: нет материального лифта над
   native + WORKFLOW.md §3 + docs-discipline — см. devlog + benchmark report).
   Self-описывающие skills (повторяют CLAUDE.md о роли main thread'а)
@@ -140,5 +142,6 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 - `.claude/rules/docs-discipline.md` — documentation invariants.
 - `.claude/skills/update-plan-progress/` — action-skill для progress-журнала multi-session задачи (rule #7 docs-discipline).
 - `.claude/devlog/entries/` — recent entries (live); архив `entries/archive/`. Index via `python3 .claude/devlog/rebuild-index.py`.
-- `.claude/agents/` — `meta-creator`, `security-reviewer`.
+- `.claude/agents/` — пусто: custom-агенты удалены 2026-06-11 как дубли built-ins/kit'а
+  (devlog #95); audit-роли едут плагином `claude-code-harness`.
 - `.claude/hooks/` — `session-context`, `stop-validation`, `loop-protected-guard`, `cost-warn`.

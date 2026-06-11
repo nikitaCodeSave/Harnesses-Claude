@@ -20,7 +20,7 @@ last-updated: 2026-06-10
 | L2 episodic | session summaries, recurring patterns | `~/.claude/projects/<hash>/memory/MEMORY.md` + per-topic `.md` | cross-session, user-scoped | user |
 | L3 durable artifacts | what happened, why | `.claude/devlog/entries/*.md` + `index.json` | cross-session, в git | repo |
 | L4 semantic / decisions | architectural rationale | `.claude/docs/principles.md` (active), `.claude/docs/archive/` (frozen) | cross-session, в git | repo |
-| inter-agent | filesystem blackboard | `PREMORTEM.md` → `EVIDENCE.md` → `CRITIC.md` через [discovery-critic](../agents/discovery-critic.md) | per-deliverable, transient | repo |
+| inter-agent | filesystem blackboard | `.claude/audit/<slug>/AUDIT-{EVIDENCE,PROCESS,REFUTER,VERDICT}.json` через `/external-audit` (плагин claude-code-harness) | per-deliverable, transient | repo |
 
 ## Curation rituals
 
@@ -41,12 +41,14 @@ last-updated: 2026-06-10
 
 Соответствует Anthropic multi-agent-research-system: subagents пишут прямо в filesystem, минуя «game of telephone» через main thread.
 
-- **main agent** → `PREMORTEM.json` (≥4 failure modes, ≥3 distinct categories) + `EVIDENCE.json` (≥3 real runs)
-- **discovery-critic** (fresh-context subagent, spawned via `/critique`) → читает оба + код → пишет `CRITIC.json` (schema v2.0 with class-based verdict)
-- **`/critique` slash command** → spawns the critic, parses CRITIC.json via jq, applies class-based rubric (CRITICAL_UNADDRESSED severity-dominates rule)
-- **discovery-gate.sh** (Stop hook, optional) → pre-/critique reminder: nags about missing PREMORTEM/EVIDENCE, never blocks (always exit 0)
+Текущая реализация — `/external-audit` плагина `claude-code-harness` (3 роли параллельно, каждая пишет свой JSON-вердикт на диск, adjudicator сводит):
 
-Pattern is opt-in via `/critique` invocation (always available, project-portable). Hook reminder активен только под `EVALUATOR_GATE_ACTIVE=1` или `.claude/.evaluator-active` marker — outside that, normal dev flow without nudges.
+- **evidence-executor** → `.claude/audit/<slug>/AUDIT-EVIDENCE.json` (исполняет живой стек)
+- **process-auditor** → `AUDIT-PROCESS.json` (git history / scope / red→green, без исполнения)
+- **code-refuter** → `AUDIT-REFUTER.json` (опровергает код)
+- **adjudicator** (main thread свежей сессии) → `AUDIT-VERDICT.json` по правилу «исполненное доказательство сильнее прочитанного»
+
+Opt-in: оператор вызывает в свежей (не авторской) сессии. Предшественник — PREMORTEM/EVIDENCE/CRITIC blackboard с discovery-critic + `/critique` + discovery-gate hook — удалён 2026-06-11 как superseded (история: devlog #62/#65/#95).
 
 ## Что специально НЕ делаем
 
