@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #101 · 2026-06-13 · D-cycle: refresh-hygiene + live-vs-completed, нативно верифицировано
+
+**Tags:** canon, kit, harness-evolution, validation
+
+Продолжение #100. Ремарка оператора: мои правки из лаборатории в чужие проекты = костыль; плагин должен делать нативные сессии самодостаточными. Два витка D-cycle на реальных проектах.
+
+[→ entries/0101-d-cycle-refresh-hygiene-live-vs-completed-nativno-verifitsir.md](entries/0101-d-cycle-refresh-hygiene-live-vs-completed-nativno-verifitsir.md)
+
+---
+
 ## #100 · 2026-06-13 · Репликация kit на AI_analyst_migration: n=2 + тест самодостаточности плагина
 
 **Tags:** canon, kit, harness-evolution, validation, benchmark
