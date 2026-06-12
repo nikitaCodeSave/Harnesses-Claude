@@ -8,6 +8,26 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #99 · 2026-06-12 · Валидация kit v1.9.0: battle-test + refuter-ремедиация
+
+**Tags:** canon, kit, harness-evolution, benchmark, validation
+
+Фидбэк оператора: «claude-code-harness ни разу не удалось успешно применить на моих проектах — всегда потеря знаний и низкое качество». Решено проверить обновлённый harness dialog_analyzer (v1.9.0, devlog #98/#26) не самоотчётом, а тремя свежими контекстами: gap → battle-test →…
+
+[→ entries/0099-validatsiya-kit-v1-9-0-battle-test-refuter-remediatsiya.md](entries/0099-validatsiya-kit-v1-9-0-battle-test-refuter-remediatsiya.md)
+
+---
+
+## #98 · 2026-06-12 · Kit v1.9.0: fold практик dialog_analyzer (D-cycle)
+
+**Tags:** canon, kit, harness-evolution, workflow
+
+Директива оператора: довести плагин claude-code-harness до уровня, на котором он переносит наработки «фабрики» в др. проекты. Мишень — реальный аудит harness'а dialog_analyzer (/home/nikita/Документы/dialog_analyzer): pre-v1.8 родословная, местами богаче kit'а. Аудит (Mode 2)…
+
+[→ entries/0098-kit-v1-9-0-fold-praktik-dialog-analyzer-d-cycle.md](entries/0098-kit-v1-9-0-fold-praktik-dialog-analyzer-d-cycle.md)
+
+---
+
 ## #97 · 2026-06-11 · Kit v1.8.0: production-grade default + отгружаемая выжимка
 
 **Tags:** canon, kit, bootstrap, docs, workflow
