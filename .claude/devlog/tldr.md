@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #102 · 2026-06-13 · practice-baseline project-embed по умолчанию (two-consumer fix)
+
+**Tags:** canon, kit, harness-evolution, practice-baseline
+
+Фидбэк оператора: при /claude-code-harness в проектах появляется недостаточно файлов, чтобы агенты знали best-practices (рекомендации Anthropic/Boris). Диагноз: §1–8 (think-before-coding, simplicity, surgical, goal-driven, tests-you-run, continuity, guardrails, fresh-context…
+
+[→ entries/0102-practice-baseline-project-embed-po-umolchaniyu-two-consumer.md](entries/0102-practice-baseline-project-embed-po-umolchaniyu-two-consumer.md)
+
+---
+
 ## #101 · 2026-06-13 · D-cycle: refresh-hygiene + live-vs-completed, нативно верифицировано
 
 **Tags:** canon, kit, harness-evolution, validation
