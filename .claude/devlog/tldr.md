@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #100 · 2026-06-13 · Репликация kit на AI_analyst_migration: n=2 + тест самодостаточности плагина
+
+**Tags:** canon, kit, harness-evolution, validation, benchmark
+
+Второй реальный проект (NL→SQL для банка, Oracle, 149 py) для проверки жалобы «kit ни разу не зашёл — потеря знаний». Ветка feature/client-product-migration (main = архив, не трогать). Тяжёлый, уже однажды подрезанный harness (11 skills, 3 agents, hooks, GUIDE, features.json).
+
+[→ entries/0100-replikatsiya-kit-na-ai-analyst-migration-n-2-test-samodostat.md](entries/0100-replikatsiya-kit-na-ai-analyst-migration-n-2-test-samodostat.md)
+
+---
+
 ## #99 · 2026-06-12 · Валидация kit v1.9.0: battle-test + refuter-ремедиация
 
 **Tags:** canon, kit, harness-evolution, benchmark, validation
