@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #103 · 2026-06-13 · Откат #102: global — единый источник §1–8 (без дублирования)
+
+**Tags:** canon, kit, harness-evolution, practice-baseline, supersedes
+
+Supersedes #102. Решение оператора: §1–8 best-practices живут в operator-global ~/.claude/CLAUDE.md как ЕДИНЫЙ источник; файл .claude/rules/practice-baseline.md в проекте — это дубликат (грузится поверх global → засоряет контекст). Travel-аргумент (коллега/клон без global)…
+
+[→ entries/0103-otkat-102-global-edinyy-istochnik-1-8-bez-dublirovaniya.md](entries/0103-otkat-102-global-edinyy-istochnik-1-8-bez-dublirovaniya.md)
+
+---
+
 ## #102 · 2026-06-13 · practice-baseline project-embed по умолчанию (two-consumer fix)
 
 **Tags:** canon, kit, harness-evolution, practice-baseline
