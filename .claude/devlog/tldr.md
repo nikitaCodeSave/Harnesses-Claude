@@ -8,6 +8,26 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #107 · 2026-06-16 · Синк WORKFLOW.md с каноном и корневой README лаборатории
+
+**Tags:** docs, harness
+
+Аудит соответствия WORKFLOW.md полному канону фабрики выявил версионный дрейф (документ застрял на CC 2.1.169 / моно-Opus, канон ушёл на v2.1.173 / поколение Fable 5 + Opus 4.8) и одну свежую рассинхронизацию: «Ритуал поверх всего» описывал старую strip-ревизию без…
+
+[→ entries/0107-sink-workflow-md-s-kanonom-i-kornevoy-readme-laboratorii.md](entries/0107-sink-workflow-md-s-kanonom-i-kornevoy-readme-laboratorii.md)
+
+---
+
+## #106 · 2026-06-16 · Механизм обновления фабрики: refresh-ledger + external-intake в strip-ревизии
+
+**Tags:** feature, harness, adr
+
+Канон фабрики (глобальный скилл claude-code-harness) стареет по трём внешним осям — CC-версия, поколение модели, подходы агентной разработки — но процедура эволюции (harness-evolution.md) триггерилась только внутренними сигналами (project journal, audit-вердикты, операторские…
+
+[→ entries/0106-mekhanizm-obnovleniya-fabriki-refresh-ledger-external-intake.md](entries/0106-mekhanizm-obnovleniya-fabriki-refresh-ledger-external-intake.md)
+
+---
+
 ## #105 · 2026-06-16 · Гигиена harness: frontmatter, CLAUDE.md-сверка, devlog-архив
 
 **Tags:** cleanup, docs, harness

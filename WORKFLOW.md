@@ -1,6 +1,6 @@
 # Development workflow with Claude Code
 
-Текущий (Opus 4.8 / Claude Code 2.1.169, 2026-06) workflow для разработчика высокого класса.
+Текущий (поколение Fable 5 + Opus 4.8 / Claude Code 2.1.173, 2026-06) workflow для разработчика высокого класса.
 Плотный портативный гайд от старта проекта до пайплайна — с акцентом на рычаги, двигающие качество. Первоисточники — внизу.
 
 > Это human-facing гайд. Машинный routing-spine для main thread'а — `.claude/docs/workflow.md`.
@@ -11,6 +11,7 @@
 
 - **Harness важнее модели — и его надо переучивать.** «Review your configuration every 3-6 months because instructions tuned for older models constrain newer ones» [[1]]. Под способной моделью **минимум обвязки = максимум продуктивности**: каждый компонент кодирует assumption «модель не умеет X»; умеет нативно → компонент вреден.
 - **Не микроменеджь модель:** `effort=high` (дефолт 4.8 — не понижай на `medium` для нетривиалки), adaptive thinking ON (не управляй thinking-бюджетом вручную), sampling-параметры (`temperature`/`top_p`/`top_k`) на 4.8 убрать совсем (HTTP 400). [[2]]
+- **Модель:** дефолт — Opus 4.8; **Fable 5** — peer этого поколения (`/model fable`, ~2× цена, thinking всегда ON, `/fast` неприменим, авто-fallback на Opus при safety-классификаторе). Blanket-switch не делать без доказанного лифта (lab A/B: ничья на bounded-задачах). [[2]]
 
 ---
 
@@ -81,6 +82,7 @@ DENY-правила     GLOSSARY             ADR / docs      ultracode если 
 - **1 main thread, 1M контекст** — фича целиком без handoff'ов. Single-agent — дефолт для most coding; multi-agent Anthropic явно называет «ill-suited» для большинства кодинга. [[4]]
 - **Test-driven как runnable-оракул**, не как догма очерёдности: read → тест на наблюдаемое поведение через публичный интерфейс (RED) → impl → GREEN → refactor. Тест обязан быть способен упасть. **Никогда не ослабляй тест ради зелёного.**
 - **5 тест-инвариантов** (компактно): тест в **той же сессии**, что и код · способен упасть · живёт **рядом с кодом** · **один тест — одно поведение** · **регрессионный тест перед фиксом бага** (воспроизвести RED → фикс → GREEN). Мокай только реально внешнюю границу (tool/API/network), не внутренности.
+- **Surgical changes:** трогай только то, что требует задача — каждая изменённая строка трассируется к запросу. Не «улучшай» соседний код / форматирование, матчи существующий стиль; убирай только орфаны, созданные твоей же правкой (pre-existing dead code — упомяни, не трогай).
 - `TaskCreate`/`TaskUpdate` для >3 шагов (L0, session-scoped).
 - **Subagent — только** при (а) изоляции контекста (broad scan загрязнит main), (б) параллельности независимых проверок, (в) auto-compact rescue. Иначе main thread сам. [[4]]
 
@@ -124,7 +126,7 @@ Scope **превышает один контекст** (codebase-sweep, мигр
 
 ## Ритуал поверх всего
 
-Раз в 3-6 мес (или на мажорном апгрейде модели) — **аудит harness'а на staleness**: что модель теперь делает нативно → выкинуть. Быстрый тест «модель или обвязка» — `--safe-mode` (старт с отключёнными CLAUDE.md/skills/hooks/MCP, 2.1.169): если без harness'а не хуже — компонент устарел. Под 4.6+ Anthropic сама убрала ручные context-resets и sprint-decomposition («context anxiety» ушла). [[1]][[3]]
+Раз в 3-6 мес (или на мажорном апгрейде модели, или на дельте `claude --version` против зафиксированной baseline) — **аудит harness'а на staleness**: что модель теперь делает нативно → выкинуть. Сверяй **дельту от refresh-ledger** (последняя точка заземления: CC-версия / модель / проверенные источники), не «всё с нуля»; два прохода — external-intake (что сдвинулось снаружи: changelog, first-party docs, essays) и re-test (что из обвязки устарело). Быстрый тест «модель или обвязка» — `--safe-mode` (старт с отключёнными CLAUDE.md/skills/hooks/MCP, 2.1.173): если без harness'а не хуже — компонент устарел. Под 4.6+ Anthropic сама убрала ручные context-resets и sprint-decomposition («context anxiety» ушла). [[1]][[3]]
 
 ---
 
@@ -140,4 +142,4 @@ Scope **превышает один контекст** (codebase-sweep, мигр
 - [8] [Claude Code Sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing) + [Settings](https://code.claude.com/docs/en/settings) — permissions (deny/ask/allow), guardrails, OS-level sandbox
 - [9] [Onboarding Claude Code like a new developer](https://claude.com/blog/onboarding-claude-code-like-a-new-developer-lessons-from-17-years-of-development) (MacLean) — контекст-слой как версионируемый артефакт; «record context, version it, grow it»
 
-<!-- last-updated: 2026-06-09 · target: Opus 4.8 / Claude Code 2.1.169 -->
+<!-- last-updated: 2026-06-16 · target: Fable 5 + Opus 4.8 / Claude Code 2.1.173 -->
