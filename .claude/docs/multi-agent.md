@@ -1,3 +1,8 @@
+---
+owner: @nikitaCodeSave
+last-updated: 2026-06-11
+---
+
 # Multi-agent baseline (Opus 4.8 + наш harness)
 
 > Baseline для построения multi-agent workflows **в проектах**, использующих этот harness. **Не** про baseline самого harness'а — это `principles.md` (active) + `.claude/docs/archive/decisions-2026Q2.md` (frozen). Evidence-based: цифры и паттерны взяты из canonical Anthropic статей + наших ADR'ов. Дата компиляции: **2026-05-10**.

@@ -122,7 +122,7 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 
 **Workflow (Plan→Work→Review spine + slice docs)** — читать при работе над фичей:
 - `.claude/docs/workflow.md` — тонкий spine (decision tree, routing к slice docs)
-- `.claude/docs/builtins-inventory.md` — lab-inventory (2.1.143-era, pending re-ground). Актуальный срез built-ins → `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.154+ / Opus 4.8, 5 built-in субагентов, dynamic workflows, effort default `high`)
+- `.claude/docs/builtins-inventory.md` — lab-inventory (core-таблицы = 2.1.143-snapshot, дельты свёрнуты до 2.1.170 / last-updated 2026-06-10, pending consolidation). Каноничный current-срез built-ins → `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.169 / Opus 4.8, 5 built-in субагентов, dynamic workflows, effort default `high`)
 - `.claude/docs/workflow-async.md` — Monitor tool / Task* / Cron* / SendMessage / `/loop` / Routines reference
 - `.claude/docs/workflow-orchestration.md` — worktree / `claude agents` dispatch / session lifecycle / agent-view
 - `.claude/docs/workflow-cloud-offload.md` — `/ultraplan` / `/ultrareview` / Routines (cloud-side)
@@ -142,6 +142,7 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 - `.claude/rules/docs-discipline.md` — documentation invariants.
 - `.claude/skills/update-plan-progress/` — action-skill для progress-журнала multi-session задачи (rule #7 docs-discipline).
 - `.claude/devlog/entries/` — recent entries (live); архив `entries/archive/`. Index via `python3 .claude/devlog/rebuild-index.py`.
-- `.claude/agents/` — пусто: custom-агенты удалены 2026-06-11 как дубли built-ins/kit'а
+- `.claude/agents/` — каталог отсутствует (custom-агентов нет): удалены 2026-06-11 как дубли built-ins/kit'а
   (devlog #95); audit-роли едут плагином `claude-code-harness`.
+- `.claude/audits/` — provenance прогонов `/external-audit` (AUDIT-*.json + логи).
 - `.claude/hooks/` — `session-context`, `stop-validation`, `loop-protected-guard`, `cost-warn`.

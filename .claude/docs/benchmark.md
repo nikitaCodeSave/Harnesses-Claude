@@ -1,3 +1,8 @@
+---
+owner: @nikitaCodeSave
+last-updated: 2026-06-09
+---
+
 # Harness Benchmark Methodology
 
 **Цель**: empirical evidence что harness changes делают то, ради чего harness существует — поднимают качество inner-executor'а на задачах, которые модель сама без обвязки делает хуже. И не делают этого — на задачах, где harness просто overhead.
