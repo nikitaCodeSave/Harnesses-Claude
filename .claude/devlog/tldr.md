@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #109 · 2026-06-17 · Staleness-guard ADR — content-discipline vs маркеры, kit v1.9.2 · _supersedes #108_
+
+**Tags:** adr, harness
+
+Инцидент #108 (устаревший #49947-caveat в shipped-baseline нуклеировал редундантный skill в dialog_analyzer) поднял вопрос: какими механизмами фабрика должна защищаться от staleness отгружаемых claim'ов. Три предложения (A: durable/volatile split; B: inline expiry-маркеры +…
+
+[→ entries/0109-staleness-guard-adr-content-discipline-vs-markery-kit-v1-9-2.md](entries/0109-staleness-guard-adr-content-discipline-vs-markery-kit-v1-9-2.md)
+
+---
+
 ## #108 · 2026-06-17 · Снят устаревший Plan-Mode caveat из kit v1.9.1
 
 **Tags:** bugfix, harness
