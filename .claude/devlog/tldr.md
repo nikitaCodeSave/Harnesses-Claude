@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #108 · 2026-06-17 · Снят устаревший Plan-Mode caveat из kit v1.9.1
+
+**Tags:** bugfix, harness
+
+Kit-baseline references/project-docs/workflow.md нёс Caveat: (стр. 24-25): «ExitPlanMode disables Auto Mode (anthropics/claude-code#49947), so if Auto Mode is on, prefer a written plan file over entering plan mode». Этот совет уводил проекты от нативного Plan Mode и был seed'ом…
+
+[→ entries/0108-snyat-ustarevshiy-plan-mode-caveat-iz-kit-v1-9-1.md](entries/0108-snyat-ustarevshiy-plan-mode-caveat-iz-kit-v1-9-1.md)
+
+---
+
 ## #107 · 2026-06-16 · Синк WORKFLOW.md с каноном и корневой README лаборатории
 
 **Tags:** docs, harness
