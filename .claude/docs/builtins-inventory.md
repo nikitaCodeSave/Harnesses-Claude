@@ -1,6 +1,6 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-06-10
+last-updated: 2026-06-23
 version-targeted: claude-code 2.1.170
 ---
 
@@ -271,10 +271,9 @@ Precedence (highest → lowest):
 
 ### Rules (`.claude/rules/*.md`) — first-party feature
 
-- YAML frontmatter `paths:` для glob-scoped loading
-- Без `paths:` → загружаются at launch alongside CLAUDE.md
-- Native since 2.0.64+
-- **Known bug** ([Issue #16853](https://github.com/anthropics/claude-code/issues/16853)): subdirectory paths-scoped rules иногда не загружаются. В этом harness обходится через full-load (no `paths:` в `testing.md`/`docs-discipline.md`/`api-constraint.md`)
+- Без `paths:` → `.claude/rules/*.md` грузятся at launch alongside CLAUDE.md (native since 2.0.64+). Для инвариантов держим full-load (no `paths:` в `testing.md`/`docs-discipline.md`/`api-constraint.md`).
+- **`paths:` frontmatter ненадёжен** (re-verified 2026-06-23, devlog #110): эвристика + открытый баг-кластер (#16853 не грузится на matching-read, #16299 грузится глобально, #21858 user-level игнор, #23478 Read-only-not-Write, #17204 документированный синтаксис неверен) — unfixed 2.1.x. **Не строить scoped-доставку правил на `paths:`.**
+- **Детерминированная scoped-доставка правил = nested `<subdir>/CLAUDE.md`** (грузится при tool-доступе к файлам поддерева; empirically read+obeyed свежими субагентами — devlog #110). Hook (`SessionStart`/`CwdChanged` → `additionalContext`) = guaranteed для must-not-miss. Каноничный current-срез → kit `references/native-capabilities.md` Memory §.
 
 ### AGENTS.md interop
 

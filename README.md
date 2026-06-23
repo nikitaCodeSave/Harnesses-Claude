@@ -6,14 +6,14 @@
 > машинерию (`loop/`, `benchmark/`, discovery-критиков, event-логи), которую **нельзя
 > копировать целиком** в рабочий проект. Отгружаемое каноничное знание о дизайне
 > harness'а живёт в отдельном **глобальном скилле** `~/.claude/skills/claude-code-harness/`
-> (плагин `claude-code-harness` v1.9.0); минимальный стартовый harness для нового проекта —
+> (плагин `claude-code-harness` v1.10.0); минимальный стартовый harness для нового проекта —
 > его **Bootstrap-режим**, а не клон этого репозитория.
 
 ## Что это
 
 Репозиторий, в котором эмпирически выращивается ответ на один вопрос: **какой минимум
 обвязки даёт максимум продуктивности под способной моделью.** Здесь живут принципы,
-бенчмарки, self-improvement-цикл и журнал решений (106 devlog-записей), на которых
+бенчмарки, self-improvement-цикл и журнал решений (111 devlog-записей), на которых
 обкатывается и калибруется канон, отгружаемый в другие проекты через плагин.
 
 ## Центральный принцип
@@ -36,7 +36,7 @@ thread'а — anti-pattern.
 
 | | Где | Что |
 |---|---|---|
-| **Канон** (отгружается) | `~/.claude/skills/claude-code-harness/` (v1.9.0) | bootstrap / audit / extend / explain режимы; `references/` (native-capabilities, harness-discipline, practice-baseline §1–8, harness-evolution, evidence-base); shipped project-docs |
+| **Канон** (отгружается) | `~/.claude/skills/claude-code-harness/` (v1.10.0) | bootstrap / audit / extend / explain режимы; `references/` (native-capabilities, harness-discipline, practice-baseline §1–8, harness-evolution, evidence-base); shipped project-docs |
 | **Practice baseline §1–8** | operator-global `~/.claude/CLAUDE.md` | think-first · simplicity · surgical · goal-driven · testing · continuity · guardrails · independent-verification. Применяется во всех проектах, **не дублируется** в каждый репо |
 | **Лаборатория** (этот репо) | `.claude/` | R&D-машинерия: эволюция канона, бенчмарки, self-improvement loop, devlog — **не копируется** |
 

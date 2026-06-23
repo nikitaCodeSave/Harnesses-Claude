@@ -8,6 +8,26 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #111 · 2026-06-23 · Campaign standard shipped to kit v1.10.0 — Phase 5 scoped-delivery, not a new mode · _supersedes #110_
+
+**Tags:** harness, kit, campaign
+
+протокола (nested CLAUDE.md, детерминированно), single-canon беклога НЕ обязателен. Follow-on был — перенести в shipped-kit claude-code-harness. Оператор одобрил.
+
+[→ entries/0111-campaign-standard-shipped-to-kit-v1-10-0-phase-5-scoped-deli.md](entries/0111-campaign-standard-shipped-to-kit-v1-10-0-phase-5-scoped-deli.md)
+
+---
+
+## #110 · 2026-06-23 · Campaign-кампании: scoped-доставка протокола, не single-canon — A/B + deep-research
+
+**Tags:** harness, benchmark, research, campaign
+
+Оператор поднял реальную боль (триггер — фича dialog_analyzer): тяжело «вести» объёмную многоспринтовую задачу — состояние расползается по 4–6 местам, беклог рассинхронизируется между markdown-каноном и features.json-зеркалом, знания фрагментируются. Запрос: найти стандарт…
+
+[→ entries/0110-campaign-kampanii-scoped-dostavka-protokola-ne-single-canon.md](entries/0110-campaign-kampanii-scoped-dostavka-protokola-ne-single-canon.md)
+
+---
+
 ## #109 · 2026-06-17 · Staleness-guard ADR — content-discipline vs маркеры, kit v1.9.2 · _supersedes #108_
 
 **Tags:** adr, harness

@@ -37,8 +37,12 @@ Cross-harness comparison: `--inject-from <alt-harness-dir>` подменяет �
 ├── tier1/                 — task definitions (yaml), tier1-naming preserved для backward-compat
 ├── tier2/                 — per-skill eval sets (Layer C для skills)
 ├── fixtures/              — synthetic in-repo + external clones
+├── campaign-backlog-ab/   — A/B: scoped rule-delivery vs single-canon backlog (devlog #110/#111)
 └── reports/               — per-run JSON + aggregate summaries
 ```
+
+> Note: блок выше — curated, не exhaustive: на диске также есть `audit/`, `text2sql*/`
+> (pre-existing, не индексированы здесь). Полная актуализация структуры — отдельной задачей.
 
 ## Когда какой layer
 
