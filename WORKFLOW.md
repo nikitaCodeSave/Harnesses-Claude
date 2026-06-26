@@ -111,6 +111,12 @@ DENY-правила     GLOSSARY             ADR / docs      ultracode если 
 
 Рамка: **файл = authoritative state, контекст эфемерен** — читаешь курированные снапшоты, не историю. [[6]]
 
+**Закрытие долгого спринта** (iteration / feature-set done). Конверсия `progress → devlog` — это не только «переписать», но и close-out:
+1. Убедись, что каждая закрытая фича получила **devlog-запись** — эпизодика переживает progress-файл, а не наоборот.
+2. **Удали progress-файл** (или Quick state → `CLOSED`): `progress/` держит только *активные* задачи, закрытая история живёт в devlog + git. Tracked-файл → удаление обратимо.
+
+Без hook'а авто-удаления и без `/close-iteration` — это доковый ритуал, не машинерия (over-engineering по принципу minimum-scaffolding). Инвариант — [docs-discipline](.claude/rules/docs-discipline.md) rule 7.
+
 ---
 
 ## Когда выходить за один контекст (и только тогда)
