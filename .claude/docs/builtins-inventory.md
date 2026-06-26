@@ -28,7 +28,7 @@ Marketplaces установлены: `anthropics/skills`, `anthropics/claude-plu
 
 Ядро таблиц ниже — 2.1.143-snapshot. Что изменилось к 2.1.170 (canonical current срез — `native-capabilities.md`):
 
-- **Built-in subagents:** типов по-прежнему **5** (новых не добавлено). `/agents` = "Manage agent configurations" (типы), `claude agents` = "Manage background agents" (sessions) — не путать.
+- **Built-in subagents:** **5** типов. `/agents` = "Manage agent configurations" (типы), `claude agents` = "Manage background agents" (sessions) — не путать.
 - **Dynamic workflows** (research preview, v2.1.154+): trigger keyword **`workflow` → `ultracode`** (2.1.160) — голое "workflow" больше не триггерит; `/config` "Workflow keyword trigger" toggle (2.1.157).
 - **Hooks:** `Stop`/`SubagentStop` могут вернуть `hookSpecificOutput.additionalContext` (feed-and-continue без error-label, 2.1.163); `if: "Bash(...)"` больше не over-fire на `$()`/`$VAR`.
 - **Slash:** `/plugin list [--enabled|--disabled]` (2.1.163); autocomplete-клик теперь **заполняет** строку, не запускает сразу (Enter to run, 2.1.162); `/effort` подтверждает persistence.

@@ -8,6 +8,26 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #113 · 2026-06-26 · Эмпирический анализ stale transition-markers + sentence-level правило в docs-discipline
+
+**Tags:** adr, harness, docs
+
+В соседнем проекте (Greenplun) оператору пришлось делать отдельный cleanup-коммит: Claude при правке reference-доков оставлял следы «было→стало» («⚠ Замещено итерацией 3», «297→330», «Итерация 3 (в работе)→закрыта»), и они накапливались вглубь, засоряя контекст. Вопрос: это…
+
+[→ entries/0113-empiricheskiy-analiz-stale-transition-markers-sentence-level.md](entries/0113-empiricheskiy-analiz-stale-transition-markers-sentence-level.md)
+
+---
+
+## #112 · 2026-06-24 · Анализ статьи Steering Claude Code + синк кита native-capabilities
+
+**Tags:** docs, harness
+
+Research-pass по first-party статье claude.com/blog/steering-claude-code-skills-hooks-rules-subagents-and-more для актуализации harness-знания. ~80% статьи — независимая валидация уже зашитого дизайна (CLAUDE.md ≤200 indexer-not-store, path-scoped rules, skills-for-procedures…
+
+[→ entries/0112-analiz-stati-steering-claude-code-sink-kita-native-capabilit.md](entries/0112-analiz-stati-steering-claude-code-sink-kita-native-capabilit.md)
+
+---
+
 ## #111 · 2026-06-23 · Campaign standard shipped to kit v1.10.0 — Phase 5 scoped-delivery, not a new mode · _supersedes #110_
 
 **Tags:** harness, kit, campaign
