@@ -40,14 +40,27 @@ R='r''m'   # build the destructive token without writing it literally on any lin
 check "deny: $R -rf /"            deny "$(verdict "$R -rf /")"
 check "deny: $R -rf /*"           deny "$(verdict "$R -rf /*")"
 check "deny: $R -rf ~"            deny "$(verdict "$R -rf ~")"
+check "deny: $R -rf ~/ (slash)"   deny "$(verdict "$R -rf ~/")"
+check "deny: $R -rf ~/* (glob)"   deny "$(verdict "$R -rf ~/*")"
 check "deny: $R -rf \$HOME"       deny "$(verdict "$R -rf \$HOME")"
-check "deny: $R -rf ~/Downloads"  deny "$(verdict "$R -rf ~/Downloads")"
+check "deny: $R -rf \$HOME/"      deny "$(verdict "$R -rf \$HOME/")"
+check "deny: $R -rf \$HOME/*"     deny "$(verdict "$R -rf \$HOME/*")"
+# Absolute home-root path (was a real gap: literal /home/<user> passed).
+check "deny: $R -rf <abs home>"   deny "$(verdict "$R -rf $HOME")"
+check "deny: $R -rf <abs home>/"  deny "$(verdict "$R -rf $HOME/")"
+check "deny: $R -rf quoted home"  deny "$(verdict "$R -rf \"\$HOME\"")"
 check "deny: $R -fr /"            deny "$(verdict "$R -fr /")"
 check "deny: $R  -rf  / (2 spc)"  deny "$(verdict "$R  -rf  /")"
 # Capital -R is a valid GNU rm recursive flag (was a pre-existing HIGH gap).
 check "deny: $R -Rf /"            deny "$(verdict "$R -Rf /")"
 check "deny: $R -R /"             deny "$(verdict "$R -R /")"
 check "deny: $R -fR ~"            deny "$(verdict "$R -fR ~")"
+
+# --- Home SUBdirectories pass (scope is root/home ROOT; the ~-only subdir deny
+# --- gave zero protection while the absolute form passed — narrowed 2026-07-15).
+check "passthrough: $R -rf ~/subdir"        safe "$(verdict "$R -rf ~/old-project/node_modules")"
+check "passthrough: $R -rf \$HOME/.cache"   safe "$(verdict "$R -rf \$HOME/.cache/pip")"
+check "passthrough: $R -rf <abs>/subdir"    safe "$(verdict "$R -rf $HOME/proj/node_modules")"
 # Quoted recursive flag (regression introduced by the word-boundary fix).
 check "deny: $R '-rf' /"          deny "$(verdict "$R '-rf' /")"
 check "deny: $R \"-rf\" ~"        deny "$(verdict "$R \"-rf\" ~")"

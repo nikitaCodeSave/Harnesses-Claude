@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #118 · 2026-07-15 · Внешний 3-фазный аудит кита → fold: v1.12.0 наконец отгружен, supply chain починен, уроки #115 доставлены
+
+**Tags:** harness, audit, kit, release, supply-chain, currency, guard
+
+Оператор запросил независимый fresh-context аудит двух артефактов (кит ~/.claude/skills/claude-code-harness/ + глобальная обвязка ~/.claude/) по осям «внутренняя согласованность» и «эмпирика потребителей» (метод devlog #115), с мандатом менять правила/паттерны при подтверждённом…
+
+[→ entries/0118-vneshniy-3-faznyy-audit-kita-fold-v1-12-0-nakonets-otgruzhen.md](entries/0118-vneshniy-3-faznyy-audit-kita-fold-v1-12-0-nakonets-otgruzhen.md)
+
+---
+
 ## #117 · 2026-07-15 · Fresh-context аудит harness'а: ретайр loop-кластера + stop-validation, актуализация до Sonnet 5 / CC 2.1.210
 
 **Tags:** harness, audit, cleanup, loop, hooks, currency
