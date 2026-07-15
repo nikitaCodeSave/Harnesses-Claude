@@ -49,7 +49,7 @@ WORKFLOW.md              — портативный human-facing гайд: ст�
 ├── settings.json        — permissions (read-only Bash/Read) + hook-конфигурация
 ├── docs/                — 13 активных reference-доков + archive/ (frozen ADR-лог, baseline'ы)
 │                          principles · harness-architecture · workflow(+async/orchestration/cloud/evolution)
-│                          · multi-agent · memory-layers · benchmark · builtins-inventory · external-sources
+│                          · multi-agent · memory-layers · benchmark · external-sources
 ├── rules/               — 3 инварианта: api-constraint · testing · docs-discipline
 ├── hooks/               — session-context · stop-validation · loop-protected-guard · cost-warn
 ├── skills/              — 1 action-skill: update-plan-progress (progress-журнал multi-session задач)

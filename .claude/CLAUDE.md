@@ -65,7 +65,7 @@ Owns задачу end-to-end до verification и финального отве�
 ассоциации». Single-agent — дефолт для most coding; bounded fan-out
 оправдан, когда scope **превышает один контекст** (codebase-scale sweep,
 миграция, trust-critical верификация find→refute→converge). Для такого —
-**built-in dynamic workflows** (`/workflow`, ключевое слово `ultracode`,
+**built-in dynamic workflows** (ключевое слово `ultracode`
 или `/effort ultracode`), НЕ кастомный subagent-pipeline (built-ins-first;
 стоит заметно больше токенов — не дефолт). Полный baseline (pre-spawn
 checklist, brief contract, model assignment, anti-patterns, evidence-based
@@ -102,27 +102,23 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 - skill-creator подключается через marketplace (`anthropics/skills`),
   не форкается локально.
 - Расширение harness'а (agents/hooks/commands) main thread делает
-  нативно; skills — через skill-creator plugin. (`meta-creator` агент
-  удалён 2026-06-11 как дубль нативной способности — devlog #95.)
+  нативно; skills — через skill-creator plugin.
 - `.claude/skills/` содержит ТОЛЬКО action-skills (workflow-templates
   для конкретных операций main thread'а): `update-plan-progress`
   (см. ADR-017). Devlog-skill — глобальный канон `~/.claude/skills/devlog/`;
   в репо остаётся только project-pin скрипта `.claude/devlog/rebuild-index.py`. `project-docs-bootstrap`
-  ретайрнут (staleness A/B n=2 на Opus 4.8: нет материального лифта над
-  native + WORKFLOW.md §3 + docs-discipline — см. devlog + benchmark report).
+  в harness не входит — native + WORKFLOW.md §3 + docs-discipline
+  покрывают bootstrap без отдельного skill'а.
   Self-описывающие skills (повторяют CLAUDE.md о роли main thread'а)
   — anti-pattern, не создаются.
 - Каноничное знание о дизайне harness'а (bootstrap / audit / extend /
-  explain) — **глобальный** скилл `~/.claude/skills/claude-code-harness/`
-  (re-grounded на Opus 4.8 / CC v2.1.154+). Предыдущий Python-only
-  `harness-setup` hard-deleted 2026-06 (overloaded prescriptive preset;
-  знание поглощено `claude-code-harness` — см. devlog).
+  explain) — **глобальный** скилл `~/.claude/skills/claude-code-harness/`.
 
 ## Reference materials
 
 **Workflow (Plan→Work→Review spine + slice docs)** — читать при работе над фичей:
 - `.claude/docs/workflow.md` — тонкий spine (decision tree, routing к slice docs)
-- `.claude/docs/builtins-inventory.md` — lab-inventory (core-таблицы = 2.1.143-snapshot, дельты свёрнуты до 2.1.170 / last-updated 2026-06-10, pending consolidation). Каноничный current-срез built-ins → `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.169 / Opus 4.8, 5 built-in субагентов, dynamic workflows, effort default `high`)
+- Built-ins current-срез — **единственный canonical** источник: `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.195 / Opus 4.8, 5 built-in субагентов, dynamic workflows, agent teams, effort default `high`, `ultracode`, нативный destructive-block + auto-mode classifier).
 - `.claude/docs/workflow-async.md` — Monitor tool / Task* / Cron* / SendMessage / `/loop` / Routines reference
 - `.claude/docs/workflow-orchestration.md` — worktree / `claude agents` dispatch / session lifecycle / agent-view
 - `.claude/docs/workflow-cloud-offload.md` — `/ultraplan` / `/ultrareview` / Routines (cloud-side)
@@ -142,7 +138,6 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 - `.claude/rules/docs-discipline.md` — documentation invariants.
 - `.claude/skills/update-plan-progress/` — action-skill для progress-журнала multi-session задачи (rule #7 docs-discipline).
 - `.claude/devlog/entries/` — recent entries (live); архив `entries/archive/`. Index via `python3 .claude/devlog/rebuild-index.py`.
-- `.claude/agents/` — каталог отсутствует (custom-агентов нет): удалены 2026-06-11 как дубли built-ins/kit'а
-  (devlog #95); audit-роли едут плагином `claude-code-harness`.
+- `.claude/agents/` — каталога нет (custom-агентов нет; audit-роли едут плагином `claude-code-harness`).
 - `.claude/audits/` — provenance прогонов `/external-audit` (AUDIT-*.json + логи).
 - `.claude/hooks/` — `session-context`, `stop-validation`, `loop-protected-guard`, `cost-warn`.

@@ -1,6 +1,6 @@
 # Development workflow with Claude Code
 
-Текущий (поколение Fable 5 + Opus 4.8 / Claude Code 2.1.173, 2026-06) workflow для разработчика высокого класса.
+Текущий (поколение Fable 5 + Opus 4.8 / Claude Code 2.1.195) workflow для разработчика высокого класса.
 Плотный портативный гайд от старта проекта до пайплайна — с акцентом на рычаги, двигающие качество. Первоисточники — внизу.
 
 > Это human-facing гайд. Машинный routing-spine для main thread'а — `.claude/docs/workflow.md`.
@@ -35,9 +35,12 @@
   Проблема:       что болит и у кого
   Пользователь:   кто, в каком сценарии
   Success (done): 3-5 наблюдаемых критериев (= acceptance criteria)
-  Out of scope:   что НЕ делаем (защита от goal drift)
+  NON-GOALS:      что осознанно НЕ делаем (заморозка scope против drift)
   Открытое:       отложенные решения → ADR
   ```
+
+  *NON-GOALS — не опускай эту строку: пусто = «не подумал», не «нет ограничений». Это гигиена scope, а не гейт, который что-то останавливает.*
+
 - **Acceptance criteria = наблюдаемое поведение через публичный интерфейс** («пользователь оформляет заказ с валидной корзиной»), не «сделать хорошо». Это **оракул, пронизывающий весь пайплайн**.
 - **GLOSSARY first-use:** первый domain-термин/аббревиатура → запись. PRD живёт в `docs/` (или `.claude/progress/<slug>.md` для крупной in-flight задачи).
 
@@ -49,6 +52,8 @@
 
 - Архитектурные развилки — built-in **`Plan`-агент** / Plan mode; тяжёлое планирование — `/ultraplan` (cloud, 3 A/B-варианта). [[3]]
 - **Каждое нетривиальное решение → ADR** (Context / Decision / Consequences / Alternatives). Порог простой: *объяснение заняло бы >5 мин → ADR*.
+- **Brownfield + трогаешь инварианты** → сначала read-only разведка built-in **`Explore`** (карта затронутых модулей · инварианты, которые нельзя сломать · blast-radius). Вывод **остаётся в контексте** — отдельный `docs/context/*.md` НЕ заводим (Explore перезапускаем по требованию под 1M-окном). Если fresh-context критику нужно прочитать карту через compaction — пришпиль её в context-секцию ADR или progress-журнал, не в новый формат.
+- **Design-lite → (large only) грилл → ADR, в этом порядке.** Нетривиальное решение сначала живёт как *мутабельный* набросок (модель данных · ≥2 РЕАЛЬНЫЕ альтернативы · acceptance). На **medium** это абзац в плане — без spawn'а. На **large ∧ необратимо ∧ трогает инвариант** — прогони по нему тот же fresh-context рефутер, что в REVIEW/§8, с фальсифицируемым мандатом: «убей ≥1 альтернативу конкретным failure-сценарием или цифрой стоимости» (у прозы нет исполняемого оракула — грилл дизайна ловит меньше, чем грилл кода; это опция для дорогого-необратимого, не станция funnel'а). Победившее решение застывает в ADR; альтернативы не дублируй в обоих.
 - Нетривиальный кодбейз → bootstrap проектных доков (`ARCHITECTURE` / `CODE-MAP` / `GLOSSARY` / `CONVENTIONS` / `ADR/` / `RUNBOOKS/`), **read-before-write** — реальное содержимое, не boilerplate.
 - **Built-ins first:** не плоди кастомных `PM→Architect→Dev→QA` субагентов — оркестратор это **ты** (main thread). [[4]]
 
@@ -65,13 +70,13 @@ DENY-правила     GLOSSARY             ADR / docs      ultracode если 
       └──────────────── оракул (acceptance criteria) пронизывает весь поток ────────────────┘
 ```
 
-Правило выбора режима: план в 2-3 шага в голове → single thread in-conversation · план становится кодом / сотни независимых операций / scope>1 контекст → dynamic workflow (`ultracode`) · дорого-необратимо и «выглядит готовым» → добавь fresh-context критика.
+Правило выбора режима: план в 2-3 шага в голове → single thread in-conversation · план становится кодом / сотни независимых операций / scope>1 контекст → dynamic workflow (`ultracode`) · дорого-необратимо и «выглядит готовым» → добавь fresh-context критика; глубину upstream (Discovery / PRD+NON-GOALS / design-lite→грилл→ADR) — по масштаб-строке Спины.
 
 ---
 
 ## Спина: Plan → Work → Review (ядро execution)
 
-Дефолт для **нетривиальной** задачи. Typo / one-liner — сразу Work → Review.
+Масштабируй воронку под изменение, дефолт — **вниз**: trivial (1 строка) → сразу Work→Review · small (1 файл, ясный spec) → только acceptance-оракул · medium (multi-file / реальная развилка) → + design-lite абзац · large (cross-cutting / миграция / трогает **общий инвариант** / **незнакомая** brownfield-подсистема) → полный набор гейтов (Discovery-разведка · PRD+NON-GOALS · design-lite+грилл · ADR). Полный набор — нижняя строка и **исключение**, не ритуал; при сомнении классифицируй на класс ниже.
 
 ### PLAN — отделить «понять» от «делать»
 - **Plan mode** (`Shift+Tab`×2 или `--permission-mode plan`): read-only разведка до первой записи на диск. Тяжёлое планирование — built-in `Plan`-агент через Task, либо `/ultraplan` (cloud) для архитектурных развилок.
@@ -127,6 +132,7 @@ Scope **превышает один контекст** (codebase-sweep, мигр
 - **НЕ** строй кастомный PM→Architect→Dev→QA pipeline (built-ins-first).
 - **Недоверенный вход в fan-out → quarantine**: субагенты, читающие untrusted-контент (web/issues/email), отделены от тех, кто выполняет high-privilege действия — privilege-separation против prompt-injection. [[7]]
 - Параллельные ветки — `-w` worktree + `claude agents` (с 2.1.169 `--json` отдаёт `id`/`state`/`--all` для observability фронта). Async-ожидание — `Monitor` tool, **никогда** bash `sleep`.
+- **Backlog для large/кампаний — ОДИН редактируемый носитель, генерируемый one-way из spec** (переиспользуй `features.json` или Plan-файл — не заводи новый store и не строй md↔json зеркала с sync-машинерией). Не мандат единого формата: A/B (`campaign-backlog-ab`, drift=0, N=3) показал dual-canon безопасен — рычаг в one-way-генерации без mirror-sync, не в структуре.
 
 ---
 
@@ -148,4 +154,4 @@ Scope **превышает один контекст** (codebase-sweep, мигр
 - [8] [Claude Code Sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing) + [Settings](https://code.claude.com/docs/en/settings) — permissions (deny/ask/allow), guardrails, OS-level sandbox
 - [9] [Onboarding Claude Code like a new developer](https://claude.com/blog/onboarding-claude-code-like-a-new-developer-lessons-from-17-years-of-development) (MacLean) — контекст-слой как версионируемый артефакт; «record context, version it, grow it»
 
-<!-- last-updated: 2026-06-16 · target: Fable 5 + Opus 4.8 / Claude Code 2.1.173 -->
+<!-- last-updated: 2026-07-02 · target: Fable 5 + Opus 4.8 / Claude Code 2.1.195 -->

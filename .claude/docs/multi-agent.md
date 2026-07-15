@@ -111,7 +111,7 @@ skills:
 | `general-purpose`   | open-ended multi-step research                 | catch-all               |
 | `statusline-setup`  | niche                                          | —                       |
 
-В **нашем harness'е** custom-агентов в репо нет — зачистка 2026-06-11 (devlog #95): `meta-creator`/`security-reviewer`/`discovery-critic` удалены как дубли нативной способности, built-in `/security-review` и kit-ритуала `/external-audit`; audit-роли едут плагином `claude-code-harness`. (См. также ADR-007 / ADR-011 — прежние волны удаления дублей.) Built-ins теперь **5** (+`claude-code-guide`). Любое расширение — через симметричное правило (N≥3 промахи).
+В **нашем harness'е** custom-агентов в репо нет: дубли нативной способности, built-in `/security-review` и kit-ритуала `/external-audit` не создаются; audit-роли едут плагином `claude-code-harness`. Built-ins — **5** (вкл. `claude-code-guide`). Любое расширение — через симметричное правило (N≥3 промахи).
 
 ---
 
@@ -235,7 +235,7 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 
 Этот baseline **не invariant** — frozen on date 2026-05-10. Re-evaluate когда:
 
-- **Major-релиз модели** (напр. 4.7 → 4.8, выполнено в devlog #50; или 4.x → 5.x): прогон проектных multi-agent workflows на классах задач, где они критичны.
+- **Major-релиз модели** (напр. 4.x → 5.x): прогон проектных multi-agent workflows на классах задач, где они критичны.
 - **N≥3 эмпирических промаха** одного типа (наблюдаемый telephone-game / token-overhead inefficiency / failure mode не в §9).
 - **Breaking change в built-in каталоге** Claude Code (новый built-in agent заменяет custom-паттерн baseline'а).
 

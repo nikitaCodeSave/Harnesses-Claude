@@ -48,7 +48,7 @@ last-updated: 2026-06-10
 - **code-refuter** → `AUDIT-REFUTER.json` (опровергает код)
 - **adjudicator** (main thread свежей сессии) → `AUDIT-VERDICT.json` по правилу «исполненное доказательство сильнее прочитанного»
 
-Opt-in: оператор вызывает в свежей (не авторской) сессии. Предшественник — PREMORTEM/EVIDENCE/CRITIC blackboard с discovery-critic + `/critique` + discovery-gate hook — удалён 2026-06-11 как superseded (история: devlog #62/#65/#95).
+Opt-in: оператор вызывает в свежей (не авторской) сессии.
 
 ## Что специально НЕ делаем
 

@@ -8,6 +8,36 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #116 · 2026-07-02 · Upstream-гейты workflow: weight-class + NON-GOALS + design-critic, kit v1.12.0
+
+**Tags:** harness, workflow, kit, design
+
+Продолжение #115. Оператор дал два входа: (1) отработать все флажки/выводы аудита; (2) свой анализ проблемы «больших изменений» — в проектах приходится каждый раз строить свою схему беклога, а upstream-дисциплина отсутствует. Ядро анализа оператора: документ — не результат, а…
+
+[→ entries/0116-upstream-geyty-workflow-weight-class-non-goals-design-critic.md](entries/0116-upstream-geyty-workflow-weight-class-non-goals-design-critic.md)
+
+---
+
+## #115 · 2026-07-02 · Эмпирический аудит harness по 8 реальным проектам — узкие места vs теория
+
+**Tags:** harness, audit, empirical, cross-project
+
+Оператор попросил свести практику: аудит текущего состояния лаборатории + сбор артефактов с проектов, реально использующих harness, + сводный анализ для выявления узких мест, которых не видно на чистой теории. Прогон: локальный аудит лаборатории (main thread) + 3 параллельных…
+
+[→ entries/0115-empiricheskiy-audit-harness-po-8-realnym-proektam-uzkie-mest.md](entries/0115-empiricheskiy-audit-harness-po-8-realnym-proektam-uzkie-mest.md)
+
+---
+
+## #114 · 2026-06-27 · Агрегация changelog CC 2.1.195 + верификация фич
+
+**Tags:** docs, harness
+
+Оператор попросил проанализировать последние 10 релизов Claude Code (2.1.179–2.1.195) и собрать фичи, полезные для harness-лаборатории. Прогон сделан как research+verification: агрегация из локального кэша changelog + сверка каждого значимого claim против установленного бинаря…
+
+[→ entries/0114-agregatsiya-changelog-cc-2-1-195-verifikatsiya-fich.md](entries/0114-agregatsiya-changelog-cc-2-1-195-verifikatsiya-fich.md)
+
+---
+
 ## #113 · 2026-06-26 · Эмпирический анализ stale transition-markers + sentence-level правило в docs-discipline
 
 **Tags:** adr, harness, docs

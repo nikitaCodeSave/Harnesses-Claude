@@ -27,7 +27,7 @@ truth для harness-philosophy.**
 - **Planner → Generator → Evaluator** — canonical pattern для long tasks. Negotiated sprint contracts: Generator+Evaluator договариваются о «done» до кода.
 - **Cost-threshold для opt-in multi-agent**: *«worth the cost когда task sits beyond what current model does reliably solo»*. Не default.
 - «I removed the sprint construct entirely — Opus 4.6 could natively handle the job».
-**Применяется:** principles.md foundational, [[discovery-critic agent]] = Evaluator-узел, retire_bias=3 (см. devlog #29).
+**Применяется:** principles.md foundational; Evaluator-узел — fresh-context critic (`claude-code-harness:/external-audit`); retire_bias=3 (см. devlog #29).
 
 ### [A Harness for Every Task: Dynamic Workflows in Claude Code](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code)
 **Авторы:** Thariq Shihipar & Sid Bidasaria (Claude Code MTS), 2 июня 2026. **Canonical для dynamic workflows** — the first-party post behind the `ultracode` / Workflow feature этого harness'а.
@@ -140,8 +140,8 @@ Live ground-truth по версиям. Релизы каждые несколь�
 - **v2.1.141** (May 13) — `/goal` (Research Preview); `claude agents` unified view; `--cwd` scoping; `/feedback` session attach
 - **v2.1.142** (May 14) — `claude agents` dispatch flags (`--add-dir/--settings/--mcp-config/--plugin-dir/--permission-mode/--model/--effort/--dangerously-skip-permissions`); fast mode default → Opus 4.7
 - **v2.1.143** (May 15) — plugin dependency enforcement; `worktree.bgIsolation: "none"`; background sessions preserve model+effort after waking; Shift+Tab in attached agent sessions cycles modes incl. auto
-- **v2.1.155→169** (late May → Jun 8) — полная дельта в `~/.claude/skills/claude-code-harness/references/native-capabilities.md` § «Changed in 2.1.155 → 2.1.169» + `builtins-inventory.md` § Delta. Highlights: `workflow`→`ultracode` keyword rename (160); `Stop` `additionalContext` (163); permissions hardening (160–166); fan-out resilience + `SendMessage` authority-hardening (161/166); **v2.1.169 (Jun 8)** — `--safe-mode`, `disableBundledSkills`, `/cd`, `claude agents --json` (+`id`/`state`/`--all`), worktree-edit-block hint, CLAUDE.md-threshold scaling.
-**Применяется:** version-claim verification, gating-feedback в memory. Updated baseline for builtins-inventory.md (versioned doc).
+- **v2.1.155→169** (late May → Jun 8) — полная дельта в `~/.claude/skills/claude-code-harness/references/native-capabilities.md` § «Changed in 2.1.155 → 2.1.169». Highlights: `workflow`→`ultracode` keyword rename (160); `Stop` `additionalContext` (163); permissions hardening (160–166); fan-out resilience + `SendMessage` authority-hardening (161/166); **v2.1.169 (Jun 8)** — `--safe-mode`, `disableBundledSkills`, `/cd`, `claude agents --json` (+`id`/`state`/`--all`), worktree-edit-block hint, CLAUDE.md-threshold scaling.
+**Применяется:** version-claim verification, gating-feedback в memory. Updated baseline for `native-capabilities.md` (canonical built-ins slice).
 
 ## Блок 3 — Claude Code creators & insiders
 
@@ -234,7 +234,7 @@ Runtime = Intelligent Harness Runtime (IHR).
 ### [arXiv 2604.14228 — Dive into Claude Code](https://arxiv.org/abs/2604.14228)
 **Авторы:** Liu, Zhao, Shang, Shen. 14 апреля 2026.
 **Тезисы:** Source-code analysis of Claude Code's TypeScript vs OpenClaw. 7-component structure, 5-layer subsystem architecture. **Core = «simple while-loop that calls model, runs tools, repeats»** — validates наш minimalism principle. Four extensibility mechanisms: **MCP, plugins, skills, hooks** — exactly наш surface. **Subagent delegation uses worktree isolation** — matches feedback_test_iterations_via_worktree.md.
-**Применяется:** independent reverse-engineering reference в builtins-inventory.md + workflow-orchestration.md.
+**Применяется:** independent reverse-engineering reference в `native-capabilities.md` + workflow-orchestration.md.
 
 ### [arXiv 2604.18071 — Architectural Design Decisions in AI Agent Harnesses](https://arxiv.org/abs/2604.18071)
 **Автор:** Hu Wei. 20 апреля 2026.

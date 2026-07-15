@@ -1,6 +1,6 @@
 ---
 owner: @nikitaCodeSave
-last-updated: 2026-06-09
+last-updated: 2026-07-02
 status: active
 supersedes: archive/workflow-2026-05-10.md
 ---
@@ -16,7 +16,7 @@ supersedes: archive/workflow-2026-05-10.md
 ## Spine: Plan → Work → Review
 
 ```
-[ контракт · PRD-lite · ADR ]                   ← upstream на новом/нетривиальном проекте (WORKFLOW.md §1-3)
+[ weight-class ↓ · Discovery(Explore, brownfield) · PRD-lite+NON-GOALS · design-lite→(large)грилл→ADR ]   ← upstream (WORKFLOW.md §1-3)
        ↓
 PLAN     →  WORK              →  REVIEW
 понять   →  implement         →  verify vs criteria
@@ -49,7 +49,7 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 
 | Задача | Что использовать | Где детали |
 |--------|------------------|------------|
-| Structured feature workflow (7-phase) | `/feature-dev` plugin (anthropics/claude-plugins-official) | [builtins-inventory.md](builtins-inventory.md) |
+| Structured feature workflow (7-phase) | `/feature-dev` plugin (anthropics/claude-plugins-official) | `native-capabilities.md` (kit) |
 | Long-running iterative refinement | `/ralph-loop` plugin (canonical Ralph pattern) | [workflow-async.md](workflow-async.md) |
 | Async / background watch | `Monitor` tool (v2.1.98+) | [workflow-async.md](workflow-async.md) |
 | Parallel feature branches | `-w` worktree + `claude agents` dispatch flags | [workflow-orchestration.md](workflow-orchestration.md) |
@@ -58,7 +58,7 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 | Bug-hunt sweep (cloud fleet) | `/ultrareview` (cloud multi-agent fleet) | [workflow-cloud-offload.md](workflow-cloud-offload.md) |
 | Scheduled / event-triggered | `Routines` (Anthropic web) | [workflow-cloud-offload.md](workflow-cloud-offload.md) |
 | Independent verifications | parallel subagents (built-in `general-purpose`) | [multi-agent.md](multi-agent.md) |
-| Commit / PR plumbing | `/commit` / `/commit-push-pr` plugin | [builtins-inventory.md](builtins-inventory.md) |
+| Commit / PR plumbing | `/commit` / `/commit-push-pr` plugin | `native-capabilities.md` (kit) |
 | Старт нового проекта / scaffolding canonical docs | `/init` + bootstrap canonical docs (нативно, `docs-discipline.md`) | [../../WORKFLOW.md](../../WORKFLOW.md) §1-3 |
 | Harness self-improvement | measurement loop + retire ritual | [workflow-evolution.md](workflow-evolution.md) |
 
@@ -66,7 +66,7 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 
 | Question | Read |
 |----------|------|
-| «Какой slash-command / flag / tool существует прямо сейчас?» | актуальный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.154+); lab-doc [builtins-inventory.md](builtins-inventory.md) — 2.1.143-era |
+| «Какой slash-command / flag / tool существует прямо сейчас?» | актуальный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.195 — единственный canonical срез) |
 | «Watch-process / scheduled task / handoff между сессиями» | [workflow-async.md](workflow-async.md) |
 | «Параллельные сессии, worktree, dispatch flags для `claude agents`» | [workflow-orchestration.md](workflow-orchestration.md) |
 | «Offload heavy phase в cloud (ultraplan/ultrareview/routines)» | [workflow-cloud-offload.md](workflow-cloud-offload.md) |

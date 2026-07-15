@@ -8,7 +8,7 @@ status: active
 
 > Operational layer для **parallel sessions / worktrees / dispatch flags / multi-process coordination**. Сюда идём когда задача требует больше одного thread'а в полёте — но без cloud-offload (см. [workflow-cloud-offload.md](workflow-cloud-offload.md)).
 >
-> Companion к [workflow.md](workflow.md), [builtins-inventory.md](builtins-inventory.md), [multi-agent.md](multi-agent.md).
+> Companion к [workflow.md](workflow.md), [multi-agent.md](multi-agent.md).
 
 ## TL;DR
 

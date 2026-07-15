@@ -8,7 +8,7 @@ status: active
 
 > Operational layer для **non-blocking** работы: фоновые watch-процессы, scheduled tasks, inter-agent communication, recurring loops. Сюда заглядываем когда agent не должен сидеть и ждать.
 >
-> Companion к [workflow.md](workflow.md) spine и [builtins-inventory.md](builtins-inventory.md).
+> Companion к [workflow.md](workflow.md) spine.
 
 ## TL;DR
 

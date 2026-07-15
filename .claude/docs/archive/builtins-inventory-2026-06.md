@@ -2,7 +2,14 @@
 owner: @nikitaCodeSave
 last-updated: 2026-06-23
 version-targeted: claude-code 2.1.170
+status: FROZEN-ARCHIVE
 ---
+
+> 🧊 **FROZEN SNAPSHOT (retired 2026-07-02, devlog #116).** Live canonical built-ins slice —
+> `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.195). This
+> version-pinned flag/slash catalog was retired because a hand-maintained flag table encodes
+> "the model can't run `--help`" (it can) — a second, always-stale source. Kept for historical
+> CC-2.1.x detail only; do not edit or fold new deltas here.
 
 # Built-ins inventory — Claude Code 2.1.170
 
