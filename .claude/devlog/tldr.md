@@ -8,6 +8,26 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #120 · 2026-07-15 · Плагин актуализирован под standalone-топологию + стандарты Anthropic (v1.13.0)
+
+**Tags:** refactor, harness, distribution, docs
+
+После выноса kit'а в отдельный публичный репо (#119) его внутренний нарратив остался dot-claude-центричным («канон = ~/.claude», доставка через git-clone dot-claude, release-скрипт в ~/.claude/scripts/), а манифесты не были сверены с first-party стандартами плагинов. Оператор…
+
+[→ entries/0120-plagin-aktualizirovan-pod-standalone-topologiyu-standarty-an.md](entries/0120-plagin-aktualizirovan-pod-standalone-topologiyu-standarty-an.md)
+
+---
+
+## #119 · 2026-07-15 · Kit вынесен в отдельный публичный репо: source of truth + symlink-догфуд
+
+**Tags:** refactor, harness, distribution
+
+Kit claude-code-harness жил подкаталогом внутри приватного dot-claude (весь ~/.claude под git). Централизованное приватное развитие уже работало (marketplace + SemVer), но для публичного шаринга dot-claude нельзя опубликовать целиком (личный конфиг), а история kit'а была…
+
+[→ entries/0119-kit-vynesen-v-otdelnyy-publichnyy-repo-source-of-truth-symli.md](entries/0119-kit-vynesen-v-otdelnyy-publichnyy-repo-source-of-truth-symli.md)
+
+---
+
 ## #118 · 2026-07-15 · Внешний 3-фазный аудит кита → fold: v1.12.0 наконец отгружен, supply chain починен, уроки #115 доставлены
 
 **Tags:** harness, audit, kit, release, supply-chain, currency, guard
