@@ -1,10 +1,10 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-07
 status: active
 ---
 
-# Async & background workflow — Claude Code 2.1.169
+# Async & background workflow
 
 > Operational layer для **non-blocking** работы: фоновые watch-процессы, scheduled tasks, inter-agent communication, recurring loops. Сюда заглядываем когда agent не должен сидеть и ждать.
 >
@@ -13,7 +13,7 @@ status: active
 ## TL;DR
 
 5 primitives:
-1. **`Monitor` tool** (v2.1.98) — event-driven background watcher. **Replaces polling/sleep loops** (dominant new primitive 2026 Q2). **Availability (2026-06-11, FP tools-reference#monitor-tool)**: недоступен на Bedrock/Vertex/Foundry и при `DISABLE_TELEMETRY` / `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` — на этой машине отсутствует именно поэтому (`DISABLE_TELEMETRY=1` в `~/.claude/settings.json`); fallback — background Bash (output-file path + `<task-notification>` по завершении).
+1. **`Monitor` tool** (v2.1.98) — event-driven background watcher. **Replaces polling/sleep loops** (dominant new primitive 2026 Q2). **Availability (2026-06-11, FP tools-reference#monitor-tool)**: недоступен на Bedrock/Vertex/Foundry и при `DISABLE_TELEMETRY` / `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` — если у оператора выставлен любой из них, Monitor отсутствует; fallback — background Bash (output-file path + `<task-notification>` по завершении).
 2. **`Task*` tools** — structured task list (L0 memory layer)
 3. **`Cron*` / `ScheduleWakeup`** — time-based wake
 4. **`SendMessage`** — agent-to-agent mid-flight communication

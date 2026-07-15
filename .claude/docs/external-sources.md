@@ -1,5 +1,5 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-09
 ---
 
@@ -67,7 +67,7 @@ truth для harness-philosophy.**
 ### [Long-Running Claude for Scientific Computing](https://www.anthropic.com/research/long-running-Claude)
 **Автор:** Mishra-Sharma, 23 марта 2026.
 **Тезисы:** **Ralph loop** — single-agent sequential для coupled pipelines (нельзя параллелить — каждый шаг зависит от прошлого). Контраст с multi-agent research.
-**Применяется:** `.claude/loop/` self-improvement infrastructure (devlog #26-29, #41) — паттерн адаптирован.
+**Применялось:** `.claude/docs/archive/loop-2026-05/` self-improvement infrastructure (retired 2026-07-15; devlog #26-29, #41) — паттерн адаптирован.
 
 ### [April 23 Postmortem — recent Claude Code quality reports](https://www.anthropic.com/engineering/april-23-postmortem)
 **Дата:** 23 апреля 2026.
@@ -88,7 +88,7 @@ Live ground-truth по фичам Claude Code CLI. **Источник для «�
 - `/best-practices` — Cherny + team 2026, single highest-leverage doc
 - `/sub-agents` — built-ins inventory, frontmatter spec
 - `/skills` — SKILL.md ≤500 строк, frontmatter required
-- `/hooks` — ~29 событий lifecycle (не 12 как в более ранних источниках)
+- `/hooks` — 30 событий lifecycle (не 12 как в более ранних источниках)
 - `/memory` — CLAUDE.md hierarchy, @import syntax, MEMORY.md auto-load 200 lines/25KB
 - `/settings` — 3-layer permissions model
 - `/common-workflows`, `/code-review`, `/cli-reference`, `/commands`, `/slash-commands`
@@ -173,38 +173,6 @@ Live ground-truth по версиям. Релизы каждые несколь�
 ### [Every — How to Use Claude Code Like the People Who Built It](https://every.to/podcast/transcript-how-to-use-claude-code-like-the-people-who-built-it)
 Cat Wu + Cherny transcripted podcast — sub-agent / slash-command usage patterns from inside Anthropic.
 
-## Блок 4 — Independent practitioners (high-signal essays)
-
-### [Karpathy — LLM coding pitfalls](https://x.com/karpathy/status/2015883857489522876), [forrestchang/andrej-karpathy-skills pack](https://github.com/forrestchang/andrej-karpathy-skills)
-**Авторы:** Andrej Karpathy (original observations), Forrest Chang (pack distribution, MIT).
-**Тезисы:** 4 принципа — Think Before Coding (state assumptions, ask when uncertain) / Simplicity First («Would a senior engineer say this is overcomplicated?») / Surgical Changes («if you notice unrelated dead code, mention it — don't delete it») / Goal-Driven Execution (transform "fix the bug" → "write a test that reproduces it, then make it pass"). LLM-failures source: «models make wrong assumptions, don't seek clarifications, don't surface inconsistencies, overcomplicate code and APIs, bloat abstractions».
-**Применяется:** **Global user-level baseline** — копия в `~/.claude/CLAUDE.md` 2026-05-18 (apply across all sessions/projects). Также 12-строчный compact subset в `bootstrap-checklist.md` Phase 2 шаблон target-CLAUDE.md для shared-team scenarios (defensive default — team-mate'ы без своего global baseline). Empirical N=3×3 (devlog #49): +0.67 avg_Q7 lift над bare baseline на single task; longitudinal value через тысячи сессий превышает single-experiment measurement. См. `[[reference_karpathy_skills_pack]]` + `[[feedback_empirical_over_theoretical_dismiss]]`.
-
-### [blog.sshh.io / Shrivu Shankar — «How I use every Claude Code feature»](https://blog.sshh.io/p/how-i-use-every-claude-code-feature)
-**Тезисы:** *«Use hooks to enforce state validation at commit time (block-at-submit). Avoid blocking at write time — let the agent finish its plan, then check the final result»*.
-**Применяется:** **anti-pattern в CLAUDE.md** («не блокировать writes mid-thought»), hooks дизайн.
-
-### [addyosmani.com — Long-Running Agents](https://addyosmani.com/blog/long-running-agents/)
-**Тезисы:** *«every component in a harness encodes an assumption about what the model can't do on its own. When you couple them, an assumption that goes stale means the whole system has to change at once»* — frame для decoupled harness > tightly coupled framework.
-**Применяется:** ADR-обоснование для retire_bias и periodic harness-prune.
-
-### [philschmid.de — Context Engineering Part 2](https://philschmid.de/context-engineering-part-2)
-**Автор:** Phil Schmid (с Manus operational data).
-**Тезисы:** 1M-модель деградирует на <256K tokens; компактифицировать **до** входа в зону rot'а, не у потолка.
-**Применяется:** principles.md context rot threshold ~256-400K.
-
-### [cognition.ai/blog/dont-build-multi-agents](https://cognition.ai/blog/dont-build-multi-agents)
-**Тезисы:** Single-threaded writes; subagents — только для read/investigation. Сильное эхо Anthropic multi-agent-research-system thesis.
-**Применяется:** spawn policy («main thread = meta-orchestrator owns end-to-end»).
-
-### [generativeprogrammer.com — 12 agentic harness patterns from leaked Claude Code](https://generativeprogrammer.com/p/12-agentic-harness-patterns-from)
-**Тезисы:** Reverse-engineered из March 2026 Claude Code source leak. Planner→Generator→Evaluator, tiered memory, progressive compaction 5 stages, tool gating, subagent isolation, hooks pipeline 27 events.
-**Применяется:** validates через independent reverse-engineering каноничность Anthropic-патт`ерн'ов; не invariant сам по себе (leaked source not authoritative).
-
-### [Lance Martin — Context Engineering for Agents](https://rlancemartin.github.io/2025/06/23/context_engineering/)
-**Тезисы:** select / compress / isolate — три rope для context engineering.
-**Применяется:** memory-layers.md curation rituals.
-
 ## Блок 5 — Research papers (peer-reviewed / arXiv)
 
 ### [arXiv 2603.25723 — Tsinghua «Natural-Language Agent Harnesses (NLAH)»](https://arxiv.org/abs/2603.25723)
@@ -264,108 +232,6 @@ Runtime = Intelligent Harness Runtime (IHR).
 **Авторы:** Hong / Troynikov / Huber, июль 2025. 18 моделей.
 **Тезисы:** эмпирическое подтверждение pre-rot threshold; performance деградирует ДО hard context limit.
 **Применяется:** principles.md context budget reasoning.
-
-## Блок 6 — Community essays (2026)
-
-### [claudefa.st — Opus 4.7 best practices](https://claudefa.st/blog/guide/development/opus-4-7-best-practices)
-**Цитата:** *«more selective subagent spawning. The default favors doing work in one response over fanning out»*. CONFIRMED дословно.
-### [claudefa.st — Rules Directory](https://claudefa.st/blog/guide/mechanics/rules-directory)
-**Тезисы:** `paths:`-scoped rules через `.claude/rules/*.md` (native 2.0.64+).
-**Применяется:** evidence для `.claude/rules/` структуры; **known bug** Issue #16853 (subdirectory paths-scoped rules не загружаются — у нас обходится full-load).
-
-### [ofox.ai — Claude Code Hooks, Subagents, Skills Complete Guide 2026](https://ofox.ai/blog/claude-code-hooks-subagents-skills-complete-guide-2026/)
-Practical guide по всем custom-primitives. Используется как cross-check для compsability.
-
-### [boringbot.substack.com — Skills/Subagents/Hooks practical overview](https://boringbot.substack.com/p/claude-code-skills-subagents-hooks)
-Прагматичный взгляд на трёхуровневую систему (hooks deterministic / subagents capability-isolated / skills workflow-templates).
-
-### [blakecrosley.com — Agent Architecture](https://blakecrosley.com/guides/agent-architecture)
-**Тезисы:** Skill auto-discovery в subagents (May 2026, v2.1.x release notes coverage).
-
-### [Daily Dose of DS — Anatomy of the .claude/ Folder](https://blog.dailydoseofds.com/p/anatomy-of-the-claude-folder)
-**Тезисы:** разбор структуры `.claude/` директории как layout pattern.
-### [codewithmukesh.com — same topic](https://codewithmukesh.com/blog/anatomy-of-the-claude-folder/)
-Дополнительный угол на ту же тему.
-
-### [Jose Parreño García — How Claude Code rules actually work](https://joseparreogarcia.substack.com/p/how-claude-code-rules-actually-work)
-**Тезисы:** механика загрузки rules — order, priority, override.
-
-### [paddo.dev — Path-specific native rules](https://paddo.dev/blog/claude-rules-path-specific-native/)
-**Тезисы:** native support для path-scoped rules.
-
-### [obviousworks.ch — Designing CLAUDE.md right (2026 architecture)](https://www.obviousworks.ch/en/designing-claude-md-right-the-2026-architecture-that-finally-makes-claude-code-work/), [shareuhack.com — CLAUDE.md setup guide 2026](https://www.shareuhack.com/en/posts/claude-code-claude-md-setup-guide-2026), [thepromptshelf.dev — Memory persistence guide 2026](https://thepromptshelf.dev/blog/claude-code-memory-persistence-guide-2026/)
-CLAUDE.md best-practice essays.
-
-### [agentrulegen.com — cursorrules vs claude.md](https://www.agentrulegen.com/guides/cursorrules-vs-claude-md)
-Cross-tool perspective.
-
-### [dev.to/yunbow — 200 lines в CLAUDE.md уронило code quality до 79%](https://dev.to/yunbow/200-lines-in-claudemd-dropped-my-code-quality-to-79-splitting-into-3-files-got-it-to-969-1glm)
-**Тезисы:** empirical evidence для CLAUDE.md ≤200 lines правила; split в `docs/` или path-scoped rules.
-**Применяется:** docs-discipline rule 2 quantitative backing.
-
-### [mcp.directory — Claude Code best practices](https://mcp.directory/blog/claude-code-best-practices), [developersdigest.tech — Agent teams subagents 2026](https://www.developersdigest.tech/blog/claude-code-agent-teams-subagents-2026)
-Aggregator-style guides.
-
-### [Hyung Won Chung tweet](https://x.com/hwchung27/status/1943395653738287429)
-*«Mistake not to add structure now, mistake not to remove it later»* — structural-retire рамка для periodic harness-prune.
-**Применяется:** evidence для retire_bias=3 (devlog #29).
-
-### [7tonshark — Claude ADR pattern](https://7tonshark.com/posts/claude-adr-pattern/), [shivamagarwal7 — TDD sub-agents](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009), [alexop.dev — TDD Vue workflow](https://alexop.dev/posts/custom-tdd-workflow-claude-code-vue/), [andrew.ooo — Superpowers agentic skills](https://andrew.ooo/posts/superpowers-agentic-skills-framework-claude-code/), [kentgigger — Thinking triggers](https://kentgigger.com/posts/claude-code-thinking-triggers), [findskill.ai — Ultrathink extended thinking](https://findskill.ai/blog/claude-ultrathink-extended-thinking/), [psantanna — Workflow guide](https://psantanna.com/claude-code-my-workflow/workflow-guide.html), [agentfactory.panaversity — Configuration hierarchy](https://agentfactory.panaversity.org/docs/General-Agents-Foundations/claude-code-teams-cicd/claude-md-configuration-hierarchy), [Inside the Agent Harness](https://medium.com/jonathans-musings/inside-the-agent-harness-how-codex-and-claude-code-actually-work-63593e26c176), [Mishra — Skills/Subagents/Hooks practical overview](https://medium.com/@mishra.shashank35/claude-code-skills-subagents-hooks-and-plugins-a-practical-overview-572de7cedb20)
-Дополнительные community-эссе для cross-validation решений.
-
-## Блок 7 — Curated lists & reference implementations
-
-### [github.com/anthropics/skills](https://github.com/anthropics/skills)
-**Канонический marketplace skills.** SKILL.md spec, skill-creator reference impl.
-**Применяется:** skill-creator подключается через marketplace, не форкается локально (CLAUDE.md self-evolution rule).
-
-### [github.com/HKUDS/OpenHarness](https://github.com/HKUDS/OpenHarness)
-**Тезисы:** Open implementation полной harness arch — 43 tools, on-demand skills, plugins, multi-tier permissions, hooks, 54 commands, MCP client, persistent memory, multi-agent coordinator, React TUI. Совместим с Claude/OpenAI/Kimi/GLM.
-**Применяется:** systems-level reference для понимания harness internals.
-
-### [github.com/shareAI-lab/learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)
-**Тезисы:** 12 reverse-engineered sessions (s01-s12): agent loop, tool use, TodoWrite, subagents, skills, compaction, tasks, background tasks, agent commands, protocols, autonomous agents, worktree isolation. Python references + 3 языка.
-**Применяется:** deepest educational resource — harness internals.
-
-### Curated awesome-lists
-- [hesreallyhim/awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) — флагманский curated list skills/hooks/commands.
-- [VoltAgent/awesome-claude-code-subagents](https://github.com/VoltAgent/awesome-claude-code-subagents) — 100+ subagents с правильными permission tiers.
-- [ai-boost/awesome-harness-engineering](https://github.com/ai-boost/awesome-harness-engineering) — meta-cheatsheet + reference на **claude-devtools** (token distribution по 7 категориям, execution trees subagents с cost breakdown).
-- [rohitg00/awesome-claude-code-toolkit](https://github.com/rohitg00/awesome-claude-code-toolkit) — 135 agents, 35 skills, 15 rules, 20 hooks.
-- [jqueryscript/awesome-claude-code](https://github.com/jqueryscript/awesome-claude-code), [awesomeclaude.ai](https://awesomeclaude.ai/awesome-claude-code).
-
-### Reference implementations
-- [shanraisshan/claude-code-best-practice](https://github.com/shanraisshan/claude-code-best-practice) — «human is oversight, not typist — research → plan → execute → review → ship».
-- [ChrisWiles/claude-code-showcase](https://github.com/ChrisWiles/claude-code-showcase) — полный setup с GitHub Actions.
-- [FlorianBruniaux/claude-code-ultimate-guide](https://github.com/FlorianBruniaux/claude-code-ultimate-guide) — production-ready templates.
-- [shinpr/claude-code-workflows](https://github.com/shinpr/claude-code-workflows) — workflow patterns library.
-- [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) — codebase-onboarding 4-фазная методичка ([SKILL.md](https://github.com/affaan-m/everything-claude-code/blob/main/skills/codebase-onboarding/SKILL.md)).
-- [flora131/atomic](https://github.com/flora131/atomic), [Chachamaru127/claude-code-harness](https://github.com/Chachamaru127/claude-code-harness).
-- [byPawel/devlog-mcp](https://github.com/byPawel/devlog-mcp) — daily/weekly/monthly devlog compression, retrospectives, Mermaid diagrams.
-
-## Блок 8 — Memory & context tooling research
-
-### [LangChain — LangMem SDK](https://blog.langchain.com/langmem-sdk-launch/)
-**Тезисы:** semantic / episodic / procedural memory taxonomy.
-**Применяется:** memory-layers.md L0-L4 модель адаптирует таксономию.
-
-### [Mem0 — State of AI Agent Memory 2026](https://mem0.ai/blog/state-of-ai-agent-memory-2026)
-**Тезисы:** benchmarks Letta / Mem0 / Zep. Overkill для нашего масштаба, но useful для understanding memory backend space.
-
-## Блок 9 — Live CLI evidence & GitHub issues
-
-### `claude --help` / `claude agents` / `claude plugin --help`
-Live ground-truth поверхность CLI. Все «new findings» из research-audit (P7-P15): `--include-hook-events`, `--bare` (out of scope per API constraint), `--brief` SendUserMessage, `ultrareview`, `--max-budget-usd` (out of scope), `--json-schema`, `--agents <json>`, `--betas` (API-only).
-**Применяется:** verification поверх документации; источник для memory-records (`reference_goal_agentview_empirical.md`, `reference_bg_flag_gating.md`).
-
-### [github.com/anthropics/claude-code/issues/6305](https://github.com/anthropics/claude-code/issues/6305)
-Pre/PostToolUse hooks not executing — acknowledged issue (CONFIRMED в research-audit).
-
-### [github.com/anthropics/claude-code/issues/16853](https://github.com/anthropics/claude-code/issues/16853)
-paths-scoped rules в подкаталогах могут не загружаться. Не релевантно у нас (`.claude/rules/testing.md` без `paths:`).
-
-### [github.com/anthropics/claude-code/issues/49947](https://github.com/anthropics/claude-code/issues/49947)
-Дополнительный tracked issue (контекст в devlog).
 
 ## Блок 10 — Source-quality rubric для будущих расширений
 

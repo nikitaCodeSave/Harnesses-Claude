@@ -1,10 +1,10 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-07
 status: active
 ---
 
-# Harness evolution workflow — Claude Code 2.1.169
+# Harness evolution workflow
 
 > **«Harness matters more than the model»** — first-party doctrine, 2026-05-14. Это doc про то, **когда и как** harness переучивается под новые модели и накопленную empirics.
 >
@@ -92,7 +92,7 @@ Portable **principles**:
 
 ## Loop pattern under CLI constraint
 
-`.claude/loop/` infrastructure (devlog #26-29, #41) — local adaptation of Anthropic's Ralph loop (Mishra-Sharma 2026, scientific computing) и Huntley's ralph-wiggum. Key elements:
+`.claude/docs/archive/loop-2026-05/` infrastructure (**retired 2026-07-15 — negative result**; devlog #26-29, #41) — local adaptation of Anthropic's Ralph loop (Mishra-Sharma 2026, scientific computing) и Huntley's ralph-wiggum. Key elements (сохранено как урок):
 
 - **Variance-checked fitness function** — n=3 multiplier per [benchmark.md](benchmark.md) Layer D
 - **Retire-bias=3** — eliminate underperforming additions aggressively

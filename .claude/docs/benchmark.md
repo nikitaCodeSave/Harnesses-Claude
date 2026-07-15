@@ -1,5 +1,5 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-09
 ---
 
@@ -140,15 +140,11 @@ Aggregate summary обязан включать:
 - **Layer B**: operational на 3 fixture × 5 tasks. `headless-runner.sh` clone→inject→`claude --print`→JSON→pytest judge→report. Cross-harness comparison validated (`reports/CROSS-HARNESS-COMPARISON.md`).
 - **Layer C**: partial — token/turn/cost захвачены, trajectory parsing — work-in-progress (P2 этой итерации).
 - **Layer D**: applied ad-hoc на T03 (4×4 confirmed −24% median), не protocol-default yet.
-- **Stop-hook two-gate validation**: `.claude/hooks/stop-validation.sh` — independent test re-run on session end.
 
 ## Roadmap
 
 - **Active (P1+P2, 2026-05-11)**: trajectory parsing в `headless-runner.sh`, доки aligned, T01–T04 re-prog.
-- **P3**: первая legend `legacy-no-tests` (modernization scenario, наибольший expected harness ROI).
-- **P4**: trip-wire / Neg-invariant tasks (5-8 honeypot prompts).
-- **P5**: stat protocol enforced default (n=3, bracket reporting).
-- **P6**: F-ambiguous tasks (criteria-judge не pytest binary). Самое ценное, самое тяжёлое.
+- **Backlog (aspirational, не реализовано)**: `legacy-no-tests` legend, trip-wire/honeypot tasks, enforced stat-protocol (n=3 bracket reporting), F-ambiguous criteria-judge tasks. Реализуется по доказанной потребности — не default roadmap.
 
 ---
 
@@ -157,14 +153,13 @@ Aggregate summary обязан включать:
 - `.claude/benchmark/static-checks.sh` — Layer A implementation.
 - `.claude/benchmark/headless-runner.sh` — Layer B+C runner.
 - `.claude/devlog/rebuild-index.py` — Layer A check #4.
-- `.claude/hooks/stop-validation.sh` — independent two-gate validation.
 - `.claude/skills/skill-creator:skill-creator` (marketplace) — Layer B+C для skills (eval + Comparator).
 
 ---
 
 ## Native `/goal` и `claude agents` — где применимы, где нет
 
-Claude Code (built-ins с 2.1.139, актуально на 2.1.169) даёт `/goal` (loop-to-condition внутри сессии) и `claude agents` (TUI для параллельных background-сессий). На первый взгляд кажется, что это покрывает наши runner'ы — на практике нет: они на разном уровне абстракции.
+Claude Code (built-ins с 2.1.139, актуально на 2.1.210) даёт `/goal` (loop-to-condition внутри сессии) и `claude agents` (TUI для параллельных background-сессий). На первый взгляд кажется, что это покрывает наши runner'ы — на практике нет: они на разном уровне абстракции.
 
 **`/goal` — runtime control внутри одной `claude --print` сессии**. Наши runner'ы — measurement pipelines (clone fixture → inject harness → run claude → parse stream-json → pytest judge → aggregate report). `/goal` не заменяет ни один из 5/9 фаз. Заменить им можно только **prompt** на входе в Phase 3 (Build) battle-test-runner'а, и то выборочно:
 

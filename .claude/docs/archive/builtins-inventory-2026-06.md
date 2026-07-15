@@ -1,5 +1,5 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-23
 version-targeted: claude-code 2.1.170
 status: FROZEN-ARCHIVE

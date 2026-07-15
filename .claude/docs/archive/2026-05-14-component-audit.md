@@ -1,5 +1,5 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-05-14
 status: snapshot
 ---

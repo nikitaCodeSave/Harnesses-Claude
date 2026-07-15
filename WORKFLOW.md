@@ -1,6 +1,6 @@
 # Development workflow with Claude Code
 
-Текущий (поколение Fable 5 + Opus 4.8 / Claude Code 2.1.195) workflow для разработчика высокого класса.
+Текущий (поколение Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.210) workflow для разработчика высокого класса.
 Плотный портативный гайд от старта проекта до пайплайна — с акцентом на рычаги, двигающие качество. Первоисточники — внизу.
 
 > Это human-facing гайд. Машинный routing-spine для main thread'а — `.claude/docs/workflow.md`.
@@ -154,4 +154,4 @@ Scope **превышает один контекст** (codebase-sweep, мигр
 - [8] [Claude Code Sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing) + [Settings](https://code.claude.com/docs/en/settings) — permissions (deny/ask/allow), guardrails, OS-level sandbox
 - [9] [Onboarding Claude Code like a new developer](https://claude.com/blog/onboarding-claude-code-like-a-new-developer-lessons-from-17-years-of-development) (MacLean) — контекст-слой как версионируемый артефакт; «record context, version it, grow it»
 
-<!-- last-updated: 2026-07-02 · target: Fable 5 + Opus 4.8 / Claude Code 2.1.195 -->
+<!-- last-updated: 2026-07-15 · target: Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.210 -->

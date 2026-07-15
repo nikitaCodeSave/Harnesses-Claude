@@ -1,10 +1,10 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-07
 status: active
 ---
 
-# Orchestration workflow — Claude Code 2.1.169
+# Orchestration workflow
 
 > Operational layer для **parallel sessions / worktrees / dispatch flags / multi-process coordination**. Сюда идём когда задача требует больше одного thread'а в полёте — но без cloud-offload (см. [workflow-cloud-offload.md](workflow-cloud-offload.md)).
 >

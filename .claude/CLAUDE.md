@@ -4,8 +4,8 @@
 создаётся в первой сессии через built-in `/init` или `/team-onboarding`.
 
 **Этот репозиторий — лаборатория harness'а, не шаблон.** `.claude/` здесь
-содержит R&D-машинерию (`loop/`, `benchmark/`, discovery-критиков), которую
-НЕЛЬЗЯ копировать целиком в целевой проект. Каноничное, отгружаемое знание о
+содержит R&D-машинерию (`benchmark/`, discovery-критиков, архивный
+`docs/archive/loop-2026-05/`), которую НЕЛЬЗЯ копировать целиком в целевой проект. Каноничное, отгружаемое знание о
 дизайне harness'а живёт в глобальном скилле `~/.claude/skills/claude-code-harness/`;
 минимальный стартовый harness для нового проекта — его **Bootstrap-режим**, а
 не копия этого репо.
@@ -65,8 +65,8 @@ Owns задачу end-to-end до verification и финального отве�
 ассоциации». Single-agent — дефолт для most coding; bounded fan-out
 оправдан, когда scope **превышает один контекст** (codebase-scale sweep,
 миграция, trust-critical верификация find→refute→converge). Для такого —
-**built-in dynamic workflows** (ключевое слово `ultracode`
-или `/effort ultracode`), НЕ кастомный subagent-pipeline (built-ins-first;
+**built-in dynamic workflows** (ключевое слово `ultracode`),
+НЕ кастомный subagent-pipeline (built-ins-first;
 стоит заметно больше токенов — не дефолт). Полный baseline (pre-spawn
 checklist, brief contract, model assignment, anti-patterns, evidence-based
 числа) — читать on-demand из `.claude/docs/multi-agent.md`.
@@ -140,4 +140,4 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 - `.claude/devlog/entries/` — recent entries (live); архив `entries/archive/`. Index via `python3 .claude/devlog/rebuild-index.py`.
 - `.claude/agents/` — каталога нет (custom-агентов нет; audit-роли едут плагином `claude-code-harness`).
 - `.claude/audits/` — provenance прогонов `/external-audit` (AUDIT-*.json + логи).
-- `.claude/hooks/` — `session-context`, `stop-validation`, `loop-protected-guard`, `cost-warn`.
+- `.claude/hooks/` — каталога нет: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером). SessionStart (devlog + active-progress surfacing), Stop (test-quality reminder) и PreToolUse (`system-guard`, DENY catastrophic) покрыты **глобальными** `~/.claude/hooks/`.

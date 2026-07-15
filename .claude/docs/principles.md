@@ -1,5 +1,5 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-09
 ---
 
@@ -21,7 +21,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 - **Skills** (action-only, workflow-templates): `update-plan-progress`. Devlog — глобальный канон `~/.claude/skills/devlog/` (project-pin скрипта: `.claude/devlog/rebuild-index.py`). SKILL.md ≤500 строк. Каноничное знание о дизайне harness'а — глобальный `~/.claude/skills/claude-code-harness/`. (`project-docs-bootstrap` в harness не входит — native + WORKFLOW.md §3 + docs-discipline покрывают bootstrap.)
 - **Custom agents**: нет. Дубли built-in/kit не создаются: orchestrator-роль — сам main thread, security — built-in `/security-review`, audit — плагин `claude-code-harness:/external-audit` (3 роли).
 - **Built-in agents** (5): `Explore` (read-only research), `Plan` (architect-level planning), `general-purpose` (open-ended), `statusline-setup` (UI), `claude-code-guide` (вопросы про Claude Code).
-- **Hooks**: `session-context` (SessionStart), `stop-validation` (Stop, advisory), `loop-protected-guard` (PreToolUse, активен при `LOOP_MODE=1`), `cost-warn` (UserPromptSubmit).
+- **Hooks**: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером). Активны только **глобальные** `~/.claude/hooks/`: `session-context` (SessionStart: devlog + active-progress inject), `test-quality-reminder` (Stop, advisory), `system-guard` (PreToolUse, DENY catastrophic).
 - **Always-loaded rules**: `testing.md` (5 invariants), `docs-discipline.md` (7 invariants), `api-constraint.md`.
 - **Reference docs** (on-demand): `workflow.md` (Plan→Work→Review spine + slice docs), `multi-agent.md`, `benchmark.md`, и др. в `.claude/docs/`.
 
@@ -31,7 +31,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 - **Spawn justified ТОЛЬКО**: (а) context isolation (search-heavy / broad codebase scan загрязнит main), (б) parallelism (independent verifications сходящиеся в main), (в) auto-compact rescue (редко при 1M).
 - **Single-agent default; bounded fan-out когда scope превышает один контекст**. Most coding — single thread (*«Most coding tasks involve fewer truly parallelizable tasks than research»* — [Multi-Agent Research System](https://www.anthropic.com/engineering/multi-agent-research-system)). Что изменилось под 4.8: Anthropic ship'нул **dynamic workflows** как first-party bounded-fan-out примитив (keyword `ultracode`, или просто попроси) — по built-ins-first роутим к нему для codebase-scale sweep / миграции / trust-critical верификации (find→refute→converge), НЕ переизобретаем оркестрацию кастомной машинерией. Стоит заметно больше токенов — не дефолт; verify ROI до fan-out. First-party обоснование — [«A harness for every task» (Shihipar & Bidasaria, 2 июня 2026)](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code): изолированные субагенты структурно лечат три failure-mode длинных/параллельных прогонов — **agentic laziness**, **self-preferential bias** (ровно почему §8 fresh-context ≠ self-recheck), **goal drift**.
 - **Subagent isolation для high-stakes — opt-in допустимо**. Patterns: Planner→Generator→Evaluator (canonical Anthropic для long tasks, Rajasekaran 2026 — теперь нативно покрывается dynamic workflows на CLI-подписке, без API), TDD triad (test-writer/implementer/refactorer), Driver-Navigator (Opus+Sonnet). Cost-threshold per Rajasekaran: *«worth the cost когда task sits beyond what current model does reliably solo»*. **Mandatory** pipeline за каждую задачу — anti-pattern.
-- **Model assignment**: main/lead = Opus 4.8; reasoning subagent = Sonnet 4.6; grunt (file scans, log filtering) = Haiku 4.5. Agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) — experimental, off by default.
+- **Model assignment**: main/lead = Opus 4.8; reasoning subagent = Sonnet 5; grunt (file scans, log filtering) = Haiku 4.5. Agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) — experimental, off by default.
 - **Custom agent justified только**: специализированный domain (security-reviewer, accessibility-auditor), restricted tool set enforcing policy, persistent memory isolation. Orchestration / general-purpose work — main thread.
 
 ## Skills (Agent Skills)
@@ -47,7 +47,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 - **Use hook когда action must happen every time с zero exceptions**. *«Unlike CLAUDE.md instructions which are advisory, hooks are deterministic and guarantee the action happens»* — Best Practices.
 - **Block-at-decision (PreToolUse), не block-at-write**. PreToolUse инспектирует tool input до execution; `UserPromptSubmit` — инспектирует user prompt content. Avoid blocking mid-thought.
-- **Event types в harness'е**: `SessionStart` (session-context inject), `Stop` (stop-validation, advisory), `PreToolUse` (loop-protected-guard при LOOP_MODE), `UserPromptSubmit` (cost-warn). Claude Code определяет **30** hook-событий (полный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md`); harness использует 4. Глобальный `system-guard.sh` (PreToolUse, DENY catastrophic) — user-level.
+- **Event types**: Claude Code определяет **30** hook-событий (полный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md`). Проектных хуков harness не держит; активны только **глобальные** `~/.claude/hooks/` — `session-context` (SessionStart: devlog + progress inject), `test-quality-reminder` (Stop, advisory), `system-guard` (PreToolUse, DENY catastrophic).
 - **Handler types**: `command` (shell + JSON), `mcp_tool`, `http`. Exit code 0 = allow, 2 = block, other = non-blocking error.
 - Source: [Hooks documentation](https://docs.claude.com/en/docs/claude-code/hooks).
 
@@ -93,7 +93,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 - **Single-incident NOT invariant**. Pattern требует multi-source evidence или повторяющейся empirics перед фиксацией как rule.
 - **Pilot validation для harness changes**: Tier 0 (static, <10s, blocker) → Tier 1 (pilot project task suite) → Tier 2 (per-component evals). Methodology — `.claude/docs/benchmark.md`.
 - **Empirical cost envelope** (2026-05-11, devlog #24; **4.7-era — re-measure due под 4.8**): на T01/T02 simple tasks our harness даёт +24-27% cost vs no-harness baseline под Opus 4.7 при идентичном quality. ECC raw inject ≈ neutral, но ломает pytest discovery через 90+ parasitic tests. cwc-long-running-agents +46% cost — opt-in для long-running fixed-spec scenarios. Re-measure trigger (major model upgrade) наступил с 4.7→4.8: первый 4.8-замер (n=1, devlog #52) на low-exploration text2sql — harness = pure overhead (×2.6 cost, ×2 turns через Task-ceremony), quality tie (score-дельта 81 vs 87 — внутри Ollama-шума, одна F-Q). Направленно подтверждает axis «ROI ∝ exploration cost». Полный n=3 verdict pending.
-- **Self-improvement Ralph-loop** (2026-05-11, devlog #26/#27): empirical evolution цикл harness'а через variance-checked fitness function + retire-bias + protected-files guard. Pattern adapted from [Mishra-Sharma «Long-running Claude» (Mar 2026)](https://www.anthropic.com/research/long-running-Claude) + Huntley ralph-wiggum. Scaffolding `.claude/loop/`; protected files routed через proposal-only mode чтобы избежать recursive failure. Cost envelope per loop iter: \$1.30-2.50 benchmark-dominated. Smoke validation pending Bug 3 fix (external fixtures + worktrees).
+- **Self-improvement Ralph-loop** (2026-05-11, devlog #26/#27): empirical evolution цикл harness'а через variance-checked fitness function + retire-bias + protected-files guard. Pattern adapted from [Mishra-Sharma «Long-running Claude» (Mar 2026)](https://www.anthropic.com/research/long-running-Claude) + Huntley ralph-wiggum. **Ретайрен 2026-07-15 (negative result)**: единственный прогон (\$72.50 / 37 iter) дал fitness ≈ +0.000, holdout-oracle ни разу не запускал pytest, accept'ы = сам loop-тулинг — single-shot micro-A/B недомерен под invocation-noise. Scaffolding архивирован в `.claude/docs/archive/loop-2026-05/`.
 
 ## Anti-patterns
 

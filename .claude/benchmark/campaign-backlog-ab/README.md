@@ -1,6 +1,6 @@
 # A/B: single-canon backlog vs dual-canon (md↔json зеркала)
 
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-23
 status: experiment (pilot)
 

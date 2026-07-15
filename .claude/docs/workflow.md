@@ -1,5 +1,5 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-07-02
 status: active
 supersedes: archive/workflow-2026-05-10.md

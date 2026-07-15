@@ -1,5 +1,5 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-11
 ---
 
@@ -134,7 +134,7 @@ skills:
 | Role               | Model       | Зачем                                       |
 | ------------------ | ----------- | ------------------------------------------- |
 | Main agent (lead)  | Opus 4.8    | Reasoning, planning, integration            |
-| Reasoning subagent | Sonnet 4.6  | Quality reasoning at lower cost             |
+| Reasoning subagent | Sonnet 5    | Quality reasoning at lower cost             |
 | Grunt subagent     | Haiku 4.5   | File scans, log filtering, API pulls        |
 
 Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents = +90.2%** к single-Opus baseline (Anthropic eval, 4.7-era — на 4.8 не перемерено). Haiku для grunt — без quality loss на грубой работе.
@@ -168,7 +168,7 @@ Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents =
 
 **Pattern 2 — TDD triad** (test-writer / impl / refactorer): community evidence (AgentCoder 87.8% accuracy vs 61% single-agent — [alexop.dev](https://alexop.dev/posts/custom-tdd-workflow-claude-code-vue/); AgentShield Anthropic Hackathon winner — red/blue/auditor pipeline на 3 Opus агентах). **Banned в нашем harness'е per ADR-002** (см. §8) — single context + `rules/testing.md` invariants заменяют. Documented здесь только для cross-reference на community claims.
 
-**Pattern 3 — Driver-Navigator** (Opus+Sonnet pair): Navigator (Opus 4.8, strategic) — PLAN/RED/REVIEW, никогда impl; Driver (Sonnet 4.6, tactical) — GREEN/REFACTOR, никогда не пишет/модифицирует тесты. Source: [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009).
+**Pattern 3 — Driver-Navigator** (Opus+Sonnet pair): Navigator (Opus 4.8, strategic) — PLAN/RED/REVIEW, никогда impl; Driver (Sonnet 5, tactical) — GREEN/REFACTOR, никогда не пишет/модифицирует тесты. Source: [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009).
 
 Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Chachamaru127/claude-code-harness) — formal Plan→Work→Review с worker/reviewer/scaffolder + Go-native guardrails + breezing mode для parallel + опциональная harness-mem.
 

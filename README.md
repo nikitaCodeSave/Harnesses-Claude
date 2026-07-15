@@ -1,10 +1,10 @@
 # Harnesses-Claude
 
-**Лаборатория R&D дизайна harness'а для Claude Code** — поколение Fable 5 + Opus 4.8 / Claude Code 2.1.173.
+**Лаборатория R&D дизайна harness'а для Claude Code** — поколение Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.210.
 
 > ⚠️ **Это лаборатория, а не шаблон.** `.claude/` здесь содержит исследовательскую
-> машинерию (`loop/`, `benchmark/`, discovery-критиков, event-логи), которую **нельзя
-> копировать целиком** в рабочий проект. Отгружаемое каноничное знание о дизайне
+> машинерию (`benchmark/`, discovery-критиков, event-логи, архивный `docs/archive/loop-2026-05/`),
+> которую **нельзя копировать целиком** в рабочий проект. Отгружаемое каноничное знание о дизайне
 > harness'а живёт в отдельном **глобальном скилле** `~/.claude/skills/claude-code-harness/`
 > (плагин `claude-code-harness` v1.10.0); минимальный стартовый harness для нового проекта —
 > его **Bootstrap-режим**, а не клон этого репозитория.
@@ -13,7 +13,7 @@
 
 Репозиторий, в котором эмпирически выращивается ответ на один вопрос: **какой минимум
 обвязки даёт максимум продуктивности под способной моделью.** Здесь живут принципы,
-бенчмарки, self-improvement-цикл и журнал решений (111 devlog-записей), на которых
+бенчмарки, журнал решений (116 devlog-записей) и архив ретайренных экспериментов, на которых
 обкатывается и калибруется канон, отгружаемый в другие проекты через плагин.
 
 ## Центральный принцип
@@ -38,7 +38,7 @@ thread'а — anti-pattern.
 |---|---|---|
 | **Канон** (отгружается) | `~/.claude/skills/claude-code-harness/` (v1.10.0) | bootstrap / audit / extend / explain режимы; `references/` (native-capabilities, harness-discipline, practice-baseline §1–8, harness-evolution, evidence-base); shipped project-docs |
 | **Practice baseline §1–8** | operator-global `~/.claude/CLAUDE.md` | think-first · simplicity · surgical · goal-driven · testing · continuity · guardrails · independent-verification. Применяется во всех проектах, **не дублируется** в каждый репо |
-| **Лаборатория** (этот репо) | `.claude/` | R&D-машинерия: эволюция канона, бенчмарки, self-improvement loop, devlog — **не копируется** |
+| **Лаборатория** (этот репо) | `.claude/` | R&D-машинерия: эволюция канона, бенчмарки, devlog, архив ретайренных экспериментов — **не копируется** |
 
 ## Структура репозитория
 
@@ -47,20 +47,18 @@ WORKFLOW.md              — портативный human-facing гайд: ст�
 .claude/
 ├── CLAUDE.md            — мета-оркестраторские инструкции (принцип, anti-patterns, API/built-ins/spawn-policy)
 ├── settings.json        — permissions (read-only Bash/Read) + hook-конфигурация
-├── docs/                — 13 активных reference-доков + archive/ (frozen ADR-лог, baseline'ы)
+├── docs/                — 11 активных reference-доков + archive/ (frozen ADR-лог, baseline'ы, ретайренный loop/)
 │                          principles · harness-architecture · workflow(+async/orchestration/cloud/evolution)
 │                          · multi-agent · memory-layers · benchmark · external-sources
 ├── rules/               — 3 инварианта: api-constraint · testing · docs-discipline
-├── hooks/               — session-context · stop-validation · loop-protected-guard · cost-warn
+│                          (проектных hooks/commands нет — ретайрены 2026-07-15; hooks — глобальные ~/.claude/hooks/)
 ├── skills/              — 1 action-skill: update-plan-progress (progress-журнал multi-session задач)
-├── commands/            — loop-status (operator-инспекция self-improvement цикла)
-├── devlog/              — 106 записей (live + archive/), index.json/tldr.md (авто), rebuild-index.py
+├── devlog/              — 116 записей (live + archive/), index.json/tldr.md (авто), rebuild-index.py
 ├── benchmark/           — 4-layer измерительная методология (static → headless → cross-fixture → smoke), text2sql-оракулы
-├── loop/                — self-improvement цикл (frozen shell-driver + corpus + fitness + protected-files)
-├── memory/              — JSONL event-логи (session-starts, agent-spawn, denied, stop-validation, …) для continuity
+├── memory/              — JSONL event-логи (session-starts, agent-spawn, denied, …) для continuity
 ├── audits/              — provenance прогонов /external-audit (AUDIT-*.json + логи)
 ├── plans/ · progress/   — долгоживущие планы + in-flight состояние (progress gitignored)
-└── worktrees/           — эфемерные git-worktree'ы (gitignored, управляются loop'ом)
+└── worktrees/           — эфемерные git-worktree'ы (gitignored)
 ```
 
 ## Как это работает
@@ -91,8 +89,8 @@ continuity (devlog/progress/memory) · mechanical-guardrails · independent-veri
 Эволюция канона идёт по эмпирическим сигналам (не по вкусу), **model-agnostic** и
 **evidence-gated** — single-incident в invariant не превращается. Две операции + provenance:
 
-- **Refresh-ledger** — штамп последней точки заземления (`last-grounded: CC v2.1.173 ·
-  Fable 5 + Opus 4.8 · дата · проверенные источники`). Дельта `claude --version` против
+- **Refresh-ledger** — штамп последней точки заземления (`last-grounded: CC v2.1.210 ·
+  Fable 5 + Sonnet 5 + Opus 4.8 · дата · проверенные источники`). Дельта `claude --version` против
   ledger — самостоятельный триггер ревизии.
 - **D-цикл** (≈1 сессия, на milestone-close) — fold доказанных находок внутрь канона:
   собрать → классифицировать (`kit-gap` / `project-specific` / `single-incident` / `noise`) →

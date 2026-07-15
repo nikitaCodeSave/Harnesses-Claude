@@ -1,10 +1,10 @@
 ---
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-06-07
 status: active
 ---
 
-# Cloud-offload workflow — Claude Code 2.1.169
+# Cloud-offload workflow
 
 > Operational layer для **cloud-side execution** heavy phases: `/ultraplan`, `/ultrareview`, `Routines`. Local CLI становится **coordination layer**; cloud runs the fleet.
 >
@@ -78,7 +78,7 @@ Anthropic itself doesn't yet know which planning style is best universally — A
 - Bug fix с known root cause
 - Single-file refactor
 - Trivial feature add
-- Когда `xhigh effort + ultrathink trigger` достаточны (most cases under Opus 4.7 1M context)
+- Когда `xhigh effort + ultrathink trigger` достаточны (most cases under Opus 4.8 1M context)
 
 ---
 

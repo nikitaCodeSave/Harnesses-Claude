@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #117 · 2026-07-15 · Fresh-context аудит harness'а: ретайр loop-кластера + stop-validation, актуализация до Sonnet 5 / CC 2.1.210
+
+**Tags:** harness, audit, cleanup, loop, hooks, currency
+
+Оператор запросил независимый аудит harness'а с чистым контекстом и без привязки к правилам репо — только самостоятельные знания агентов + доступ к интернету/MCP — чтобы вырезать ошибочные/устаревшие/переусложнённые решения и оставить минимальное рабочее ядро для…
+
+[→ entries/0117-fresh-context-audit-harness-a-retayr-loop-klastera-stop-vali.md](entries/0117-fresh-context-audit-harness-a-retayr-loop-klastera-stop-vali.md)
+
+---
+
 ## #116 · 2026-07-02 · Upstream-гейты workflow: weight-class + NON-GOALS + design-critic, kit v1.12.0
 
 **Tags:** harness, workflow, kit, design

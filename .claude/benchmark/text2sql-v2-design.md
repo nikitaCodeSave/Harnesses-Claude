@@ -1,6 +1,6 @@
 # text2sql benchmark v2 — design (mined from AI_analyst_migration)
 
-owner: @nikitaCodeSave
+owner: nikitaCodeSave
 last-updated: 2026-05-29
 status: proposal (pending build-scope approval)
 
