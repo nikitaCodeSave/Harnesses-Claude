@@ -107,6 +107,13 @@ evidence-base пересведены.
   **5/5 PASS**; единственный найденный stale-остаток (bootstrap Phase 0 «interactive
   /agents») закрыт патчем **v1.12.1**, выпущенным end-to-end через новый
   kit-release.sh — заодно живая e2e-валидация самого ритуала (запушен, тег на remote).
+- Поздний отчёт binary-verifier (11 пунктов по strings 2.1.210) свёрнут патчем
+  **v1.12.2**: `/code-review <level> <pr#>` = multi-agent PR review (2.1.202);
+  autoMode не читается из repo `.claude/settings.local.json` (2.1.207); «Dynamic
+  workflow size» setting (2.1.202); plugin-релизы пинятся тегами `{name}--v{version}`
+  + validate требует согласия манифестов + installs фиксируют gitCommitSha. Memory
+  `reference_cc_retry_watchdog_max_retries` исправлена: с 2.1.199 watchdog снимает
+  cap 15 (non-capacity transient дефолт → 300).
 - Все новые фактические клеймы сверены: changelog verbatim (2.1.197/198/200/210) +
   strings бинаря 2.1.210 + live-fetch code.claude.com (sub-agents, plugins-reference,
   commands, hooks, memory, model-config) + anthropic.com news/engineering.
