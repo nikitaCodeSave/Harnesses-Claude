@@ -1,6 +1,6 @@
 # Development workflow with Claude Code
 
-Текущий (поколение Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.210) workflow для разработчика высокого класса.
+Текущий (поколение Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.211) workflow для разработчика высокого класса.
 Плотный портативный гайд от старта проекта до пайплайна — с акцентом на рычаги, двигающие качество. Первоисточники — внизу.
 
 > Это human-facing гайд. Машинный routing-spine для main thread'а — `.claude/docs/workflow.md`.
@@ -11,7 +11,7 @@
 
 - **Harness важнее модели — и его надо переучивать.** «Review your configuration every 3-6 months because instructions tuned for older models constrain newer ones» [[1]]. Под способной моделью **минимум обвязки = максимум продуктивности**: каждый компонент кодирует assumption «модель не умеет X»; умеет нативно → компонент вреден.
 - **Не микроменеджь модель:** `effort=high` (дефолт 4.8 — не понижай на `medium` для нетривиалки), adaptive thinking ON (не управляй thinking-бюджетом вручную), sampling-параметры (`temperature`/`top_p`/`top_k`) на 4.8 убрать совсем (HTTP 400). [[2]]
-- **Модель:** дефолт — Opus 4.8; **Fable 5** — peer этого поколения (`/model fable`, ~2× цена, thinking всегда ON, `/fast` неприменим, авто-fallback на Opus при safety-классификаторе). Blanket-switch не делать без доказанного лифта (lab A/B: ничья на bounded-задачах). [[2]]
+- **Модель:** дефолт зависит от плана — Opus 4.8 на Max / Team Premium / Enterprise PAYG, **Sonnet 5** на Pro / Team Standard; **Fable 5** — peer этого поколения (`/model fable`, ~2× цена, thinking всегда ON, `/fast` неприменим, авто-fallback на Opus при safety-классификаторе). Blanket-switch не делать без доказанного лифта (lab A/B: ничья на bounded-задачах). [[2]]
 
 ---
 
@@ -64,7 +64,7 @@
 ```
 КОНТРАКТ      →  ТРЕБОВАНИЯ        →  ДИЗАЙН       →  WORK             →  REVIEW            →  СЛЕД
 /init            PRD-lite             Plan mode       1 main thread       self+tests/lint      devlog
-стек/mode        acceptance=оракул    Plan-агент      RED→GREEN→refactor  /review              progress→devlog
+стек/mode        acceptance=оракул    Plan-агент      RED→GREEN→refactor  /code-review         progress→devlog
 DENY-правила     GLOSSARY             ADR / docs      ultracode если      fresh-context §8     doc-with-code
                                                       scope>1 контекст    ultrareview(high)    MEMORY
       └──────────────── оракул (acceptance criteria) пронизывает весь поток ────────────────┘
@@ -93,14 +93,15 @@ DENY-правила     GLOSSARY             ADR / docs      ultracode если 
 
 ### REVIEW — главный рычаг
 - Self-review + tests/lint/type-check всегда. **«Looks done ≠ is done»** — гоняй фичу end-to-end, не только unit/`curl`.
-- `/review` (built-in, local, codebase-aware) на каждый substantive change; `claude ultrareview` (cloud-fleet, ~20мин) — для high-stakes.
+- **`/code-review`** — дефолтная ступень на каждый substantive change: built-in skill по рабочему диффу, локально и бесплатно, codebase-aware (`--fix` применяет находки, `--comment` кладёт inline-комментарии в PR). `/review` — про **PR на GitHub**, рабочий дифф он не смотрит. Калибровка severity — `REVIEW.md` в корне. [[10]]
+- **`/code-review ultra`** (алиас `/ultrareview`, CLI `claude ultrareview`) — cloud-fleet для high-stakes (security-путь, миграция, платежи): типично **5–10 мин, ~$5–20 за прогон через usage credits** (3 бесплатных на Pro/Max). Не на каждый PR — на каждый есть `/code-review`. [[10]]
 - **Независимая верификация = fresh context, не self-recheck.** In-context «перепроверь себя» добавляет ≈0 — автор якорится на своём решении (Anthropic называет это **self-preferential bias** — одна из трёх failure-mode длинных/параллельных прогонов, наряду с *agentic laziness* «бросил, объявив done» и *goal drift* «констрейнты ушли через compaction»; изолированные субагенты лечат все три структурно [[7]]). Рычаг — **отдельный fresh-context критик (subagent / новая сессия), которому велено опровергать, а не подтверждать** (judge≠author / Planner→Generator→Evaluator). Сильный вариант: evaluator взаимодействует с **живым приложением** (Playwright MCP) перед оценкой, калиброван быть скептичным. [[3]] Это ⊥ TDD: TDD — *как строить*, это — *кто судит*.
 
 ---
 
 ## Лестница верификации (cheapest → strongest)
 
-`in-prompt check` → `/goal <condition>` (re-checked каждый ход [[5]]) → **Stop-hook** (детерминированный гейт) → **fresh-context критик / dynamic workflow**.
+`in-prompt check` → `/goal <condition>` (re-checked каждый ход [[5]]) → **Stop-hook** (детерминированный гейт) → **`/code-review`** (built-in, локально) → **fresh-context критик / dynamic workflow**.
 
 Дай Claude петлю, которую он закрывает сам — «the single highest-leverage thing you can do» [[2]]. Анти-паттерн: одна end-session проверка (two-gate снижает false-completion ~35%→4%).
 
@@ -153,5 +154,6 @@ Scope **превышает один контекст** (codebase-sweep, мигр
 - [7] [A harness for every task: dynamic workflows in Claude Code](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code) (2026-06-02, Shihipar & Bidasaria) — Claude пишет свой `.js`-harness; 3 failure-mode (laziness / self-preferential bias / goal drift); quarantine pattern; `ultracode` = trigger word
 - [8] [Claude Code Sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing) + [Settings](https://code.claude.com/docs/en/settings) — permissions (deny/ask/allow), guardrails, OS-level sandbox
 - [9] [Onboarding Claude Code like a new developer](https://claude.com/blog/onboarding-claude-code-like-a-new-developer-lessons-from-17-years-of-development) (MacLean) — контекст-слой как версионируемый артефакт; «record context, version it, grow it»
+- [10] [Code review](https://code.claude.com/docs/en/code-review) + [ultrareview](https://code.claude.com/docs/en/ultrareview) — `/code-review` как дефолтная ступень, `REVIEW.md`, экономика cloud-прогона
 
-<!-- last-updated: 2026-07-15 · target: Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.210 -->
+<!-- last-updated: 2026-07-16 · target: Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.211 -->

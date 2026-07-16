@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #122 · 2026-07-16 · Актуализация workflow-кластера до CC 2.1.211 и /code-review
+
+**Tags:** docs, harness
+
+Оператор попросил проверить актуальность WORKFLOW.md. Проверка против живого бинаря 2.1.211 и канонического среза кита вскрыла функциональную ошибку роутинга: раздел REVIEW отправлял каждый substantive change на /review, тогда как /review — строго GitHub-PR-поверхность, а…
+
+[→ entries/0122-aktualizatsiya-workflow-klastera-do-cc-2-1-211-i-code-review.md](entries/0122-aktualizatsiya-workflow-klastera-do-cc-2-1-211-i-code-review.md)
+
+---
+
 ## #121 · 2026-07-16 · Drift-remediation трек исполнен (kit v1.15.0)
 
 **Tags:** harness, kit, d-cycle, verification, continuity, temp-verify
@@ -192,7 +202,7 @@ Kit-baseline references/project-docs/workflow.md нёс Caveat: (стр. 24-25):
 
 **Tags:** canon, kit, harness-evolution, practice-baseline, supersedes
 
-- kit: revert 26ea6f3 → 24182ee (восстановлена исходная delivery-процедура: global preferred, project-embed = fallback со skip-if-global). Pushed. - AI_analyst_migration: revert 1316d37 → 737eb60 (файл + CLAUDE.md-ссылка убраны). Pushed. - dialog_analyzer: reset на a3cbbfe (файл…
+Supersedes #102. Решение оператора: §1–8 best-practices живут в operator-global ~/.claude/CLAUDE.md как ЕДИНЫЙ источник; файл .claude/rules/practice-baseline.md в проекте — это дубликат (грузится поверх global → засоряет контекст). Travel-аргумент (коллега/клон без global)…
 
 [→ entries/0103-otkat-102-global-edinyy-istochnik-1-8-bez-dublirovaniya.md](entries/0103-otkat-102-global-edinyy-istochnik-1-8-bez-dublirovaniya.md)
 

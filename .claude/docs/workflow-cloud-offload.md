@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-06-07
+last-updated: 2026-07-16
 status: active
 ---
 
@@ -18,7 +18,7 @@ Cherny (Code w/ Claude 2026 keynote, 2026-05-06): *«Routines = higher-order pro
 
 3 surfaces:
 - **`/ultraplan`** — cloud planning, **3 A/B variants** (Simple / Visual / Deep)
-- **`/ultrareview`** — cloud bug-hunting fleet (multi-agent, ~$15-25/run, ~20min)
+- **`/code-review ultra`** (алиас `/ultrareview`) — cloud bug-hunting fleet (multi-agent, ~$5-20/run via usage credits, ~5-10min)
 - **`Routines`** — cron- / GitHub-event- / API-triggered cloud agents
 
 **Reframe meta-orchestrator role**: ты больше не «configures inner executor» — ты **picks which executor (local CLI или cloud fleet)** для каждой phase.
@@ -40,8 +40,8 @@ Heavy planning task (architectural design, multi-component spec)?
         Local alt: built-in Plan agent + ultrathink
 
 High-stakes PR / bug-hunt sweep needed?
-  └─ Yes → /ultrareview или `claude ultrareview` (CLI)
-        Local alt: /review (local, free, fast)
+  └─ Yes → /code-review ultra (алиас /ultrareview) или `claude ultrareview` (CLI)
+        Local alt: /code-review (working diff, local, free, fast)
 
 Need scheduled / event-triggered автоматизация?
   └─ Yes → Routines (web)
@@ -82,17 +82,17 @@ Anthropic itself doesn't yet know which planning style is best universally — A
 
 ---
 
-## `/ultrareview` (cloud bug-hunting fleet)
+## `/code-review ultra` — cloud bug-hunting fleet (алиас `/ultrareview`)
 
-Multi-agent cloud review. **~20 minutes wall-clock, ~$15-25 cost per run.**
+Multi-agent cloud review of the current branch or a PR. **~5-10 minutes wall-clock, ~$5-20 per run via usage credits**; 3 free runs on Pro/Max (one-time).
 
-Two surfaces:
-- **`/ultrareview`** slash-command in interactive session
-- **`claude ultrareview [PR-number | base-branch]`** CLI subcommand
+Surfaces:
+- **`/code-review ultra`** slash-command in interactive session (алиас — `/ultrareview`)
+- **`claude ultrareview [PR-number | base-branch]`** CLI subcommand (`--json`, `--timeout` default 30 min)
 
 ### When to use
 
-Cost-justified when production bug «would cost more than $25 to fix in post-deploy».
+Cost-justified when production bug «would cost more than ~$20 to fix in post-deploy».
 
 - Security-sensitive PR
 - Pre-deploy validation для public API change
@@ -100,9 +100,9 @@ Cost-justified when production bug «would cost more than $25 to fix in post-dep
 - Payment / billing logic change
 - Critical infra change
 
-### When `/review` is enough
+### When `/code-review` is enough
 
-- Standard PR (most cases)
+- Standard PR (most cases) — `/code-review <level> <pr#>` тоже гоняет multi-agent review локально
 - Internal tool refactor
 - Style / docs / typo changes
 - Когда self-review + tests + lint покрывают acceptance criteria
@@ -158,11 +158,11 @@ State runs in CCR; results land as PRs / Slack messages / API responses.
 
 | Anti-pattern | Why | Replacement |
 |--------------|-----|-------------|
-| `/ultrareview` для every PR | $15-25 × N — drains budget | `/review` локально, `/ultrareview` только high-stakes |
+| `/code-review ultra` для every PR | $5-20 × N usage credits — drains budget | `/code-review` локально, cloud-прогон только high-stakes |
 | `/ultraplan` для trivial task | Cloud roundtrip > task time | Local Plan + `xhigh` |
 | Routines для one-shot automation | Cron* simpler | Local `Cron*` if applicable |
 | Cloud-offload на Bedrock/Vertex | Not compatible | Use local primitives only |
-| Skipping local `/review` because cloud will catch it | Misses fast feedback loop | Both: local first, cloud high-stakes |
+| Skipping local `/code-review` because cloud will catch it | Misses fast feedback loop | Both: local first, cloud high-stakes |
 
 ---
 
@@ -183,6 +183,7 @@ Cloud-offload landscape moves быстро (research-preview features). Re-check
 - [TechCrunch — Cat Wu interview](https://techcrunch.com/2026/05/13/anthropics-cat-wu-says-that-in-the-future-ai-will-anticipate-your-needs-before-you-know-what-they-are/) — proactivity thesis, Routines as on-ramp
 - [/ultraplan tutorial — dev.to](https://dev.to/rams901/claude-code-ultraplan-cloud-based-ai-planning-in-2026-a-hands-on-tutorial-4id6)
 - [/ultrareview research preview — explainx.ai](https://explainx.ai/blog/claude-code-ultrareview-cloud-bug-hunt-research-preview)
-- [code.claude.com/docs/en/code-review](https://code.claude.com/docs/en/code-review) — severity tags + REVIEW.md customization
+- [code.claude.com/docs/en/ultrareview](https://code.claude.com/docs/en/ultrareview) (first-party, Jun 2026) — timing / cost / free-run economics
+- [code.claude.com/docs/en/code-review](https://code.claude.com/docs/en/code-review) — `/code-review` surfaces, severity tags + REVIEW.md customization
 - [code.claude.com/docs/en/whats-new — w15-w17](https://code.claude.com/docs/en/whats-new) — release-dated feature timeline
 - [api-constraint.md](../rules/api-constraint.md) — what's in/out of scope on subscription

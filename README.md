@@ -1,6 +1,6 @@
 # Harnesses-Claude
 
-**Лаборатория R&D дизайна harness'а для Claude Code** — поколение Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.210.
+**Лаборатория R&D дизайна harness'а для Claude Code** — поколение Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.211.
 
 > ⚠️ **Это лаборатория, а не шаблон.** `.claude/` здесь содержит исследовательскую
 > машинерию (`benchmark/`, discovery-критиков, event-логи, архивный `docs/archive/loop-2026-05/`),
@@ -71,12 +71,12 @@ WORKFLOW.md              — портативный human-facing гайд: ст�
 - **Work** — один main thread на весь lifecycle (1M контекст). Test-driven как runnable-оракул
   (RED → GREEN → refactor, не догма очерёдности; тест обязан быть способен упасть). Subagent —
   только при изоляции контекста / параллельности / compact-rescue.
-- **Review** — self-review + tests/lint/type-check всегда; `/review` на substantive change;
+- **Review** — self-review + tests/lint/type-check всегда; `/code-review` на substantive change;
   **fresh-context критик** (отдельная сессия/subagent, которому велено опровергать) для
   high-stakes. «Looks done ≠ is done».
 
 **Лестница верификации** (cheapest → strongest): in-prompt check → `/goal` → Stop-hook →
-`/review` → fresh-context критик / dynamic workflow.
+`/code-review` → fresh-context критик / dynamic workflow.
 
 **Practice baseline §1–8** (живёт в operator-global, отгружается через канон):
 think-before-coding · simplicity-first · surgical-changes · goal-driven · tests-verify-behavior ·
@@ -89,7 +89,7 @@ continuity (devlog/progress/memory) · mechanical-guardrails · independent-veri
 Эволюция канона идёт по эмпирическим сигналам (не по вкусу), **model-agnostic** и
 **evidence-gated** — single-incident в invariant не превращается. Две операции + provenance:
 
-- **Refresh-ledger** — штамп последней точки заземления (`last-grounded: CC v2.1.210 ·
+- **Refresh-ledger** — штамп последней точки заземления (`last-grounded: CC v2.1.211 ·
   Fable 5 + Sonnet 5 + Opus 4.8 · дата · проверенные источники`). Дельта `claude --version` против
   ledger — самостоятельный триггер ревизии.
 - **D-цикл** (≈1 сессия, на milestone-close) — fold доказанных находок внутрь канона:

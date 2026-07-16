@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-07-02
+last-updated: 2026-07-16
 status: active
 supersedes: archive/workflow-2026-05-10.md
 ---
@@ -20,7 +20,7 @@ supersedes: archive/workflow-2026-05-10.md
        ↓
 PLAN     →  WORK              →  REVIEW
 понять   →  implement         →  verify vs criteria
-+ страт. →  test-driven cycle →  /review (+ /ultrareview для high-stakes)
++ страт. →  test-driven cycle →  /code-review (+ /code-review ultra для high-stakes)
 ```
 
 Default для **нетривиальной** задачи. Trivial (typo / formatting / one-liner) — пропускает Plan, идёт Work → Review. **Cold start (новый проект):** `/init` (repo-state → CLAUDE.md) + bootstrap canonical docs (ARCHITECTURE/CODE-MAP/GLOSSARY/CONVENTIONS/ADR/RUNBOOKS — нативно, read-before-write, per `docs-discipline.md`) + контракт (стек / mode / acceptance / verification / DENY) — детали в [../../WORKFLOW.md](../../WORKFLOW.md) §1-3.
@@ -40,8 +40,8 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 
 ### Review
 - Self-review + tests/lint always
-- `/review` built-in — для substantive change (local, fast, codebase-aware)
-- `claude ultrareview` — high-stakes (cloud multi-agent, ~20min, $15-25)
+- `/code-review` built-in — дефолтная ступень для substantive change (working diff, local, free, codebase-aware); `/review` — только GitHub PR
+- `/code-review ultra` (алиас `/ultrareview`, CLI `claude ultrareview`) — high-stakes (cloud multi-agent, ~5-10min, ~$5-20 via usage credits)
 - Doc-with-code rule: PR обновляет doc в том же PR ([docs-discipline](../rules/docs-discipline.md) rule 1)
 - Devlog entry через `devlog` skill после significant change
 
@@ -66,7 +66,7 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 
 | Question | Read |
 |----------|------|
-| «Какой slash-command / flag / tool существует прямо сейчас?» | актуальный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.195 — единственный canonical срез) |
+| «Какой slash-command / flag / tool существует прямо сейчас?» | актуальный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.211 — единственный canonical срез) |
 | «Watch-process / scheduled task / handoff между сессиями» | [workflow-async.md](workflow-async.md) |
 | «Параллельные сессии, worktree, dispatch flags для `claude agents`» | [workflow-orchestration.md](workflow-orchestration.md) |
 | «Offload heavy phase в cloud (ultraplan/ultrareview/routines)» | [workflow-cloud-offload.md](workflow-cloud-offload.md) |

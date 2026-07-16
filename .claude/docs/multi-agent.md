@@ -184,7 +184,7 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 | PM → Architect → Dev → QA pipeline           | meta-CLAUDE.md                  | Main thread + built-in `Plan` для design                  |
 | Generator/Evaluator контракт каждый sprint   | meta-CLAUDE.md                  | Opus 4.8 «devises ways to verify own outputs»; high-stakes — dynamic workflow opt-in |
 | Custom subagent дублирующий built-in         | ADR-007                         | `claude agents` check **до** создания                     |
-| code-reviewer как custom agent               | ADR-011                         | Built-in `/review` или main thread + diff                 |
+| code-reviewer как custom agent               | ADR-011                         | Built-in `/code-review` или main thread + diff            |
 | Multi-agent для sequential dependency chain  | Anthropic [multi-agent-systems] | Single agent + TaskCreate                                 |
 | Subagent как wrapper над одним tool call     | принцип                         | Direct tool call в main thread                            |
 | Multi-agent для most coding                  | Anthropic explicit              | Main thread; для scope>1 контекста — built-in dynamic workflow, не кастомный pipeline |

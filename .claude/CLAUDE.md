@@ -118,7 +118,7 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 
 **Workflow (Plan→Work→Review spine + slice docs)** — читать при работе над фичей:
 - `.claude/docs/workflow.md` — тонкий spine (decision tree, routing к slice docs)
-- Built-ins current-срез — **единственный canonical** источник: `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.210 / Claude 5 family + Opus 4.8; 5 built-in субагентов + catch-all `claude` dispatch-тип; Explore наследует main-модель с 2.1.198; `/agents` wizard удалён; dynamic workflows, agent teams, effort default `high`, `ultracode`, нативный destructive-block + auto-mode classifier; `/code-review` = дефолтная ступень для diff, `/review` = PR).
+- Built-ins current-срез — **единственный canonical** источник: `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.211 / Claude 5 family + Opus 4.8; 5 built-in субагентов + catch-all `claude` dispatch-тип; Explore наследует main-модель с 2.1.198; `/agents` wizard удалён; dynamic workflows, agent teams, effort default `high`, `ultracode`, нативный destructive-block + auto-mode classifier; `/code-review` = дефолтная ступень для diff, `/review` = PR).
 - `.claude/docs/workflow-async.md` — Monitor tool / Task* / Cron* / SendMessage / `/loop` / Routines reference
 - `.claude/docs/workflow-orchestration.md` — worktree / `claude agents` dispatch / session lifecycle / agent-view
 - `.claude/docs/workflow-cloud-offload.md` — `/ultraplan` / `/ultrareview` / Routines (cloud-side)
