@@ -94,6 +94,37 @@ out=$(run "$p")
 check_bounded "R3: huge body, no title -> bounded" 4096 "$out"
 check_absent  "R3: body line not smuggled in as title" "SMUGGLED FROM BODY" "$out"
 
+# R3b: a body '---' (horizontal rule / setext underline) must NOT reopen the
+# frontmatter range and let a body line forge id/date/title. Refuter 2026-07-16:
+# the first fm() fix claimed to bound the read and did neither.
+p="$TMP/forge"; mkdir -p "$p/.claude/devlog/entries"
+{ printf -- '---\nid: 1\ndate: 2026-01-01\n---\n\n'; printf 'Some prose.\n\n'; \
+  printf -- '---\ntitle: FORGED FROM BODY\ndate: 1999-09-09\n---\n'; } \
+  > "$p/.claude/devlog/entries/1-slug.md"
+out=$(run "$p")
+check_absent "R3b: body --- does not reopen frontmatter (title)" "FORGED FROM BODY" "$out"
+check_absent "R3b: body --- does not reopen frontmatter (date)"  "1999-09-09"       "$out"
+
+# R3c: setext underline in the body is the same shape.
+p="$TMP/setext"; mkdir -p "$p/.claude/devlog/entries"
+{ printf -- '---\nid: 1\ndate: 2026-01-01\n---\n\nHeading\n---\n'; \
+  printf 'title: SETEXT FORGERY\n'; } > "$p/.claude/devlog/entries/1-slug.md"
+check_absent "R3c: setext --- does not reopen frontmatter" "SETEXT FORGERY" "$(run "$p")"
+
+# R3d: an entry with no frontmatter fence at all -> filename fallback, no body leak.
+p="$TMP/nofence"; mkdir -p "$p/.claude/devlog/entries"
+{ printf 'Just a body.\n\n'; printf 'title: NO FENCE LEAK\n'; } \
+  > "$p/.claude/devlog/entries/1-slug.md"
+check_absent "R3d: unfenced entry does not leak a body line" "NO FENCE LEAK" "$(run "$p")"
+
+# R3e: CRLF entries must not leave a stray quote or CR in the title.
+p="$TMP/crlf"; mkdir -p "$p/.claude/devlog/entries"
+printf -- '---\r\nid: 1\r\ndate: 2026-01-01\r\ntitle: "CRLF entry"\r\n---\r\n\r\nbody\r\n' \
+  > "$p/.claude/devlog/entries/1-slug.md"
+out=$(run "$p")
+check        "R3e: CRLF title parsed"          "CRLF entry" "$out"
+check_absent "R3e: CRLF leaves no stray quote" 'CRLF entry"' "$out"
+
 # R4: huge progress journal.
 p="$TMP/huge-prog"; mkdir -p "$p/.claude/progress"
 printf '# %s\n' "$BIG" > "$p/.claude/progress/big.md"
@@ -136,6 +167,37 @@ p="$TMP/closed-real2"; mkdir -p "$p/.claude/progress"
 printf '# Task\n\n## Quick state\nCLOSED\n' > "$p/.claude/progress/g.md"
 out=$(run "$p")
 check_absent "CLOSED alone on quick-state line -> filtered" "CLOSED" "$out"
+
+# The marker's tail: a status suffix means closed; a lowercase suffix means the word
+# is part of an identifier (a domain term), so the journal is active. Refuter
+# 2026-07-16: word-boundary alone leaked "CLOSED-2026-07-16" back in as active.
+closed_case() { # desc filename state expected(hidden|shown)
+  local d="$TMP/cc-$2"; mkdir -p "$d/.claude/progress"
+  printf '# Task\n\n## Quick state — %s\n' "$3" > "$d/.claude/progress/$2.md"
+  local o; o=$(run "$d")
+  if [ "$4" = hidden ]; then check_absent "CLOSED tail: $1 -> filtered" "$2.md" "$o"
+  else check "CLOSED tail: $1 -> shown" "$2.md" "$o"; fi
+}
+closed_case "CLOSED-<date>"       dated    "CLOSED-2026-07-16"                  hidden
+closed_case "CLOSED_<UPPER>"      upper    "CLOSED_TASK"                        hidden
+closed_case "(CLOSED)"            paren    "(CLOSED) done"                      hidden
+closed_case "CLOSED."             dot      "CLOSED."                            hidden
+closed_case "CLOSED-<lowercase>"  ident    "refactor CLOSED-account handler"    shown
+closed_case "UNCLOSED"            unclosed "UNCLOSED transaction bug"           shown
+closed_case "lowercase closed"    lower    "closed the modal, still testing"    shown
+closed_case "NOT-CLOSED"          notclosed "NOT-CLOSED yet, still verifying"   shown
+
+# === REGRESSION: the MAX_BYTES backstop is reachable and announces itself =====
+# Refuter 2026-07-16: the cap was unreachable on every constructible input AND
+# asserted by zero tests — a guard nothing exercises is a guard nobody trusts.
+p="$TMP/capped"; mkdir -p "$p"
+mkentry "$p" 1 2026-01-01 "A perfectly ordinary entry title here"
+mkentry "$p" 2 2026-01-02 "Another perfectly ordinary entry title"
+out=$(SESSION_CONTEXT_MAX_BYTES=120 run "$p")
+check "cap: truncation is announced" "truncated" "$out"
+check_bounded "cap: honours a lowered ceiling" 260 "$out"
+out_normal=$(run "$p")
+check_absent "cap: no marker when under the ceiling" "truncated" "$out_normal"
 
 # === Progress behavior =====================================================
 p="$TMP/prog"; mkdir -p "$p/.claude/progress"
