@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #121 · 2026-07-16 · Drift-remediation трек исполнен (kit v1.15.0)
+
+**Tags:** harness, kit, d-cycle, verification, continuity, temp-verify
+
+Исполнение kickoff-артефакта plans/harness-drift-remediation.md (продолжение #115: 4 адверсариальных harvest-агента над 37 проектами). Сессия велась из репо плагина (~/PROJECTS/claude-code-harness), по одному WU за раз, с обязательным refuter-чекпойнтом перед TIER 2 и…
+
+[→ entries/0121-drift-remediation-trek-ispolnen-kit-v1-15-0.md](entries/0121-drift-remediation-trek-ispolnen-kit-v1-15-0.md)
+
+---
+
 ## #120 · 2026-07-15 · Плагин актуализирован под standalone-топологию + стандарты Anthropic (v1.13.0)
 
 **Tags:** refactor, harness, distribution, docs
@@ -182,7 +192,7 @@ Kit-baseline references/project-docs/workflow.md нёс Caveat: (стр. 24-25):
 
 **Tags:** canon, kit, harness-evolution, practice-baseline, supersedes
 
-Supersedes #102. Решение оператора: §1–8 best-practices живут в operator-global ~/.claude/CLAUDE.md как ЕДИНЫЙ источник; файл .claude/rules/practice-baseline.md в проекте — это дубликат (грузится поверх global → засоряет контекст). Travel-аргумент (коллега/клон без global)…
+- kit: revert 26ea6f3 → 24182ee (восстановлена исходная delivery-процедура: global preferred, project-embed = fallback со skip-if-global). Pushed. - AI_analyst_migration: revert 1316d37 → 737eb60 (файл + CLAUDE.md-ссылка убраны). Pushed. - dialog_analyzer: reset на a3cbbfe (файл…
 
 [→ entries/0103-otkat-102-global-edinyy-istochnik-1-8-bez-dublirovaniya.md](entries/0103-otkat-102-global-edinyy-istochnik-1-8-bez-dublirovaniya.md)
 
