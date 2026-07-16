@@ -92,6 +92,33 @@ check "regression: hyphen-word + non-recursive rm -> safe (not deny)" safe "$(ve
 fp2="cp ~/.claude/hooks/system-guard.sh /tmp/bak # restore-later"
 check "regression: hyphen-word, no rm -> safe" safe "$(verdict "$fp2")"
 
+# --- REGRESSION: the guard must judge rm's OWN arguments, not the raw line ----
+# Field-reported false positives (4 in one session, all wrong): a root/home token
+# living in a NEIGHBOURING segment or inside a quoted string was read as if it
+# were rm's target. rm of /tmp is not catastrophic no matter what follows it.
+check "fp: rm /tmp + '~/' in later echo"  safe "$(verdict "$R -rf /tmp/x && echo \"backup in ~/\"")"
+check "fp: rm /tmp + ls ~/ after"         safe "$(verdict "$R -rf /tmp/scratch && ls ~/")"
+check "fp: rm /tmp + cd / before"         safe "$(verdict "cd / && $R -rf /tmp/x")"
+check "fp: root token in quoted arg"      safe "$(verdict "$R -rf /tmp/x && echo 'done, / untouched'")"
+# A mere MENTION of the catastrophic form is not an invocation of it (this is the
+# self-diagnostic probe that got blocked in the field).
+check "fp: quoted mention via echo"       safe "$(verdict "echo \"$R -rf /\" > /tmp/note.txt")"
+check "fp: quoted mention via grep"       safe "$(verdict "grep -rn '$R -rf ~' ~/.claude/hooks/")"
+# Recursive flag belonging to a DIFFERENT command in the same line (documented
+# residual of the raw-string matcher — the token-level check retires it).
+check "fp: -r flag owned by grep, not rm" safe "$(verdict "grep -r foo / && $R /tmp/out")"
+check "fp: -R flag owned by cp, not rm"   safe "$(verdict "cp -R ~/ /tmp/bak && $R /tmp/bak/note")"
+
+# --- The DENY tier must survive the same token-level scrutiny ----------------
+check "deny: rm root in 2nd segment"      deny "$(verdict "cd /tmp && $R -rf /")"
+check "deny: rm home after a safe rm"     deny "$(verdict "$R -rf /tmp/x; $R -rf ~")"
+check "deny: sudo rm -rf /"               deny "$(verdict "sudo $R -rf /")"
+check "deny: env-assignment prefix"       deny "$(verdict "FOO=bar $R -rf /")"
+check "deny: absolute /bin/rm -rf /"      deny "$(verdict "/bin/$R -rf /")"
+check "deny: long flag --recursive ~"     deny "$(verdict "$R --recursive --force ~")"
+check "deny: flags after the target"      deny "$(verdict "$R / -rf")"
+check "deny: end-of-options -- then /"    deny "$(verdict "$R -rf -- /")"
+
 # --- Edit/Write: DENY-only guard no longer gates protected paths ------------
 # (NTFS/Windows-mount writes are still DENY, but require a live mount to test.)
 check "edit passthrough: /etc/hosts"    safe "$(verdict_edit /etc/hosts)"
