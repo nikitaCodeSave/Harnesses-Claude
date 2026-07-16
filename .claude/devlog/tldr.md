@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #123 · 2026-07-16 · system-guard судит по аргументам rm, а не по строке команды
+
+**Tags:** hooks, guardrails, testing, empirical
+
+Оператор: четыре блокировки за сессию, все четыре ложные. Guard матчил сырую строку, поэтому rm -rf /tmp/x && echo "backup in ~/" читался как рекурсивное удаление дома, а echo "rm -rf /" — как вызов, а не упоминание. Это было задокументировано в шапке как «Residual (accepted)»…
+
+[→ entries/0123-system-guard-sudit-po-argumentam-rm-a-ne-po-stroke-komandy.md](entries/0123-system-guard-sudit-po-argumentam-rm-a-ne-po-stroke-komandy.md)
+
+---
+
 ## #122 · 2026-07-16 · Актуализация workflow-кластера до CC 2.1.211 и /code-review
 
 **Tags:** docs, harness
