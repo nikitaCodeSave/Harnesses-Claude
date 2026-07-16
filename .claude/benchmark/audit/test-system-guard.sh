@@ -239,6 +239,15 @@ check "deny: unbalanced quote hides $R"       deny "$(verdict "echo 'oops && $R 
 check "fp: balanced nested quotes stay safe"  safe "$(verdict "echo \"\$(echo 'hi')\" && $R -rf /tmp/x")"
 check "fp: quoted mention still safe"         safe "$(verdict "echo \"$R -rf /\"")"
 
+# --- The \x01 segment sentinel is forgeable: a literal \x01 in the command
+# --- splits the rm invocation and hides its target. Claude Code's Bash tool
+# --- rejects control characters before the hook ever runs, but the guard must
+# --- not lean on another layer's validation — the sentinel is our own choice.
+S1=$'\x01'
+check "deny: forged SEP before target"    deny "$(verdict "$R -rf $S1 /")"
+check "deny: forged SEP glued to target"  deny "$(verdict "$R -rf $S1/")"
+check "deny: forged SEP after rm"         deny "$(verdict "$R $S1 -rf /")"
+
 # --- ${HOME} is the same target as $HOME (the rule listed only the bare form).
 check "deny: $R -rf \${HOME}"             deny "$(verdict "$R -rf \${HOME}")"
 check "deny: $R -rf \${HOME}/*"           deny "$(verdict "$R -rf \${HOME}/*")"
