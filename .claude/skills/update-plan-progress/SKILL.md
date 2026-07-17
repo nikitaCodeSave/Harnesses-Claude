@@ -7,7 +7,7 @@ allowed-tools: Read, Write, Edit, Bash(ls .claude/plans/*), Bash(ls .claude/prog
 
 # Навык: progress journal для multi-session task
 
-Поддерживает `.claude/progress/<slug>.md` — single-threaded журнал для задачи, которая идёт несколько сессий. Источник правды: progress-файл под git. Глобальный SessionStart hook (`~/.claude/hooks/session-context.sh`) уже инжектирует последнюю строку active progress в `additionalContext` — cold-start работает автоматически.
+Поддерживает `.claude/progress/<slug>.md` — single-threaded журнал для задачи, которая идёт несколько сессий. Источник правды: progress-файл под git. SessionStart hook плагина `devlog` (`session-start-digest.sh`) уже инжектирует последнюю строку active progress в `additionalContext` — cold-start работает автоматически.
 
 ## Когда использовать
 
@@ -186,6 +186,6 @@ Per rule #7 docs-discipline:
 ## Связь с другими артефактами
 
 - **`.claude/rules/docs-discipline.md` rule #7** — invariant про progress journal threshold + SessionStart hook + конверсию в devlog. Этот skill — operational механика для rule #7.
-- **Глобальный SessionStart hook** (`~/.claude/hooks/session-context.sh`) — инжектирует tail active progress-файла в `additionalContext` в каждом проекте. Никаких проектных hook'ов скилл НЕ требует.
-- **Глобальный `devlog` skill** (`~/.claude/skills/devlog/`) — финальный conversion progress → devlog entry при `status: completed`.
+- **SessionStart hook плагина `devlog`** (`session-start-digest.sh`) — инжектирует tail active progress-файла в `additionalContext` в каждом проекте. Никаких проектных hook'ов скилл НЕ требует.
+- **Скилл `devlog:devlog`** (тот же плагин) — финальный conversion progress → devlog entry при `status: completed`.
 - **`.claude/plans/<slug>.md`** — план под git, source of truth для **что** делать; progress-файл — **что сделано**. Дробление осознанное: план редко меняется, прогресс — каждую сессию.

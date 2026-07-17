@@ -152,7 +152,7 @@ Aggregate summary обязан включать:
 
 - `.claude/benchmark/static-checks.sh` — Layer A implementation.
 - `.claude/benchmark/headless-runner.sh` — Layer B+C runner.
-- `.claude/devlog/rebuild-index.py` — Layer A check #4.
+- `devlog-reindex` (плагин `devlog`) — Layer A check #4.
 - `.claude/skills/skill-creator:skill-creator` (marketplace) — Layer B+C для skills (eval + Comparator).
 
 ---

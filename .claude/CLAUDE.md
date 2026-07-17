@@ -105,8 +105,9 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
   нативно; skills — через skill-creator plugin.
 - `.claude/skills/` содержит ТОЛЬКО action-skills (workflow-templates
   для конкретных операций main thread'а): `update-plan-progress`
-  (см. ADR-017). Devlog-skill — глобальный канон `~/.claude/skills/devlog/`;
-  в репо остаётся только project-pin скрипта `.claude/devlog/rebuild-index.py`. `project-docs-bootstrap`
+  (см. ADR-017). Devlog едет плагином `devlog@skills-dir` (скилл + `devlog-reindex`
+  на PATH + SessionStart-дайджест); в репо ничего devlog'ового не дублируется.
+  `project-docs-bootstrap`
   в harness не входит — native + WORKFLOW.md §3 + docs-discipline
   покрывают bootstrap без отдельного skill'а.
   Self-описывающие skills (повторяют CLAUDE.md о роли main thread'а)
@@ -137,7 +138,7 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 - `.claude/rules/testing.md` — testing invariants.
 - `.claude/rules/docs-discipline.md` — documentation invariants.
 - `.claude/skills/update-plan-progress/` — action-skill для progress-журнала multi-session задачи (rule #7 docs-discipline).
-- `.claude/devlog/entries/` — recent entries (live); архив `entries/archive/`. Index via `python3 .claude/devlog/rebuild-index.py`.
+- `.claude/devlog/entries/` — recent entries (live); архив `entries/archive/`. Index via `devlog-reindex` (плагин `devlog`).
 - `.claude/agents/` — каталога нет (custom-агентов нет; audit-роли едут плагином `claude-code-harness`).
 - `.claude/audits/` — provenance прогонов `/external-audit` (AUDIT-*.json + логи).
-- `.claude/hooks/` — каталога нет: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером). SessionStart (devlog + active-progress surfacing), Stop (test-quality reminder) и PreToolUse (`system-guard`, DENY catastrophic) покрыты **глобальными** `~/.claude/hooks/`.
+- `.claude/hooks/` — каталога нет: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером). Активны два внешних: PreToolUse (`system-guard`, DENY catastrophic) — глобальный `~/.claude/hooks/`; SessionStart (devlog + active-progress surfacing) — плагин `devlog`. Test-quality (§5) и lint остаются за глобальным CLAUDE.md + LSP — хуками не дублируются.

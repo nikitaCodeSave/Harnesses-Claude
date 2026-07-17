@@ -18,10 +18,10 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 ## Components inventory (current state)
 
-- **Skills** (action-only, workflow-templates): `update-plan-progress`. Devlog — глобальный канон `~/.claude/skills/devlog/` (project-pin скрипта: `.claude/devlog/rebuild-index.py`). SKILL.md ≤500 строк. Каноничное знание о дизайне harness'а — глобальный `~/.claude/skills/claude-code-harness/`. (`project-docs-bootstrap` в harness не входит — native + WORKFLOW.md §3 + docs-discipline покрывают bootstrap.)
+- **Skills** (action-only, workflow-templates): `update-plan-progress`. Devlog — плагин `devlog@skills-dir` (скилл + `devlog-reindex` на PATH + SessionStart-дайджест), в репо не дублируется. SKILL.md ≤500 строк. Каноничное знание о дизайне harness'а — глобальный `~/.claude/skills/claude-code-harness/`. (`project-docs-bootstrap` в harness не входит — native + WORKFLOW.md §3 + docs-discipline покрывают bootstrap.)
 - **Custom agents**: нет. Дубли built-in/kit не создаются: orchestrator-роль — сам main thread, security — built-in `/security-review`, audit — плагин `claude-code-harness:/external-audit` (3 роли).
 - **Built-in agents** (5): `Explore` (read-only research), `Plan` (architect-level planning), `general-purpose` (open-ended), `statusline-setup` (UI), `claude-code-guide` (вопросы про Claude Code).
-- **Hooks**: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером). Активны только **глобальные** `~/.claude/hooks/`: `session-context` (SessionStart: devlog + active-progress inject), `test-quality-reminder` (Stop, advisory), `system-guard` (PreToolUse, DENY catastrophic).
+- **Hooks**: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером). Активны два внешних: `system-guard` (PreToolUse, DENY catastrophic) — глобальный `~/.claude/hooks/`; `session-start-digest` (SessionStart: devlog + active-progress inject) — плагин `devlog`. Test-quality — за глобальным CLAUDE.md §5, хуком не дублируется.
 - **Always-loaded rules**: `testing.md` (5 invariants), `docs-discipline.md` (7 invariants), `api-constraint.md`.
 - **Reference docs** (on-demand): `workflow.md` (Plan→Work→Review spine + slice docs), `multi-agent.md`, `benchmark.md`, и др. в `.claude/docs/`.
 
@@ -47,7 +47,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 - **Use hook когда action must happen every time с zero exceptions**. *«Unlike CLAUDE.md instructions which are advisory, hooks are deterministic and guarantee the action happens»* — Best Practices.
 - **Block-at-decision (PreToolUse), не block-at-write**. PreToolUse инспектирует tool input до execution; `UserPromptSubmit` — инспектирует user prompt content. Avoid blocking mid-thought.
-- **Event types**: Claude Code определяет **30** hook-событий (полный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md`). Проектных хуков harness не держит; активны только **глобальные** `~/.claude/hooks/` — `session-context` (SessionStart: devlog + progress inject), `test-quality-reminder` (Stop, advisory), `system-guard` (PreToolUse, DENY catastrophic).
+- **Event types**: Claude Code определяет **30** hook-событий (полный срез — `~/.claude/skills/claude-code-harness/references/native-capabilities.md`). Проектных хуков harness не держит; активны два внешних — `system-guard` (PreToolUse, DENY catastrophic) из глобального `~/.claude/hooks/` и `session-start-digest` (SessionStart: devlog + progress inject) из плагина `devlog`.
 - **Handler types**: `command` (shell + JSON), `mcp_tool`, `http`. Exit code 0 = allow, 2 = block, other = non-blocking error.
 - Source: [Hooks documentation](https://docs.claude.com/en/docs/claude-code/hooks).
 

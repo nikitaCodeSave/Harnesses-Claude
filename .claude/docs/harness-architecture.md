@@ -16,12 +16,13 @@ Reference doc: что этот проект производит, где как�
 | Артефакт | Где | Что | Роль |
 |---|---|---|---|
 | **Плагин `claude-code-harness`** | marketplace → `~/.claude/skills/claude-code-harness/` | режимы bootstrap / audit / extend / explain + `references/` (native-capabilities, harness-discipline, practice-baseline §1–8, harness-evolution, evidence-base) + audit-роли (evidence-executor ∥ process-auditor ∥ code-refuter) | **канон**: как поставить harness в любой проект |
-| **Глобальная обвязка** | `~/.claude/` | practice baseline §1–8 (в `CLAUDE.md`), глобальные hooks (`session-context` · `system-guard` · `test-quality-reminder`), глобальные skills (`devlog`, …) | **practice-слой**, действующий во всех проектах без копирования |
+| **Глобальная обвязка** | `~/.claude/` | practice baseline §1–8 (в `CLAUDE.md`), глобальный hook `system-guard`, skills-dir плагины (`claude-code-harness`, `devlog` — последний несёт SessionStart-дайджест) | **practice-слой**, действующий во всех проектах без копирования |
 | **Лаборатория** (этот репо) | `.claude/` | R&D: эволюция канона через devlog/benchmark; архив ретайренных экспериментов | питает первые два, сам не отгружается |
 
-Следствие для этого репо: проектных hooks/commands harness **не держит** — safety (`system-guard`),
-continuity (`session-context` inject devlog+progress) и verify (`test-quality-reminder`) закрыты
-**глобальным** слоем. Дублировать их проектной копией — anti-pattern.
+Следствие для этого репо: проектных hooks/commands harness **не держит** — safety (`system-guard`)
+закрыт глобальным `~/.claude/hooks/`, continuity (`session-start-digest` inject devlog+progress) —
+плагином `devlog`, verify (§5) — глобальным practice-слоем без хука. Дублировать их проектной
+копией — anti-pattern.
 
 ## Foundational principle
 
@@ -86,7 +87,7 @@ is too long» — Anthropic).
 |---|---|---|---|
 | `settings.json` permissions | ✅ | — | — |
 | глобальный `PreToolUse` (`system-guard`) | ✅ | partial (reason) | — |
-| глобальный `SessionStart` (`session-context`) | — | ✅ | — |
+| Plugin-`SessionStart` (`devlog:session-start-digest`) | — | ✅ | — |
 | Plugin-агент (`claude-code-harness:code-refuter`) | partial (whitelist) | ✅ (только audited surface) | ✅ (fresh context) |
 | Slash command (`external-audit`) | — | ✅ | partial (bounded scope) |
 | Skill (`devlog`) | — | ✅ (при триггере) | — |
@@ -145,8 +146,8 @@ decision в L0 scratchpad — компонент сломан.
 - **Stale компонент без retire trigger** — паразитный по умолчанию.
 - **Vague always-loaded rule** («be careful», «write clean code») — empirically ignored; specific
   bans / verification criteria > vague guidance.
-- **Проектная копия глобального слоя** — дублировать `system-guard`/`session-context`/practice §1–8
-  в репо (они уже действуют глобально).
+- **Проектная копия глобального слоя** — дублировать `system-guard`/devlog-скилл с его
+  reindex-скриптом и SessionStart-дайджестом/practice §1–8 в репо (они уже действуют глобально).
 
 ## Sources
 

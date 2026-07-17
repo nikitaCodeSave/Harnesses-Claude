@@ -73,11 +73,16 @@ for d_num in $(grep -oE '^### D-[0-9]+' .claude/docs/principles.md 2>/dev/null |
 done
 
 # Check 4: Devlog index integrity (ADR-004)
-if python3 .claude/devlog/rebuild-index.py >/dev/null 2>&1; then
+# devlog-reindex ships with the devlog plugin; it is on PATH inside Claude Code's Bash
+# tool, but not in a plain terminal — hence the bundle-path fallback.
+reindex="$(command -v devlog-reindex || echo "$HOME/.claude/skills/devlog/bin/devlog-reindex")"
+if [[ ! -x "$reindex" ]]; then
+    check "Devlog index integrity" "devlog-reindex not found (devlog plugin not installed?)" fail
+elif "$reindex" .claude/devlog >/dev/null 2>&1; then
     entries=$(python3 -c "import json; print(len(json.load(open('.claude/devlog/index.json'))['entries']))" 2>/dev/null || echo "?")
     check "Devlog index integrity" "$entries entries, valid" pass
 else
-    check "Devlog index integrity" "rebuild-index.py exit != 0" fail
+    check "Devlog index integrity" "devlog-reindex exit != 0" fail
 fi
 
 # Check 5: Skill frontmatter present (name + description required per Claude Code spec)

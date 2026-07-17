@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #124 · 2026-07-17 · Ретайр devlog-pin и мёртвых тестов после переезда devlog в плагин
+
+**Tags:** cleanup, harness, devlog, docs
+
+Проверка установки плагина вскрыла хвосты миграции devlog в devlog@skills-dir (16.07): репо продолжал держать собственную копию rebuild-index.py от 11.06, а 306 строк тестов защищали SessionStart-хук, которого больше нет. Доки описывали оба как живые.
+
+[→ entries/0124-retayr-devlog-pin-i-mertvykh-testov-posle-pereezda-devlog-v.md](entries/0124-retayr-devlog-pin-i-mertvykh-testov-posle-pereezda-devlog-v.md)
+
+---
+
 ## #123 · 2026-07-16 · system-guard судит по аргументам rm, а не по строке команды
 
 **Tags:** hooks, guardrails, testing, empirical
@@ -212,7 +222,7 @@ Kit-baseline references/project-docs/workflow.md нёс Caveat: (стр. 24-25):
 
 **Tags:** canon, kit, harness-evolution, practice-baseline, supersedes
 
-Supersedes #102. Решение оператора: §1–8 best-practices живут в operator-global ~/.claude/CLAUDE.md как ЕДИНЫЙ источник; файл .claude/rules/practice-baseline.md в проекте — это дубликат (грузится поверх global → засоряет контекст). Travel-аргумент (коллега/клон без global)…
+- kit: revert 26ea6f3 → 24182ee (восстановлена исходная delivery-процедура: global preferred, project-embed = fallback со skip-if-global). Pushed. - AI_analyst_migration: revert 1316d37 → 737eb60 (файл + CLAUDE.md-ссылка убраны). Pushed. - dialog_analyzer: reset на a3cbbfe (файл…
 
 [→ entries/0103-otkat-102-global-edinyy-istochnik-1-8-bez-dublirovaniya.md](entries/0103-otkat-102-global-edinyy-istochnik-1-8-bez-dublirovaniya.md)
 

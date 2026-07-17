@@ -51,9 +51,9 @@ WORKFLOW.md              — портативный human-facing гайд: ст�
 │                          principles · harness-architecture · workflow(+async/orchestration/cloud/evolution)
 │                          · multi-agent · memory-layers · benchmark · external-sources
 ├── rules/               — 3 инварианта: api-constraint · testing · docs-discipline
-│                          (проектных hooks/commands нет — ретайрены 2026-07-15; hooks — глобальные ~/.claude/hooks/)
+│                          (проектных hooks/commands нет — ретайрены 2026-07-15; хуки внешние: system-guard — глобальный, SessionStart-дайджест — плагин devlog)
 ├── skills/              — 1 action-skill: update-plan-progress (progress-журнал multi-session задач)
-├── devlog/              — 116 записей (live + archive/), index.json/tldr.md (авто), rebuild-index.py
+├── devlog/              — 123 записи (live + archive/), index.json/tldr.md (авто, через devlog-reindex)
 ├── benchmark/           — 4-layer измерительная методология (static → headless → cross-fixture → smoke), text2sql-оракулы
 ├── memory/              — JSONL event-логи (session-starts, agent-spawn, denied, …) для continuity
 ├── audits/              — provenance прогонов /external-audit (AUDIT-*.json + логи)
