@@ -1,6 +1,7 @@
 # Development workflow with Claude Code
 
-Текущий (поколение Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.211) workflow для разработчика высокого класса.
+Workflow для разработчика высокого класса на текущем поколении Claude Code и frontier-моделей.
+Версионно-зависимый инвентарь built-ins намеренно не дублируется здесь — он живёт в одном месте: `~/.claude/skills/claude-code-harness/references/native-capabilities.md`.
 Плотный портативный гайд от старта проекта до пайплайна — с акцентом на рычаги, двигающие качество. Первоисточники — внизу.
 
 > Это human-facing гайд. Машинный routing-spine для main thread'а — `.claude/docs/workflow.md`.
@@ -11,7 +12,7 @@
 
 - **Harness важнее модели — и его надо переучивать.** «Review your configuration every 3-6 months because instructions tuned for older models constrain newer ones» [[1]]. Под способной моделью **минимум обвязки = максимум продуктивности**: каждый компонент кодирует assumption «модель не умеет X»; умеет нативно → компонент вреден.
 - **Не микроменеджь модель:** `effort=high` (дефолт 4.8 — не понижай на `medium` для нетривиалки), adaptive thinking ON (не управляй thinking-бюджетом вручную), sampling-параметры (`temperature`/`top_p`/`top_k`) на 4.8 убрать совсем (HTTP 400). [[2]]
-- **Модель:** дефолт зависит от плана — Opus 4.8 на Max / Team Premium / Enterprise PAYG, **Sonnet 5** на Pro / Team Standard; **Fable 5** — peer этого поколения (`/model fable`, ~2× цена, thinking всегда ON, `/fast` неприменим, авто-fallback на Opus при safety-классификаторе). Blanket-switch не делать без доказанного лифта (lab A/B: ничья на bounded-задачах). [[2]]
+- **Модель:** дефолт зависит от плана — топовая Opus на Max / Team Premium / Enterprise PAYG, **Sonnet-тир** на Pro / Team Standard; **Fable** — peer-модель поколения (`/model fable`, ~2× цена, thinking всегда ON, `/fast` неприменим, авто-fallback на Opus при safety-классификаторе). Blanket-switch не делать без доказанного лифта (lab A/B: ничья на bounded-задачах). [[2]]
 
 ---
 
@@ -35,11 +36,15 @@
   Проблема:       что болит и у кого
   Пользователь:   кто, в каком сценарии
   Success (done): 3-5 наблюдаемых критериев (= acceptance criteria)
+  Ограничения:    инварианты и контракты, помеченные [hard] / [soft]
   NON-GOALS:      что осознанно НЕ делаем (заморозка scope против drift)
   Открытое:       отложенные решения → ADR
   ```
 
   *NON-GOALS — не опускай эту строку: пусто = «не подумал», не «нет ограничений». Это гигиена scope, а не гейт, который что-то останавливает.*
+
+- **Фиксируй *что* и *зачем*; *как* — не фиксируй.** Детектор: деталь влияет на бизнес-риск или архитектуру → пиши явно; чистая реализация (имена классов и функций, пути к файлам, схема таблиц, выбор библиотеки) → не пиши, это решение исполнителя. Разговор, из которого растёт спека, всегда содержит реализационные реплики — без детектора они оседают в *обязывающих* разделах и начинают подменять требование (A/B 2026-07-22, N=3×2: без правила 6/6 приманок в 3/3 прогонов, в одном реализационный ключ подменил acceptance-критерий; с правилом 0/6 без потери бизнес-фактов — `.claude/benchmark/spec-upstream-ab/`).
+- **Ограничения — инварианты, не шаги.** «Операция идемпотентна», а не «сделай таблицу дедупа». `[hard]` — недоговороспособно; `[soft]` — можно пожертвовать ради простоты (это явное разрешение упрощать, а не украшение).
 
 - **Acceptance criteria = наблюдаемое поведение через публичный интерфейс** («пользователь оформляет заказ с валидной корзиной»), не «сделать хорошо». Это **оракул, пронизывающий весь пайплайн**.
 - **GLOSSARY first-use:** первый domain-термин/аббревиатура → запись. PRD живёт в `docs/` (или `.claude/progress/<slug>.md` для крупной in-flight задачи).
@@ -156,4 +161,4 @@ Scope **превышает один контекст** (codebase-sweep, мигр
 - [9] [Onboarding Claude Code like a new developer](https://claude.com/blog/onboarding-claude-code-like-a-new-developer-lessons-from-17-years-of-development) (MacLean) — контекст-слой как версионируемый артефакт; «record context, version it, grow it»
 - [10] [Code review](https://code.claude.com/docs/en/code-review) + [ultrareview](https://code.claude.com/docs/en/ultrareview) — `/code-review` как дефолтная ступень, `REVIEW.md`, экономика cloud-прогона
 
-<!-- last-updated: 2026-07-16 · target: Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.211 -->
+<!-- last-updated: 2026-07-25 · version-free by design: версионные факты — только в native-capabilities.md -->

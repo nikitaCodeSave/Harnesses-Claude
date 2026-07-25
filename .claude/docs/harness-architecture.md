@@ -26,8 +26,8 @@ Reference doc: что этот проект производит, где как�
 
 ## Foundational principle
 
-**Минимум обвязки → максимум продуктивности под способной моделью.** (Model-agnostic; re-grounded
-на Opus 4.8.)
+**Минимум обвязки → максимум продуктивности под способной моделью.** (Model-agnostic; последнее re-grounding —
+поколение Opus 4.8, июль 2026.)
 
 > «As models improve, developers should strip away unnecessary scaffolding rather than accumulate
 > complexity» — Rajasekaran, Anthropic (March 2026)

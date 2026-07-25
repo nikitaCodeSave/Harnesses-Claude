@@ -109,7 +109,7 @@ Live ground-truth по фичам Claude Code CLI. **Источник для «�
 
 ### [claude.com/blog/how-anthropic-teams-use-claude-code](https://claude.com/blog/how-anthropic-teams-use-claude-code)
 **Тезисы:** реальные patterns внутри Anthropic — `/init`, кастомные slash-commands, hooks для state validation.
-**Применяется:** validates docs-contract направление (`docs-discipline.md` + WORKFLOW.md §3; bootstrap нативно под Opus 4.8).
+**Применяется:** validates docs-contract направление (`docs-discipline.md` + WORKFLOW.md §3; bootstrap нативно под способной моделью).
 
 ### [claude.com/blog — How Claude Code Works in Large Codebases](https://www.claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start)
 **Дата:** 14 мая 2026.

@@ -13,8 +13,8 @@
 ## Foundational principle (центральный)
 
 **Под способной моделью минимум обвязки даёт максимум продуктивности**
-(re-grounded на Opus 4.8; принцип model-agnostic — не пере-привязывай его
-к конкретной версии при апгрейде). Симптом «трудности в росте harness'а» —
+(последнее re-grounding — поколение Opus 4.8, июль 2026; принцип
+model-agnostic — не пере-привязывай его к конкретной версии при апгрейде). Симптом «трудности в росте harness'а» —
 почти всегда признак того, что обвязка переросла полезность модели. Если
 предлагаемый компонент кодирует assumption «модель не умеет X», а модель
 уже умеет X нативно — компонент не добавляется.
@@ -53,8 +53,8 @@ Main thread = meta-orchestrator (это я, кто общается с поль�
 Owns задачу end-to-end до verification и финального ответа. Делегирование
 в subagent — инструмент для inner executors, не передача ownership'а.
 
-Под Opus 4.8 single-agent остаётся дефолтом для most coding (это пережило
-переход 4.7→4.8). Spawn subagent'а оправдан ТОЛЬКО:
+Single-agent — дефолт для most coding (инвариант пережил переход 4.7→4.8;
+на текущем поколении не перемерен). Spawn subagent'а оправдан ТОЛЬКО:
 - (а) **изоляция контекста** — search-heavy работа, чей вывод
   загрязнит main thread (file scans, broad codebase research);
 - (б) **параллельность** — независимые поиски/проверки, сходящиеся
@@ -90,7 +90,7 @@ checklist, brief contract, model assignment, anti-patterns, evidence-based
 - Sensitive paths/команды для DENY в settings.json
 Сохранить в проектном CLAUDE.md (в корне репо, не здесь).
 
-Это **soft guidance**, не invariant. Под Opus 4.8 в agentic workflow
+Это **soft guidance**, не invariant. Под способной моделью в agentic workflow
 эти пункты часто появляются органически из conversation — формальное
 upfront-интервью **не обязательно** (см. ADR-014 evidence). Built-in
 `/init` документирует repo-state; недостающие куски контракта
@@ -119,7 +119,7 @@ upfront-интервью **не обязательно** (см. ADR-014 evidence
 
 **Workflow (Plan→Work→Review spine + slice docs)** — читать при работе над фичей:
 - `.claude/docs/workflow.md` — тонкий spine (decision tree, routing к slice docs)
-- Built-ins current-срез — **единственный canonical** источник: `~/.claude/skills/claude-code-harness/references/native-capabilities.md` (v2.1.211 / Claude 5 family + Opus 4.8; 5 built-in субагентов + catch-all `claude` dispatch-тип; Explore наследует main-модель с 2.1.198; `/agents` wizard удалён; dynamic workflows, agent teams, effort default `high`, `ultracode`, нативный destructive-block + auto-mode classifier; `/code-review` = дефолтная ступень для diff, `/review` = PR).
+- Built-ins current-срез — **единственный canonical** источник: `~/.claude/skills/claude-code-harness/references/native-capabilities.md`. Это **единственный файл харнеса, который пинится к версии CC и поколению моделей**; все остальные доки (включая этот) пишутся version-free и ссылаются сюда. Не дублируй его содержимое здесь — копия протухает молча.
 - `.claude/docs/workflow-async.md` — Monitor tool / Task* / Cron* / SendMessage / `/loop` / Routines reference
 - `.claude/docs/workflow-orchestration.md` — worktree / `claude agents` dispatch / session lifecycle / agent-view
 - `.claude/docs/workflow-cloud-offload.md` — `/ultraplan` / `/ultrareview` / Routines (cloud-side)

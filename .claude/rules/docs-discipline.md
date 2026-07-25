@@ -2,11 +2,11 @@
 
 7 правил поддержки проектной документации, инвариантных для любого стека. Расширяется проектным CLAUDE.md, не заменяется.
 
-Bootstrap canonical layout (`docs/ARCHITECTURE.md` / `CODE-MAP.md` / `GLOSSARY.md` / `CONVENTIONS.md` / `ADR/` / `RUNBOOKS/`) — нативно под Opus 4.8 (read-before-write, реальное содержимое не boilerplate; рычаг — `WORKFLOW.md` §3). Этот rule — ongoing discipline поверх bootstrap'а.
+Bootstrap canonical layout (`docs/ARCHITECTURE.md` / `CODE-MAP.md` / `GLOSSARY.md` / `CONVENTIONS.md` / `ADR/` / `RUNBOOKS/`) — нативно под способной моделью (read-before-write, реальное содержимое не boilerplate; рычаг — `WORKFLOW.md` §3). Этот rule — ongoing discipline поверх bootstrap'а.
 
 1. **Doc-with-code rule**. PR, меняющий архитектуру / добавляющий top-level dir / вводящий domain-термин / устанавливающий новую convention — обязан обновить соответствующий doc в **том же** PR. Reviewer (включая Claude) отклоняет PR при отсутствии doc-update.
 
-   **Mapping diff → документ** (классифицируй каждый изменённый файл по характеру правки; один файл может попасть в несколько строк). Под Opus 4.8 это нативная работа main thread'а из git diff — **отдельный skill не нужен** (его ядро — эта таблица):
+   **Mapping diff → документ** (классифицируй каждый изменённый файл по характеру правки; один файл может попасть в несколько строк). Под способной моделью это нативная работа main thread'а из git diff — **отдельный skill не нужен** (его ядро — эта таблица):
 
    | Категория изменения | Признак в diff | Документ |
    |---|---|---|

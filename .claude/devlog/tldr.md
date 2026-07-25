@@ -8,6 +8,26 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #126 · 2026-07-25 · Opus 5: xhigh ломает WebSearch, доки де-версионированы
+
+**Tags:** config, docs, harness
+
+Вышел Claude Opus 5 (CC 2.1.219, дефолтная Opus-модель), и глобальная настройка effortLevel: xhigh начала молча ломать WebSearch: под-запрос инструмента идёт с отключённым thinking, а Opus 5 принимает thinking: disabled только при effort ≤ high — иначе HTTP 400. Инструмент…
+
+[→ entries/0126-opus-5-xhigh-lomaet-websearch-doki-de-versionirovany.md](entries/0126-opus-5-xhigh-lomaet-websearch-doki-de-versionirovany.md)
+
+---
+
+## #125 · 2026-07-22 · Спека фиксирует что и зачем; ось spec-faithfulness отклонена
+
+**Tags:** adr, harness
+
+Внешний бриф о спек-фазе («тонкая спека + CONTEXT.md наружу + вертикальные срезы + двухосевое ревью») на ~75% совпал с тем, что уже стоит в WORKFLOW.md §1-3 и docs-discipline. Триаж оставил 3 кандидата, и вместо адопта «по здравому смыслу» они прогнаны через A/B — 21…
+
+[→ entries/0125-speka-fiksiruet-chto-i-zachem-os-spec-faithfulness-otklonena.md](entries/0125-speka-fiksiruet-chto-i-zachem-os-spec-faithfulness-otklonena.md)
+
+---
+
 ## #124 · 2026-07-17 · Ретайр devlog-pin и мёртвых тестов после переезда devlog в плагин
 
 **Tags:** cleanup, harness, devlog, docs

@@ -78,7 +78,7 @@ Anthropic itself doesn't yet know which planning style is best universally — A
 - Bug fix с known root cause
 - Single-file refactor
 - Trivial feature add
-- Когда `xhigh effort + ultrathink trigger` достаточны (most cases under Opus 4.8 1M context)
+- Когда `xhigh effort + ultrathink trigger` достаточны (most cases при 1M context)
 
 ---
 

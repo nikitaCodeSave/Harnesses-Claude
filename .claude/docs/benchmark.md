@@ -159,7 +159,7 @@ Aggregate summary обязан включать:
 
 ## Native `/goal` и `claude agents` — где применимы, где нет
 
-Claude Code (built-ins с 2.1.139, актуально на 2.1.210) даёт `/goal` (loop-to-condition внутри сессии) и `claude agents` (TUI для параллельных background-сессий). На первый взгляд кажется, что это покрывает наши runner'ы — на практике нет: они на разном уровне абстракции.
+Claude Code (built-ins с 2.1.139; актуальный срез — `native-capabilities.md`) даёт `/goal` (loop-to-condition внутри сессии) и `claude agents` (TUI для параллельных background-сессий). На первый взгляд кажется, что это покрывает наши runner'ы — на практике нет: они на разном уровне абстракции.
 
 **`/goal` — runtime control внутри одной `claude --print` сессии**. Наши runner'ы — measurement pipelines (clone fixture → inject harness → run claude → parse stream-json → pytest judge → aggregate report). `/goal` не заменяет ни один из 5/9 фаз. Заменить им можно только **prompt** на входе в Phase 3 (Build) battle-test-runner'а, и то выборочно:
 
