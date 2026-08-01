@@ -253,6 +253,357 @@ check "deny: $R -rf \${HOME}"             deny "$(verdict "$R -rf \${HOME}")"
 check "deny: $R -rf \${HOME}/*"           deny "$(verdict "$R -rf \${HOME}/*")"
 check "passthrough: \${HOME} subdir"      safe "$(verdict "$R -rf \${HOME}/.cache/pip")"
 
+# --- Cross-vendor refuter pass (Codex via codex_peer MCP, 2026-07-31) --------
+# 16 bypasses, every one reproduced ALLOW against the then-current guard while a
+# real shell would destroy the target. Grouped by the parser assumption it breaks.
+SQ=\'
+
+# (a) A redirect or a command substitution is not a command boundary: rm's
+#     operands continue across both. Emitting a segment break there flushed rm's
+#     args before the target arrived.
+check "deny: stdin redirect before target"  deny "$(verdict "$R -rf </dev/null ~")"
+check "deny: empty substitution before tgt" deny "$(verdict "$R -rf \$(true) ~")"
+# (b) A command substitution is CODE even inside double quotes / an unquoted
+#     heredoc body — the shell runs it while producing the argument.
+check "deny: \$( ) inside double quotes"    deny "$(verdict "echo \"\$($R -rf ~)\"")"
+hd_sub="cat <<EOF
+\$($R -rf ~)
+EOF"
+check "deny: \$( ) in unquoted heredoc"     deny "$(verdict "$hd_sub")"
+# Nested quotes inside the substitution used to mispair EVENLY, so the broken-
+# parse fallback never fired and the rm went unseen.
+q_desync=": \"\$(printf ${SQ}\"x\"${SQ}; $R -rf ~)\""
+check "deny: balanced quote desync in \$( )" deny "$(verdict "$q_desync")"
+# (c) The command name and the target may arrive through a variable assigned in
+#     the same line — the shell expands them, so the guard must too.
+check "deny: command name via variable"     deny "$(verdict "x=$R; \$x -rf ~")"
+check "deny: target via variable"           deny "$(verdict "p=\$HOME; $R -rf \"\$p\"")"
+# (d) Pathname expansion in the executable name.
+check "deny: glob in executable name"       deny "$(verdict "/bin/${R:0:1}[${R:1:1}] -rf ~")"
+# (e) GNU accepts any unambiguous long-option abbreviation.
+check "deny: --recursiv (GNU abbrev)"       deny "$(verdict "$R --recursiv ~")"
+# (f) A shell with no -c executes its stdin.
+check "deny: shell reads code from <<<"     deny "$(verdict "bash <<< ${SQ}$R -rf ~${SQ}")"
+hd_shell="bash <<EOF
+$R -rf ~
+EOF"
+check "deny: shell reads code from heredoc" deny "$(verdict "$hd_shell")"
+# (g) ~USER is the same directory as ~ when USER is this user — getent turns the
+#     old "assumption, not a fact" residual into a fact.
+check "deny: tilde-USER form"               deny "$(verdict "$R -rf ~$(id -un)")"
+# (h) Quote concatenation splits any raw-string match; the shell sees one word.
+check "deny: mkfs via quote concatenation"  deny "$(verdict "mk${SQ}${SQ}fs.ext4 /dev/sdb")"
+check "deny: dd via quote concatenation"    deny "$(verdict "d${SQ}${SQ}d if=/dev/zero of=/dev/sda")"
+check "deny: dd with quoted device"         deny "$(verdict "dd if=/dev/zero of=\"/dev/sda\"")"
+check "deny: redirect onto quoted device"   deny "$(verdict "printf x > /dev/\"sda\"")"
+# (i) A fork bomb is a shape, not the single name `:`.
+check "deny: fork bomb, renamed function"   deny "$(verdict 'f(){ f|f& };f')"
+
+# --- …and the same pass reported false denials. Text that merely MENTIONS a
+# --- catastrophic command is data: a comment, or a fully quoted operand.
+check "fp: trailing comment mentions rm"    safe "$(verdict "echo done # $R -rf /")"
+check "fp: mkfs as a quoted search pattern" safe "$(verdict "rg ${SQ}mkfs.ext4 /dev/sdb${SQ} README.md")"
+check "fp: mkfs inside double quotes"       safe "$(verdict "echo \"mkfs.ext4 /dev/sdb\"")"
+# Quoting a WORD does not make it data — the shell just removes the quotes and
+# runs it. Only a quoted token holding whitespace is a string being passed
+# around. Cost of that line: `printf '%s\n' '--no-preserve-root'` still denies.
+check "residual: single quoted flag denies" deny "$(verdict "printf ${SQ}%s\\n${SQ} ${SQ}--no-preserve-root${SQ}")"
+# The residual stays deliberate: a BARE unquoted rm word that belongs to another
+# command still denies (trust quoting, not position — see is_rm_root).
+check "residual: bare rm word still denies" deny "$(verdict "echo $R -rf /")"
+
+# --- Regressions the fixes above must not introduce -------------------------
+# A redirect operand is the redirect's, not rm's.
+check "fp: root path as redirect operand"   safe "$(verdict "$R -rf /tmp/x < /")"
+check "fp: dd to a regular file"            safe "$(verdict "dd if=/dev/zero of=/tmp/img bs=1M count=1")"
+# Variable expansion must resolve to the real value, not fire on any variable.
+check "fp: variable holds a harmless cmd"   safe "$(verdict "x=ls; \$x -rf ~")"
+check "fp: variable holds a harmless path"  safe "$(verdict "p=/tmp; $R -rf \"\$p\"")"
+# A QUOTED heredoc delimiter suppresses substitution — the body is data again.
+hd_q_sub="cat <<${SQ}EOF${SQ}
+\$($R -rf ~)
+EOF"
+check "fp: \$( ) in quoted heredoc"         safe "$(verdict "$hd_q_sub")"
+# ~USER resolves through getent: an unknown user, or a subdirectory, is not root.
+check "fp: tilde-USER unknown account"      safe "$(verdict "$R -rf ~nosuchuser99")"
+check "fp: tilde-USER subdirectory"         safe "$(verdict "$R -rf ~$(id -un)/build")"
+# The long-option abbreviation must stay unambiguous: --preserve-root is not it.
+check "fp: --preserve-root is not recursive" safe "$(verdict "$R --preserve-root -f /tmp/x")"
+
+# --- A heredoc inside a command substitution is TEXT. `git commit -m "$(cat
+# --- <<'EOF' … EOF)"` is the everyday shape, and prose contains unbalanced
+# --- parens and apostrophes: they used to end the substitution early, after
+# --- which the leftover message was parsed as code (2 false denials in an
+# --- 18k-command corpus of this operator's real work).
+msg_body="feat: drop the cache (v1.14.0 / v1.0.0)
+
+Today's fix removes the fork; the old note said $R -rf ~ was fine (it wasn't).
+Rollback: restore the file."
+git_msg="git commit -q -m \"\$(cat <<${SQ}EOF${SQ}
+$msg_body
+EOF
+)\" && git log --oneline -1"
+check "fp: heredoc msg inside \$( )"        safe "$(verdict "$git_msg")"
+check "fp: same, after a subdir rm"         safe "$(verdict "$R -rf ~/.cache/x
+$git_msg")"
+# …and a real invocation after that substitution is still gated.
+check "deny: real rm after heredoc msg"     deny "$(verdict "$git_msg && $R -rf ~")"
+
+# --- Second cross-vendor refuter pass (Codex, on the rewrite itself) ---------
+# The rewrite was reviewed by the same outside reviewer; these are its findings.
+# Two were REGRESSIONS the rewrite introduced (quoting a word is not quoting a
+# command), the rest are holes and false alarms it inherited or added.
+
+# (a) A compound redirect is still a redirect: 2>&1 / &> must not sever the
+#     command from its operands.
+check "deny: 2>&1 before the target"        deny "$(verdict "$R -rf 2>&1 /")"
+check "deny: &>/dev/null before the target" deny "$(verdict "$R -rf &>/dev/null /")"
+# (b) Quotes around a WORD do not turn it into data — the shell removes them and
+#     runs it. Only a quoted token carrying whitespace is a string being passed.
+check "deny: quoted dd operand"             deny "$(verdict "dd ${SQ}of=/dev/sda${SQ}")"
+check "deny: quoted --no-preserve-root"     deny "$(verdict "chmod -R 000 / ${SQ}--no-preserve-root${SQ}")"
+check "deny: quoted mkfs command name"      deny "$(verdict "\"mkfs.ext4\" /dev/sdb")"
+# (c) An assignment must reach the code that runs inside $( … ) and sh -c.
+check "deny: var command inside \$( )"      deny "$(verdict "SG_CMD=$R; echo \"\$(\$SG_CMD -rf /)\"")"
+var_subst='SG_PATH=/; echo "$('"$R"' -rf "$SG_PATH")"'
+check "deny: var target inside \$( )"       deny "$(verdict "$var_subst")"
+check "deny: var code passed to bash -c"    deny "$(verdict "SG_CODE=${SQ}$R -rf /${SQ}; bash -c \"\$SG_CODE\"")"
+# (d) …but NAME=value is an assignment only in a segment's prefix position, and
+#     `NAME=v cmd` scopes it to that one command.
+check "fp: NAME=value as an argument"       safe "$(verdict "printf \"%s\\n\" SG_X=$R; \$SG_X -rf /")"
+check "fp: assignment scoped to one cmd"    safe "$(verdict "SG_Y=$R true; \$SG_Y -rf /")"
+# (e) An escaped \$ in a heredoc body is not a substitution.
+hd_esc="cat <<EOF
+\\\$($R -rf /)
+EOF"
+check "fp: escaped \$( ) in heredoc"        safe "$(verdict "$hd_esc")"
+# (f) A glob is only a glob unquoted; and a quoted heredoc body is data whatever
+#     it spells.
+check "fp: quoted glob in command name"     safe "$(verdict "\"/bin/${R:0:1}[${R:1:1}]\" -rf /")"
+hd_mkfs="cat <<${SQ}EOF${SQ}
+mkfs.ext4 /dev/sdb
+EOF"
+check "fp: mkfs in quoted heredoc body"     safe "$(verdict "$hd_mkfs")"
+# (g) The fork-bomb shape must be read as code, not as text that spells it.
+fb='f(){ f|f& };f'
+check "fp: fork-bomb text via printf"       safe "$(verdict "printf ${SQ}%s\\n${SQ} ${SQ}$fb${SQ}")"
+check "fp: fork-bomb text in a comment"     safe "$(verdict "echo ok # $fb")"
+check "fp: fork-bomb text as grep pattern"  safe "$(verdict "git grep ${SQ}$fb${SQ} -- README.md")"
+# (h) Line continuation is removed by the shell before the word is read.
+check "deny: name split by line continuation" deny "$(verdict "${R:0:1}\\
+${R:1:1} -rf /")"
+# (i) Deeply nested substitutions must not turn the hook into a hang: a guard
+#     that never answers gates nothing. 350 levels, 2.8KB — the recursive
+#     quadratic scan went cubic and blew the 5s hook timeout.
+deep=true; for _ in $(seq 1 350); do deep="echo \$($deep)"; done
+t0=$(date +%s%N); verdict "$deep" >/dev/null; t1=$(date +%s%N)
+check "perf: 350 nested substitutions < 3s" ok "$( (( (t1-t0)/1000000 < 3000 )) && echo ok || echo "$(( (t1-t0)/1000000 ))ms" )"
+
+# --- Third refuter pass (Codex, on the fixes to the rewrite) ----------------
+# One root cause behind most of it: "this operand is CODE" (sh -c, eval, a shell
+# reading stdin, a substitution) was implemented in the rm rule only, so every
+# other rule went blind the moment the command was spelled through a shell.
+FB=':(){ :|:& };:'
+check "deny: mkfs via bash -c"              deny "$(verdict "bash -c ${SQ}mkfs.ext4 /dev/sdb${SQ}")"
+check "deny: mkfs via eval"                 deny "$(verdict "eval ${SQ}mkfs.ext4 /dev/sdb${SQ}")"
+check "deny: mkfs via shell stdin"          deny "$(verdict "bash <<< ${SQ}mkfs.ext4 /dev/sdb${SQ}")"
+check "deny: fork bomb via bash -c"         deny "$(verdict "bash -c ${SQ}$FB${SQ}")"
+check "deny: fork bomb inside \$( )"        deny "$(verdict "echo \"\$($FB)\"")"
+# `#` only starts a comment at the start of a word: x#y is an ordinary argument.
+check "deny: fork bomb after x#y"           deny "$(verdict "echo x#y; $FB")"
+# An escaped quote inside double quotes does not close them.
+check "deny: fork bomb after escaped quote" deny "$(verdict "echo \"x\\\"\" ; $FB")"
+# Legacy `>&word` is the same redirect as `&>word`.
+check "deny: >& redirect before target"     deny "$(verdict "$R -rf >& /tmp/log /")"
+check "deny: >& onto a device"              deny "$(verdict "printf x >& /dev/sda")"
+
+# …and its false alarms: text that merely spells the shape, in quotes or in a
+# quoted heredoc body, is data.
+check "fp: fork-bomb text in nested quotes" safe "$(verdict "printf \"%s\\n\" \"example: \\\"f(){ f|f& };f\\\"\"")"
+hd_fb="cat <<${SQ}EOF${SQ}
+f(){ f|f& };f
+EOF"
+check "fp: fork-bomb text in heredoc"       safe "$(verdict "$hd_fb")"
+# A child shell's assignments must not leak back into the parent, and must not
+# overwrite the parent's own.
+check "fp: assignment stays in the child"   safe "$(verdict "sh -c ${SQ}x=$R${SQ}; \$x -rf /")"
+check "deny: child must not shadow parent"  deny "$(verdict "x=$R; sh -c ${SQ}x=ls; echo $R${SQ}; \$x -rf /")"
+# A glob runs its FIRST match, not any match that happens to look dangerous.
+check "fp: glob whose first match is nm"    safe "$(verdict "/bin/[n${R:1:1}]${R:1:1} -rf /")"
+
+# --- The recursion/scan limits must hold for every rule, not just rm ---------
+deep_mkfs="mkfs.ext4 /dev/sdb"; for _ in $(seq 1 350); do deep_mkfs="echo \$($deep_mkfs)"; done
+t0=$(date +%s%N); verdict "$deep_mkfs" >/dev/null; t1=$(date +%s%N)
+check "perf: 350 nested, device rule < 3s"  ok "$( (( (t1-t0)/1000000 < 3000 )) && echo ok || echo "$(( (t1-t0)/1000000 ))ms" )"
+pad50=$(printf 'x%.0s' $(seq 1 50000))
+t0=$(date +%s%N); verdict "echo $pad50; $FB" >/dev/null; t1=$(date +%s%N)
+check "perf: 50KB + fork bomb < 3s"         ok "$( (( (t1-t0)/1000000 < 3000 )) && echo ok || echo "$(( (t1-t0)/1000000 ))ms" )"
+
+# --- Fourth refuter pass (Codex, on the shared code_frags rewrite) ----------
+# The shared list of "operands the shell runs as code" was itself reading raw
+# tokens: it saw `bash` and `sh -c` but not the variable or glob that produces
+# them, and eval joins ALL its arguments rather than taking the first.
+check "deny: shell code held in a variable" deny "$(verdict "SG_CODE=${SQ}mkfs.ext4 /dev/sdb${SQ}; bash -c \"\$SG_CODE\"")"
+check "deny: shell name held in a variable" deny "$(verdict "s=bash; \$s -c ${SQ}mkfs.ext4 /dev/sdb${SQ}")"
+check "deny: rm via eval"                   deny "$(verdict "eval ${SQ}$R -rf /${SQ}")"
+check "deny: eval joins its arguments"      deny "$(verdict "eval ${SQ}:(){${SQ} ${SQ}:|:&${SQ} ${SQ}};:${SQ}")"
+# A fork bomb after some other function definition: the matcher must look at
+# every definition, not only the first.
+check "deny: fork bomb after another func"  deny "$(verdict "g(){ true; }; $FB")"
+# …and the pipeline must live INSIDE that function's body: running a finite
+# function twice in a pipeline is not a bomb.
+check "fp: finite function piped to itself" safe "$(verdict "f(){ true; }; f | f &")"
+# Nested child shells: the VARS snapshot has to be a stack, not one global slot.
+check "deny: nested child shells"           deny "$(verdict "x=$R ; sh -c ${SQ}x=ls; sh -c \"\\\$z\"${SQ} ; \$x -rf /")"
+# An escaped quote inside a substitution does not close it.
+esc_sub='echo "$(printf "x\")"; '"$R"' -rf /)"'
+check "deny: escaped quote inside \$( )"    deny "$(verdict "$esc_sub")"
+esc_sub_fp='echo "$(printf "x\") '"$R"' -rf /")"'
+check "fp: escaped quote, only printing"    safe "$(verdict "$esc_sub_fp")"
+# \cX in ANSI-C quoting is control-X — here TAB, i.e. an argument separator.
+check "deny: \$'…' with \\cI separators"    deny "$(verdict "bash -c \$'${R}\\cI-rf\\cI/'")"
+
+# --- A shared work budget across ALL rules. Per-rule limits were not enough:
+# --- one 16KB string re-scanned by three rules at depth still blew the 5s
+# --- timeout, and a hook that times out gates nothing.
+pad16=$(printf 'x%.0s' $(seq 1 16064))
+combo="printf '%s' '$pad16 \$x mkfs'; $FB"
+for _ in $(seq 1 7); do combo="echo \$($combo)"; done
+t0=$(date +%s%N); verdict "$combo" >/dev/null; t1=$(date +%s%N)
+check "perf: 16KB x nesting x 3 rules < 3s" ok "$( (( (t1-t0)/1000000 < 3000 )) && echo ok || echo "$(( (t1-t0)/1000000 ))ms" )"
+
+# --- Fifth refuter pass (Codex) ---------------------------------------------
+# eval joins its operands for the rm rule too, code inside a child shell can
+# assign its own variables, and a function body does not end at the first `}`.
+check "deny: eval joins operands (rm)"      deny "$(verdict "eval ${SQ}$R -rf${SQ} ${SQ}/${SQ}")"
+check "deny: assignment inside bash -c"     deny "$(verdict "bash -c ${SQ}x=\"mkfs.ext4 \"; \$x /dev/sdb${SQ}")"
+check "deny: assignment inside eval"        deny "$(verdict "eval ${SQ}x=\"mkfs.ext4 \"; \$x /dev/sdb${SQ}")"
+check "deny: fork bomb, \${x} in the body"  deny "$(verdict ':(){ echo ${x}; :|:& };:')"
+check "deny: fork bomb, nested group"       deny "$(verdict ':(){ { true; }; :|:& };:')"
+# `<<` inside $(( … )) is a shift, not a heredoc — at any nesting level.
+check "deny: rm after a shift inside \$( )" deny "$(verdict "echo \"\$(echo \$((1 << 2)); $R -rf /)\"")"
+# Each substitution is its own subshell: assignments do not cross between them.
+check "fp: no var leak between \$( ) \$( )" safe "$(verdict "echo \"\$(x=$R)\" \"\$(\$x -rf /)\"")"
+# Defining a function is not running it.
+check "fp: fork-bomb shape, never called"   safe "$(verdict 'f(){ f|f& }')"
+# \c? is DEL — it stays INSIDE the word, so this is one long command name.
+check "fp: \$'…' with \\c? (DEL, not TAB)"  safe "$(verdict "bash -c \$'${R}\\c?-rf\\c?/'")"
+
+# --- Budget and size limits must count BYTES, because the scan does. Measured
+# --- in characters they were 4x too generous on this operator's own writing
+# --- (Russian, emoji) — the guard ran past the 5s hook timeout and gated nothing.
+pademoji=$(printf '😀%.0s' $(seq 1 14000))
+combo_u="printf '%s' '$pademoji \$x mkfs'; $FB"
+for _ in $(seq 1 7); do combo_u="echo \$($combo_u)"; done
+t0=$(date +%s%N); verdict "$combo_u" >/dev/null; t1=$(date +%s%N)
+check "perf: 56KB of emoji, 3 rules < 3s"   ok "$( (( (t1-t0)/1000000 < 3000 )) && echo ok || echo "$(( (t1-t0)/1000000 ))ms" )"
+
+# --- Sixth refuter pass (Codex) ---------------------------------------------
+# The raw pre-filters undid the very thing the token stream was built for: a
+# command name spelled with quote concatenation never reached the tokenizer.
+check "deny: rm spelled r''m"               deny "$(verdict "${R:0:1}${SQ}${SQ}${R:1:1} -rf /")"
+check "deny: rm spelled r\\m"               deny "$(verdict "${R:0:1}\\${R:1:1} -rf /")"
+check "deny: mkfs spelled mk''fs"           deny "$(verdict "mk${SQ}${SQ}fs.ext4 /tmp/image")"
+# Nested parameter expansion inside a function body.
+check "deny: fork bomb, nested \${x:-\${y}}" deny "$(verdict ':(){ echo ${x:-${y}}; :|:& };:')"
+# Nested parens in arithmetic, and a comment, inside a substitution.
+check "deny: rm after nested arithmetic"    deny "$(verdict "echo \"\$(echo \$(((1))); $R -rf / )\"")"
+check "deny: rm after a comment in \$( )"   deny "$(verdict "echo \"\$(echo ok # )
+$R -rf /
+)\"")"
+# Assignments have a POSITION in the line: a substitution sees the value that
+# was current where it stands, not the last one in the line.
+check "deny: subst sees the value in place" deny "$(verdict "x=$R; echo \"\$(\$x -rf /)\"; x=ls")"
+check "deny: eval assigns in THIS shell"    deny "$(verdict "eval ${SQ}x=$R${SQ}; \$x -rf /")"
+check "deny: eval assign, then subst"       deny "$(verdict "eval ${SQ}x=$R${SQ}; echo \"\$(\$x -rf /)\"")"
+check "fp: assignment comes after the use"  safe "$(verdict "echo \"\$(\$x -rf /)\"; x=$R")"
+check "fp: eval before the assignment"      safe "$(verdict "eval ${SQ}\$x -rf /${SQ}; x=$R")"
+# Expansion is not only "the token IS \$NAME": concatenation and word splitting.
+check "deny: value splits into words"       deny "$(verdict "x=${SQ}$R -rf /${SQ}; \$x")"
+check "deny: flags and target from a var"   deny "$(verdict "x=${SQ}-rf /${SQ}; $R \$x")"
+concat_case='p=/; '"$R"' -rf "$p/"'
+check "deny: var concatenated with a slash" deny "$(verdict "$concat_case")"
+# …but single quotes make \$p a literal, not an expansion.
+literal_case='p=/; '"$R"' -rf '"'"'$p'"'"''
+check "fp: single-quoted \$p is literal"    safe "$(verdict "$literal_case")"
+
+# --- The budget must cover the variable-table snapshots too: their cost is
+# --- variables x fragments, which an 8KB command can drive past the timeout.
+many=""; for i in $(seq 1 700); do many+="v$i=$i; "; done
+for i in $(seq 1 700); do many+="echo \$(:); "; done
+t0=$(date +%s%N); verdict "$many" >/dev/null; t1=$(date +%s%N)
+check "perf: 700 vars x 700 frags < 3s"     ok "$( (( (t1-t0)/1000000 < 3000 )) && echo ok || echo "$(( (t1-t0)/1000000 ))ms" )"
+
+
+# --- Seventh refuter pass (Codex) -------------------------------------------
+# Expansion is a MODEL, and it was still missing pieces the shell has: word
+# splitting in the device rule, position for the fork-bomb rule, several
+# references in one word, ${p:-default} — and, the other way, quoting that
+# forbids expansion entirely.
+dd_var='x="dd of=/dev/sda"; $x'
+check "deny: dd command from a variable"    deny "$(verdict "$dd_var")"
+dd_op='o=of=/dev/sda; dd $o'
+check "deny: dd operand from a variable"    deny "$(verdict "$dd_op")"
+dd_dev='d=/dev/sda; dd of=$d'
+check "deny: device path from a variable"   deny "$(verdict "$dd_dev")"
+dd_redir='d=/dev/sda; printf x > "$d"'
+check "deny: redirect device from a var"    deny "$(verdict "$dd_redir")"
+# The fork-bomb rule must read variables where they stand, like the other two.
+fb_eval='x=":(){ :|:& };:"; eval "$x"; x=true'
+check "deny: fork bomb via eval of a var"   deny "$(verdict "$fb_eval")"
+fb_shell='x=":(){ :|:& };:"; bash -c "$x"; x=true'
+check "deny: fork bomb via bash -c of var"  deny "$(verdict "$fb_shell")"
+fb_after='bash -c "$x"; x="f(){ f|f& };f"'
+check "fp: value assigned after the use"    safe "$(verdict "$fb_after")"
+# A full variable table must still allow OVERWRITING a key it already holds.
+pad_vars=""; for i in $(seq 1 128); do pad_vars+="v$i=$i; "; done
+check "deny: new var after 128 others"      deny "$(verdict "${pad_vars}danger=$R; \$danger -rf /")"
+pad127=""; for i in $(seq 1 127); do pad127+="v$i=$i; "; done
+check "deny: overwrite in a full table"     deny "$(verdict "x=ls; ${pad127}x=$R; \$x -rf /")"
+# Several references in one word, and the default-value operator.
+concat2='x=m; r${x} -rf /'
+check "deny: reference inside a word"       deny "$(verdict "$concat2")"
+concat3='a=r; b=m; ${a}${b} -rf /'
+check "deny: two references in one word"    deny "$(verdict "$concat3")"
+default_op='p=; '"$R"' -rf "${p:-/}"'
+check "deny: \${p:-/} default value"        deny "$(verdict "$default_op")"
+# Word splitting happens on newlines too, and a newline inside a VALUE separates
+# words, not commands.
+nl_cmd="x=\$'${R}\\n-rf\\n/'; \$x"
+check "deny: value split on newlines"       deny "$(verdict "$nl_cmd")"
+nl_args="x=\$'-rf\\n/'; $R \$x"
+check "deny: operands split on newlines"    deny "$(verdict "$nl_args")"
+# A comment can follow ')' as well — the ')' inside it must not close anything.
+cmt_paren="echo \"\$( (true)# )
+$R -rf /
+)\""
+check "deny: comment after ) inside \$( )"  deny "$(verdict "$cmt_paren")"
+# Quoting that FORBIDS expansion: the shell passes the dollar through literally.
+esc_dollar='p=/; '"$R"' -rf \$p'
+check "fp: escaped \$p is literal"          safe "$(verdict "$esc_dollar")"
+quoted_cmd="x=mkfs.ext4; ${SQ}\$x${SQ} /tmp/image"
+check "fp: single-quoted \$x is literal"    safe "$(verdict "$quoted_cmd")"
+# Naming a tool is not running it: these are everyday diagnostics.
+check "fp: command -v mkfs.ext4"            safe "$(verdict "command -v mkfs.ext4")"
+check "fp: man mkfs"                        safe "$(verdict "man mkfs")"
+check "fp: stat /sbin/mkfs.ext4"            safe "$(verdict "stat /sbin/mkfs.ext4")"
+check "fp: printf of a tool name"           safe "$(verdict "printf ${SQ}%s\\n${SQ} mkfs.ext4")"
+check "fp: fork-bomb shape, only echoed"    safe "$(verdict 'f(){ f|f& }; echo f')"
+
+# --- getent lookups are work too: thousands of ~user operands ran past the 5s
+# --- timeout on a command well under the 16KB cap.
+many_tilde="$R -r"; for i in $(seq 1 4000); do many_tilde+=" ~q"; done; many_tilde+=" /"
+t0=$(date +%s%N); r_many=$(verdict "$many_tilde"); t1=$(date +%s%N)
+check "perf: 4000 ~user operands < 3s"      ok "$( (( (t1-t0)/1000000 < 3000 )) && echo ok || echo "$(( (t1-t0)/1000000 ))ms" )"
+check "deny: …and it still gates the root"  deny "$r_many"
+
+# --- Oversized commands: the token scan is O(n²) and the hook has a 5s timeout,
+# --- so past 16KB it hands off to the linear raw matcher. A guard that times out
+# --- gates NOTHING, and does so silently — the one failure this floor must not have.
+pad=$(printf 'x%.0s' $(seq 1 20000))
+check "deny: 20KB command, real rm root"  deny "$(verdict "echo $pad && $R -rf /")"
+check "fp: 20KB command, rm of /tmp"      safe "$(verdict "echo $pad && $R -rf /tmp/x")"
+
 # --- Edit/Write: DENY-only guard no longer gates protected paths ------------
 # (NTFS/Windows-mount writes are still DENY, but require a live mount to test.)
 check "edit passthrough: /etc/hosts"    safe "$(verdict_edit /etc/hosts)"
