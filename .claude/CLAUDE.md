@@ -61,6 +61,12 @@ Single-agent — дефолт для most coding (инвариант переж�
   в main thread;
 - (в) **auto-compact rescue** — редко при 1M context window.
 
+Отдельно от spawn-политики: независимый judge для silent-wrong класса
+(парсеры/guards/инвариантные рефакторы) — **ревьюер другого вендора**,
+Codex через MCP-сервер `codex_peer` (скилл `codex-mcp` хранит поверхность
+вызова; дисциплина — `.claude/docs/multi-agent.md` §7.3). Это не subagent
+и не нарушение api-constraint: сторонний CLI на своей подписке.
+
 В остальном — main thread сам, даже если описание агента подходит «по
 ассоциации». Single-agent — дефолт для most coding; bounded fan-out
 оправдан, когда scope **превышает один контекст** (codebase-scale sweep,

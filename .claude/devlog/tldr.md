@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #127 · 2026-08-01 · Cross-vendor критик (Codex) переписал парсер system-guard: 7 раундов, 60+ дефектов
+
+**Tags:** guardrails, testing, multi-agent, tooling
+
+Оператор подключил Codex CLI как MCP-сервер (codex_peer, tools codex / codex-reply) и глобальный скилл codex-mcp с замороженными фактами вызова. Появился ревьюер другого вендора — механизм §8 личного baseline (judge ≠ author, fresh context) без ограничения «то же семейство…
+
+[→ entries/0127-cross-vendor-kritik-codex-perepisal-parser-system-guard-7-ra.md](entries/0127-cross-vendor-kritik-codex-perepisal-parser-system-guard-7-ra.md)
+
+---
+
 ## #126 · 2026-07-25 · Opus 5: xhigh ломает WebSearch, доки де-версионированы
 
 **Tags:** config, docs, harness

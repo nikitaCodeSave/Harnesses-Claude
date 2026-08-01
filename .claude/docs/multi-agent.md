@@ -174,6 +174,23 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 
 **P/G/E нативно на CLI-подписке**: с CC v2.1.154+ паттерн Planner→Generator→Evaluator и adversarial-convergence (find→refute→converge) доступны через built-in **dynamic workflows** (keyword `ultracode`, или просто попроси) — **без** API/managed-agents. First-party источник — [«A harness for every task» (Shihipar & Bidasaria, 2 июня 2026)](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code): Claude читает задачу, пишет собственный `.js`-harness (spawn субагентов, назначение моделей, worktree-изоляция, resume после прерывания), и harness становится **output задачи, не предусловием**. Обоснование изоляции — три failure-mode длинных/параллельных прогонов, которые отдельные context-окна лечат структурно: **agentic laziness** (бросает сложную задачу, объявив done), **self-preferential bias** (подтверждает собственный вывод при self-verify — ровно §8 fresh-context ≠ self-recheck), **goal drift** (констрейнты теряются через turns/compaction). `ultracode` = trigger word, не отдельный режим. [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) (API-only beta) остаются out of scope; концепт больше не нужно вручную портировать на CLI-примитивы — он встроен.
 
+### 7.3 Cross-vendor fresh-context ревьюер (Codex через MCP)
+
+§8 личного baseline требует, чтобы high-stakes deliverable судил **независимый свежий контекст**. Обычный subagent даёт свежий контекст, но остаётся тем же семейством моделей и разделяет наши же слепые пятна. Codex CLI умеет работать MCP-сервером (`codex mcp-server`), а Claude Code — его клиентом: получается ревьюер **другого вендора**, который не якорится на решении, построенном нами.
+
+**Как включено** (user scope, один раз): `claude mcp add -s user -t stdio codex_peer -- "$(command -v codex)" mcp-server`. Инструменты — `mcp__codex_peer__codex` / `mcp__codex_peer__codex-reply`. Полная поверхность вызова (параметры через дефис, effort через `config.model_reasoning_effort`, таймауты, auto-backgrounding >2 мин, чем ограничена ChatGPT-авторизация) заморожена в **глобальном скилле `~/.claude/skills/codex-mcp/`** — не перепроверять её каждую сессию.
+
+**Когда применять**: тот же триггер, что и §8 per-change — silent-wrong класс (парсеры/переписчики недоверенного ввода, guards/валидаторы, инвариант-сохраняющие рефакторы). Плюс тупик в реализации: второй вендор вместо повторных попыток в том же контексте.
+
+**Дисциплина применения** (эмпирика devlog #127 — 7 раундов на `system-guard.sh`):
+- **Промпт на опровержение**, не на подтверждение, и `sandbox: "read-only"` для ревью — ревьюеру запись не нужна по определению.
+- **Вывод — сырьё для триажа, не список задач.** Реальные находки идут вперемешку с уже задокументированными резидуалами и с adversarial-обфускацией, защищаться от которой бессмысленно. Ретрансляция as-is даёт 16 «багов» вместо 5.
+- **Каждую находку воспроизводить самому** — падающим тестом до фикса. Агент другого вендора ошибается так же, как свой.
+- **Цикл find→fix→refute не сходится сам.** Каждый следующий раунд находит новое, включая регрессии от предыдущих фиксов. Сигнал остановки — не «ничего не нашёл», а «находки перестали быть регрессиями и зависаниями»; плюс объективный слой рядом (дифференциальный прогон старой и новой версии на реальном корпусе команд).
+- **Модерация OpenAI отклоняет security-формулировки** («обходы», «разрушительные команды» → *flagged for possible cybersecurity risk*). Нейтральная формулировка того же запроса («ошибки разбора», «расхождения вердиктов») проходит.
+
+**Границы**: это не замена built-in dynamic workflows (`ultracode`) — там fan-out своими субагентами внутри нашей подписки; здесь одиночный внешний judge. И не нарушение `rules/api-constraint.md`: инвариант запрещает Anthropic API, а не сторонний CLI на собственной подписке пользователя.
+
 ---
 
 ## 8. Anti-patterns (запрещены ADR'ами нашего harness'а)

@@ -76,6 +76,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 - **TDD оправдан** для changes *«easily verifiable with unit, integration, or end-to-end tests»* — Best Practices (опт-in framing).
 - 5 invariants в `.claude/rules/testing.md`: тест в той же сессии что и код / RED → GREEN / тесты рядом с кодом / один тест — одно поведение / регрессионный тест перед фиксом.
 - **Address root causes, не symptoms**: *«fix the underlying issue, don't suppress the error»* — Best Practices.
+- **Cross-vendor judge для silent-wrong класса**. Свежий контекст своего же семейства делит с автором слепые пятна; ревьюер другого вендора — нет. Codex подключён MCP-сервером (`codex_peer`), поверхность вызова заморожена в глобальном скилле `codex-mcp`, дисциплина применения — `multi-agent.md` §7.3. Эмпирика: 5 реальных дыр в `system-guard.sh` мимо 109 тестов, трёх фикс-коммитов и всех нативных проходов (devlog #127). Вывод внешнего ревьюера **триажируется и воспроизводится тестом**, не принимается на веру.
 
 ## Documentation
 
