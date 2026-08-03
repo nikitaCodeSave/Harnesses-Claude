@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #128 · 2026-08-03 · Preview-фикс из плагина: артефакты лабы перегенерированы, три записи выправились
+
+**Tags:** devlog, tooling, docs
+
+Плагин devlog v1.20.1 починил генератор: preview теперь plain-текст — разметка снимается до обрезки, код-спан проходит verbatim, лимит ≤280 стал истинным. Лаба догфудит генератор симлинком: правка приехала молча, а артефакты остались от старой версии.
+
+[→ entries/0128-preview-fiks-iz-plagina-artefakty-laby-peregenerirovany-tri.md](entries/0128-preview-fiks-iz-plagina-artefakty-laby-peregenerirovany-tri.md)
+
+---
+
 ## #127 · 2026-08-01 · Cross-vendor критик (Codex) переписал парсер system-guard: 7 раундов, 60+ дефектов
 
 **Tags:** guardrails, testing, multi-agent, tooling
@@ -202,7 +212,7 @@ Research-pass по first-party статье claude.com/blog/steering-claude-code
 
 **Tags:** bugfix, harness
 
-Kit-baseline references/project-docs/workflow.md нёс Caveat: (стр. 24-25): «ExitPlanMode disables Auto Mode (anthropics/claude-code#49947), so if Auto Mode is on, prefer a written plan file over entering plan mode». Этот совет уводил проекты от нативного Plan Mode и был seed'ом…
+Kit-baseline references/project-docs/workflow.md нёс *Caveat:* (стр. 24-25): «ExitPlanMode disables Auto Mode (anthropics/claude-code#49947), so if Auto Mode is on, prefer a written plan file over entering plan mode». Этот совет уводил проекты от нативного Plan Mode и был…
 
 [→ entries/0108-snyat-ustarevshiy-plan-mode-caveat-iz-kit-v1-9-1.md](entries/0108-snyat-ustarevshiy-plan-mode-caveat-iz-kit-v1-9-1.md)
 
@@ -792,7 +802,7 @@ Re-measurement cost-envelope под Opus 4.8 (триггер из devlog #50/#51
 
 **Tags:** adr, harness, experiment
 
-Оператор сообщил, что /harness-setup (skill claude-code-harness) генерирует target-CLAUDE.md без behavioral guidance — нет «думай прежде чем кодить / минимум кода / surgical changes / verifiable goals», которые Карпати [сформулировал в…
+Оператор сообщил, что /harness-setup (skill claude-code-harness) генерирует target-CLAUDE.md без behavioral guidance — нет «думай прежде чем кодить / минимум кода / surgical changes / verifiable goals», которые Карпати сформулировал в forrestchang/andrej-karpathy-skills. Первая…
 
 [→ entries/archive/0049-working-style-block-added-to-harness-setup-template-a-b-c-n.md](entries/archive/0049-working-style-block-added-to-harness-setup-template-a-b-c-n.md)
 
@@ -1022,7 +1032,7 @@ Continuation of devlog #26 (Milestone 1 scaffolding). User explicit authorizatio
 
 **Tags:** harness, self-improvement, loop, ralph, scaffolding
 
-User authorized многочасовой autonomous self-improvement цикл harness'а по аналогии с Ralph-pattern ([Mishra-Sharma «Long-running Claude», Mar 2026](https://www.anthropic.com/research/long-running-Claude) + Huntley ralph-wiggum). Goal: эмпирическая эволюция harness'а для…
+User authorized многочасовой autonomous self-improvement цикл harness'а по аналогии с Ralph-pattern (Mishra-Sharma «Long-running Claude», Mar 2026 + Huntley ralph-wiggum). Goal: эмпирическая эволюция harness'а для projects «new» И «old» через claude --print loop с file-based…
 
 [→ entries/archive/0026-self-improvement-ralph-loop-milestone-1-scaffolding.md](entries/archive/0026-self-improvement-ralph-loop-milestone-1-scaffolding.md)
 
