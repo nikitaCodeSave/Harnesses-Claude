@@ -1,6 +1,6 @@
 # Harnesses-Claude
 
-**Лаборатория R&D дизайна harness'а для Claude Code** — поколение Fable 5 + Sonnet 5 + Opus 4.8 / Claude Code 2.1.211.
+**Лаборатория R&D дизайна harness'а для Claude Code.** Выводы model-agnostic; актуальный срез версий и built-in'ов — единственный version-pinned файл кита, `references/native-capabilities.md`.
 
 > ⚠️ **Это лаборатория, а не шаблон.** `.claude/` здесь содержит исследовательскую
 > машинерию (`benchmark/`, discovery-критиков, event-логи, архивный `docs/archive/loop-2026-05/`),
@@ -36,7 +36,7 @@ thread'а — anti-pattern.
 
 | | Где | Что |
 |---|---|---|
-| **Канон** (отгружается) | `~/.claude/skills/claude-code-harness/` (v1.10.0) | bootstrap / audit / extend / explain режимы; `references/` (native-capabilities, harness-discipline, practice-baseline §1–8, harness-evolution, evidence-base); shipped project-docs |
+| **Канон** (отгружается) | `~/.claude/skills/claude-code-harness/` | bootstrap / audit / extend / explain режимы; `references/` (native-capabilities, harness-discipline, harness-evolution, evidence-base, operator-playbook); shipped project-docs. Ни агентов, ни команд, ни хуков — только скилл и справочники |
 | **Practice baseline §1–8** | operator-global `~/.claude/CLAUDE.md` | think-first · simplicity · surgical · goal-driven · testing · continuity · guardrails · independent-verification. Применяется во всех проектах, **не дублируется** в каждый репо |
 | **Лаборатория** (этот репо) | `.claude/` | R&D-машинерия: эволюция канона, бенчмарки, devlog, архив ретайренных экспериментов — **не копируется** |
 
@@ -51,12 +51,12 @@ WORKFLOW.md              — портативный human-facing гайд: ст�
 │                          principles · harness-architecture · workflow(+async/orchestration/cloud/evolution)
 │                          · multi-agent · memory-layers · benchmark · external-sources
 ├── rules/               — 3 инварианта: api-constraint · testing · docs-discipline
-│                          (проектных hooks/commands нет — ретайрены 2026-07-15; хуки внешние: system-guard — глобальный, SessionStart-дайджест — плагин devlog)
+│                          (проектных hooks/commands нет — ретайрены 2026-07-15; единственный внешний хук — SessionStart-дайджест плагина devlog)
 ├── skills/              — 1 action-skill: update-plan-progress (progress-журнал multi-session задач)
-├── devlog/              — 123 записи (live + archive/), index.json/tldr.md (авто, через devlog-reindex)
+├── devlog/              — 135 записей (live + archive/), index.json/tldr.md (авто, через devlog-reindex)
 ├── benchmark/           — 4-layer измерительная методология (static → headless → cross-fixture → smoke), text2sql-оракулы
 ├── memory/              — JSONL event-логи (session-starts, agent-spawn, denied, …) для continuity
-├── audits/              — provenance прогонов /external-audit (AUDIT-*.json + логи)
+├── audits/              — provenance независимых аудитов (AUDIT-*.json + логи), frozen
 ├── plans/ · progress/   — долгоживущие планы + in-flight состояние (progress gitignored)
 └── worktrees/           — эфемерные git-worktree'ы (gitignored)
 ```
@@ -89,9 +89,10 @@ continuity (devlog/progress/memory) · mechanical-guardrails · independent-veri
 Эволюция канона идёт по эмпирическим сигналам (не по вкусу), **model-agnostic** и
 **evidence-gated** — single-incident в invariant не превращается. Две операции + provenance:
 
-- **Refresh-ledger** — штамп последней точки заземления (`last-grounded: CC v2.1.211 ·
-  Fable 5 + Sonnet 5 + Opus 4.8 · дата · проверенные источники`). Дельта `claude --version` против
-  ledger — самостоятельный триггер ревизии.
+- **Refresh-ledger** — штамп последней точки заземления (`last-grounded: CC <версия> ·
+  <модели поколения> · дата · проверенные источники`; сам штамп живёт в
+  `harness-evolution.md` кита). Дельта `claude --version` против ledger — самостоятельный
+  триггер ревизии.
 - **D-цикл** (≈1 сессия, на milestone-close) — fold доказанных находок внутрь канона:
   собрать → классифицировать (`kit-gap` / `project-specific` / `single-incident` / `noise`) →
   gate (только `kit-gap` с multi-source evidence) → point-edit reference → commit + devlog.

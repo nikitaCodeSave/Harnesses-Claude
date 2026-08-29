@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-06-09
+last-updated: 2026-08-07
 ---
 
 # Harness Benchmark Methodology
@@ -159,14 +159,14 @@ Aggregate summary обязан включать:
 
 ## Native `/goal` и `claude agents` — где применимы, где нет
 
-Claude Code (built-ins с 2.1.139; актуальный срез — `native-capabilities.md`) даёт `/goal` (loop-to-condition внутри сессии) и `claude agents` (TUI для параллельных background-сессий). На первый взгляд кажется, что это покрывает наши runner'ы — на практике нет: они на разном уровне абстракции.
+Claude Code (актуальный срез built-ins — `native-capabilities.md`) даёт `/goal` (loop-to-condition внутри сессии) и `claude agents` (TUI для параллельных background-сессий). На первый взгляд кажется, что это покрывает наши runner'ы — на практике нет: они на разном уровне абстракции.
 
 **`/goal` — runtime control внутри одной `claude --print` сессии**. Наши runner'ы — measurement pipelines (clone fixture → inject harness → run claude → parse stream-json → pytest judge → aggregate report). `/goal` не заменяет ни один из 5/9 фаз. Заменить им можно только **prompt** на входе в Phase 3 (Build) battle-test-runner'а, и то выборочно:
 
 - Уместно: усилить acceptance в `prompt.txt` (`/goal The deliverable invokes without ImportError and pytest exits 0`). Это prompt-engineering, не структурное изменение.
 - Не уместно: оборачивать сам `claude --print` в bash-loop вокруг `/goal` — это попытка дублировать встроенный механизм извне.
 
-**Cost watch**: тривиальный `/goal` (одна Edit, 4 turn'а, 14s) — $0.11 (Opus 4.7 1M $0.109 + Haiku 4.5 $0.003, гибрид). Для долгих goals предсказуемо $1+. Безопасность — в `prompt.txt` явное «stop after N turns regardless» либо внешний `timeout`.
+**Cost watch**: тривиальный `/goal` (одна Edit, 4 turn'а, 14s) — ≈$0.11 в гибриде «топовая модель + Haiku» (замер прошлого поколения, порядок величины). Для долгих goals предсказуемо $1+. Безопасность — в `prompt.txt` явное «stop after N turns regardless» либо внешний `timeout`.
 
 **`claude agents` (TUI) — параллельные independent-сессии с автоматической worktree-isolation**. Кандидат на замену последовательного multi-run в Layer D protocol (n=3..5 на cell). Не верифицировано эмпирически в нашем контексте на момент 2026-05-12; перед адопцией нужен test-run: запустить 3 одинаковых benchmark cell'а через agent view и подтвердить (а) корректную worktree-изоляцию между ними, (б) отсутствие гонок при записи `reports/`, (в) что permission-context из `.claude/settings.json` применяется per-process.
 

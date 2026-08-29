@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-06-07
+last-updated: 2026-08-07
 status: active
 ---
 
@@ -13,7 +13,7 @@ status: active
 ## TL;DR
 
 5 primitives:
-1. **`Monitor` tool** (v2.1.98) — event-driven background watcher. **Replaces polling/sleep loops** (dominant new primitive 2026 Q2). **Availability (2026-06-11, FP tools-reference#monitor-tool)**: недоступен на Bedrock/Vertex/Foundry и при `DISABLE_TELEMETRY` / `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` — если у оператора выставлен любой из них, Monitor отсутствует; fallback — background Bash (output-file path + `<task-notification>` по завершении).
+1. **`Monitor` tool** — event-driven background watcher. **Replaces polling/sleep loops**. **Availability** (FP tools-reference#monitor-tool): недоступен на Bedrock/Vertex/Foundry и при `DISABLE_TELEMETRY` / `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` — если у оператора выставлен любой из них, Monitor отсутствует; fallback — background Bash (output-file path + `<task-notification>` по завершении).
 2. **`Task*` tools** — structured task list (L0 memory layer)
 3. **`Cron*` / `ScheduleWakeup`** — time-based wake
 4. **`SendMessage`** — agent-to-agent mid-flight communication
@@ -26,7 +26,7 @@ Anti-pattern: `bash sleep` loops для wait. Всегда Monitor.
 ```
 Нужно дождаться output фонового процесса?
   └─ Yes → Monitor tool (event-driven)
-        Bash sleep loop = ANTI-PATTERN (per Anthropic w15)
+        Bash sleep loop = ANTI-PATTERN (per Anthropic docs)
 
 Нужно run-later (specific time)?
   └─ Yes → ScheduleWakeup + Cron* if recurring
@@ -50,7 +50,7 @@ Anti-pattern: `bash sleep` loops для wait. Всегда Monitor.
 | Situation | Primitive | Why |
 |-----------|-----------|-----|
 | Long-running build/test, нужен output как готов | `Monitor` | Event-driven, 200ms batching |
-| Multiple parallel checks (lint+test+typecheck) | parallel `Agent` calls + main thread integrate | Standard fan-out — см. [multi-agent.md](multi-agent.md) §7.1. **С 2.1.161 упавший Bash в parallel tool-batch не отменяет siblings** — каждый tool возвращает результат независимо |
+| Multiple parallel checks (lint+test+typecheck) | parallel `Agent` calls + main thread integrate | Standard fan-out — см. [multi-agent.md](multi-agent.md) §7.1. **Упавший Bash в parallel tool-batch не отменяет siblings** — каждый tool возвращает результат независимо |
 | «Wake up tomorrow at 9am и check X» | `ScheduleWakeup` или `Routines` (cloud) | Schedule-driven |
 | Recurring task («каждые 10мин check PR status») | `/loop` self-pacing | Adaptive interval |
 | Inter-agent коммуникация мид-task | `SendMessage(to: agentId)` | Mid-flight handoff |
@@ -61,7 +61,7 @@ Anti-pattern: `bash sleep` loops для wait. Всегда Monitor.
 
 ## Monitor tool (event-driven background)
 
-The **dominant primitive of 2026 Q2**. Pattern:
+Канонический примитив ожидания. Pattern:
 
 ```
 1. Spawn background script (build / test / watch / log-tail)
@@ -94,7 +94,7 @@ sleep 30 && check_build_status
 Monitor({command: "watch_build.sh", persistent: true})
 ```
 
-Now explicit anti-pattern per [code.claude.com/docs/en/whats-new/2026-w15](https://code.claude.com/docs/en/whats-new/2026-w15).
+Explicit anti-pattern per [code.claude.com/docs/en/tools-reference](https://code.claude.com/docs/en/tools-reference).
 
 ---
 
@@ -163,15 +163,21 @@ Cron-локально хорош когда нужно on-machine state (file ch
 
 Most sub-agents fire-and-forget (single Agent call → result back). **SendMessage только когда need mid-flight handoff** — most spawn lifecycles линейные.
 
-### Security (2.1.166)
+### Cross-session и безопасность
 
-Cross-session `SendMessage` relays **больше не несут user-authority**: receiver отклоняет relayed permission requests, auto mode их блокирует. Не закладывайся на то, что message от другой сессии может авторизовать привилегированное действие.
+`SendMessage` работает и **между сессиями на разных машинах** (`ListAgents` перечисляет адресатов).
+Границы канала: relay **не несёт user-authority** (receiver отклоняет проброшенные permission
+requests, auto mode их блокирует), исходящее сообщение проходит permission-классификатор,
+доставка в сессию с обойдёнными permissions придерживается на подтверждение (`crossSessionInbound`).
+Не закладывайся на то, что message от другой сессии может авторизовать привилегированное действие —
+и помни, что доступ к другому агенту эквивалентен его правам
+([workflow-orchestration.md](workflow-orchestration.md) § Cross-session).
 
 ---
 
 ## /loop self-pacing
 
-Week 15 (2026-04-06) addition. Claude picks next-tick interval automatically based on observed activity — лучше fixed cron когда cadence data-dependent.
+Claude picks next-tick interval automatically based on observed activity — лучше fixed cron когда cadence data-dependent.
 
 Pattern:
 ```
@@ -203,7 +209,7 @@ Full details — [workflow-cloud-offload.md](workflow-cloud-offload.md).
 
 | Anti-pattern | Source | Replacement |
 |--------------|--------|-------------|
-| `sleep 30 && check_status` Bash polling | Anthropic w15 release notes | `Monitor` tool |
+| `sleep 30 && check_status` Bash polling | Anthropic docs (tools-reference) | `Monitor` tool |
 | Manual `while true; do ... done` for watching | community 2026 explicit | `Monitor` + `persistent: true` |
 | Sleep-based delay для CI status poll | Anthropic | `/autofix-pr` + Monitor |
 | `Agent` spawn для one-shot tool call | Anthropic Multi-Agent Research | Direct tool call в main thread |
@@ -215,7 +221,7 @@ Full details — [workflow-cloud-offload.md](workflow-cloud-offload.md).
 
 ## Sources
 
-- [code.claude.com/docs/en/whats-new/2026-w15](https://code.claude.com/docs/en/whats-new/2026-w15) — Monitor tool, `/loop`, `/autofix-pr`, `/team-onboarding`
+- [code.claude.com/docs/en/tools-reference](https://code.claude.com/docs/en/tools-reference) — Monitor tool, availability-гейтинг, sleep-loop anti-pattern
 - [Monitor tool deep-dive (MindStudio)](https://www.mindstudio.ai/blog/claude-code-monitor-tool-background-processes)
 - [Boris Cherny — Code w/ Claude 2026 keynote (Simon Willison live-blog)](https://simonwillison.net/2026/May/6/code-w-claude-2026/) — Routines paradigm, «wake up to merged PRs»
 - [TechCrunch — Cat Wu interview (2026-05-13)](https://techcrunch.com/2026/05/13/anthropics-cat-wu-says-that-in-the-future-ai-will-anticipate-your-needs-before-you-know-what-they-are/) — proactivity thesis

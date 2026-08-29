@@ -134,17 +134,17 @@ DENY-правила     GLOSSARY             ADR / docs      ultracode если 
 
 Scope **превышает один контекст** (codebase-sweep, миграция, trust-critical find→refute→converge):
 
-- **Built-in dynamic workflows** — keyword **`ultracode`** (trigger word, не отдельный режим; переименован с `workflow` в 2.1.160 — голое «workflow» больше не триггерит) или просто попроси. Claude пишет собственный `.js`-harness под задачу: скрипт держит план/цикл/промежуточные результаты, в контекст входит только финал; **harness = output задачи, не предусловие**, переживает прерывание (resume). Стоит **заметно больше токенов** — не дефолт. [[7]]
+- **Built-in dynamic workflows** — keyword **`ultracode`** (trigger word, не отдельный режим; голое «workflow» не триггерит) или просто попроси. Claude пишет собственный `.js`-harness под задачу: скрипт держит план/цикл/промежуточные результаты, в контекст входит только финал; **harness = output задачи, не предусловие**, переживает прерывание (resume). Стоит **заметно больше токенов** — не дефолт. [[7]]
 - **НЕ** строй кастомный PM→Architect→Dev→QA pipeline (built-ins-first).
 - **Недоверенный вход в fan-out → quarantine**: субагенты, читающие untrusted-контент (web/issues/email), отделены от тех, кто выполняет high-privilege действия — privilege-separation против prompt-injection. [[7]]
-- Параллельные ветки — `-w` worktree + `claude agents` (с 2.1.169 `--json` отдаёт `id`/`state`/`--all` для observability фронта). Async-ожидание — `Monitor` tool, **никогда** bash `sleep`.
+- Параллельные ветки — `-w` worktree + `claude agents` (`--json` отдаёт `id`/`state`/`--all` для observability фронта). Async-ожидание — `Monitor` tool, **никогда** bash `sleep`.
 - **Backlog для large/кампаний — ОДИН редактируемый носитель, генерируемый one-way из spec** (переиспользуй `features.json` или Plan-файл — не заводи новый store и не строй md↔json зеркала с sync-машинерией). Не мандат единого формата: A/B (`campaign-backlog-ab`, drift=0, N=3) показал dual-canon безопасен — рычаг в one-way-генерации без mirror-sync, не в структуре.
 
 ---
 
 ## Ритуал поверх всего
 
-Раз в 3-6 мес (или на мажорном апгрейде модели, или на дельте `claude --version` против зафиксированной baseline) — **аудит harness'а на staleness**: что модель теперь делает нативно → выкинуть. Сверяй **дельту от refresh-ledger** (последняя точка заземления: CC-версия / модель / проверенные источники), не «всё с нуля»; два прохода — external-intake (что сдвинулось снаружи: changelog, first-party docs, essays) и re-test (что из обвязки устарело). Быстрый тест «модель или обвязка» — `--safe-mode` (старт с отключёнными CLAUDE.md/skills/hooks/MCP, 2.1.173): если без harness'а не хуже — компонент устарел. Под 4.6+ Anthropic сама убрала ручные context-resets и sprint-decomposition («context anxiety» ушла). [[1]][[3]]
+Раз в 3-6 мес (или на мажорном апгрейде модели, или на дельте `claude --version` против зафиксированной baseline) — **аудит harness'а на staleness**: что модель теперь делает нативно → выкинуть. Сверяй **дельту от refresh-ledger** (последняя точка заземления: CC-версия / модель / проверенные источники), не «всё с нуля»; два прохода — external-intake (что сдвинулось снаружи: changelog, first-party docs, essays) и re-test (что из обвязки устарело). Быстрый тест «модель или обвязка» — `--safe-mode` (старт с отключёнными CLAUDE.md/skills/hooks/MCP): если без harness'а не хуже — компонент устарел. Под текущим поколением Anthropic сама убрала ручные context-resets и sprint-decomposition («context anxiety» ушла). [[1]][[3]]
 
 ---
 

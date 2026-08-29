@@ -1,150 +1,110 @@
 # Meta-orchestrator instructions for Claude Code
 
+@../AGENTS.md
+
 Этот файл — мета-уровневый. Он НЕ описывает проект; проектный CLAUDE.md
 создаётся в первой сессии через built-in `/init` или `/team-onboarding`.
+Операционный слой (команды, границы, неочевидные конвенции) вынесен в корневой
+`AGENTS.md` — единственный источник для агентов любого вендора; здесь он
+подключён импортом, а не пересказан.
 
 **Этот репозиторий — лаборатория harness'а, не шаблон.** `.claude/` здесь
-содержит R&D-машинерию (`benchmark/`, discovery-критиков, архивный
-`docs/archive/loop-2026-05/`), которую НЕЛЬЗЯ копировать целиком в целевой проект. Каноничное, отгружаемое знание о
-дизайне harness'а живёт в глобальном скилле `~/.claude/skills/claude-code-harness/`;
+содержит R&D-машинерию (`benchmark/`, архив `docs/archive/`), которую НЕЛЬЗЯ
+копировать целиком в целевой проект. Каноничное, отгружаемое знание о дизайне
+harness'а живёт в глобальном скилле `~/.claude/skills/claude-code-harness/`;
 минимальный стартовый harness для нового проекта — его **Bootstrap-режим**, а
 не копия этого репо.
 
-## Foundational principle (центральный)
+## Foundational principle
 
 **Под способной моделью минимум обвязки даёт максимум продуктивности**
-(последнее re-grounding — поколение Opus 4.8, июль 2026; принцип
-model-agnostic — не пере-привязывай его к конкретной версии при апгрейде). Симптом «трудности в росте harness'а» —
-почти всегда признак того, что обвязка переросла полезность модели. Если
-предлагаемый компонент кодирует assumption «модель не умеет X», а модель
-уже умеет X нативно — компонент не добавляется.
+(model-agnostic; провенанс последнего re-grounding — refresh-ledger в
+`harness-evolution.md` кита). Компонент не добавляется, если кодирует
+assumption «модель не умеет X», а модель уже умеет X нативно. Порог появления
+— повторяющаяся эмпирика или multi-source: **single-incident в invariant не
+превращается**.
 
-**Уточнение про мета-уровень (higher-order orchestration)**: main
-thread = meta-orchestrator. Его задача — не писать код напрямую, а
-**конфигурировать окружение Claude Code** (preload context, выставить
-constraints, recognize паттерны делегирования) перед тем как «попросить»
-inner executor писать код. Skill / agent / hook как **environment
-configurator** — допустимы; как **duplicate of built-in capability**
-или **self-description main thread'а** — anti-pattern.
+Main thread = meta-orchestrator: конфигурирует окружение перед тем, как inner
+executor напишет код. Skill / agent / hook как environment configurator —
+допустимы; как дубль built-in или самоописание main thread'а — anti-pattern.
 
-Когда компонент *должен* появиться: эмпирическое доказательство, что
-модель не делает X нативно, X не покрывается проектным CLAUDE.md или
-built-in'ами, и потребность повторяется. **Single-incident в invariant
-не превращается** — pattern требует multi-source-evidence или
-повторяющейся эмпирики.
+Развёрнуто: [principles.md](docs/principles.md),
+[harness-architecture.md](docs/harness-architecture.md).
 
-## API constraint (КРИТИЧНО)
+## Жёсткие рамки
 
-Harness строго на CLI-подписке Claude Code. Anthropic API, managed-agents,
-beta headers, `--bare`, `--max-budget-usd` — **out of scope**. Полные
-invariants и допустимые переносы концепций — `.claude/rules/api-constraint.md`.
-
-## Built-ins first (КРИТИЧНО)
-
-Перед созданием любого custom subagent'а: `claude agents`. Built-ins
-(Explore, Plan, general-purpose, statusline-setup, claude-code-guide)
-дублировать ЗАПРЕЩЕНО. Orchestrator-роль исполняется самим main thread,
-не отдельным subagent'ом. Для делегирования глубоких задач — built-in
-`general-purpose` через Task tool.
-
-## Sub-agent spawn policy
-
-Main thread = meta-orchestrator (это я, кто общается с пользователем).
-Owns задачу end-to-end до verification и финального ответа. Делегирование
-в subagent — инструмент для inner executors, не передача ownership'а.
-
-Single-agent — дефолт для most coding (инвариант пережил переход 4.7→4.8;
-на текущем поколении не перемерен). Spawn subagent'а оправдан ТОЛЬКО:
-- (а) **изоляция контекста** — search-heavy работа, чей вывод
-  загрязнит main thread (file scans, broad codebase research);
-- (б) **параллельность** — независимые поиски/проверки, сходящиеся
-  в main thread;
-- (в) **auto-compact rescue** — редко при 1M context window.
-
-Отдельно от spawn-политики: независимый judge для silent-wrong класса
-(парсеры/guards/инвариантные рефакторы) — **ревьюер другого вендора**,
-Codex через MCP-сервер `codex_peer` (скилл `codex-mcp` хранит поверхность
-вызова; дисциплина — `.claude/docs/multi-agent.md` §7.3). Это не subagent
-и не нарушение api-constraint: сторонний CLI на своей подписке.
-
-В остальном — main thread сам, даже если описание агента подходит «по
-ассоциации». Single-agent — дефолт для most coding; bounded fan-out
-оправдан, когда scope **превышает один контекст** (codebase-scale sweep,
-миграция, trust-critical верификация find→refute→converge). Для такого —
-**built-in dynamic workflows** (ключевое слово `ultracode`),
-НЕ кастомный subagent-pipeline (built-ins-first;
-стоит заметно больше токенов — не дефолт). Полный baseline (pre-spawn
-checklist, brief contract, model assignment, anti-patterns, evidence-based
-числа) — читать on-demand из `.claude/docs/multi-agent.md`.
+- **Только CLI-подписка.** Anthropic API, managed-agents, beta headers,
+  `--bare`, `--max-budget-usd` — вне scope. Инварианты и допустимые переносы —
+  [rules/api-constraint.md](rules/api-constraint.md) (загружен всегда, здесь не
+  пересказывается).
+- **Built-ins first.** Перед созданием custom subagent'а — `claude agents`.
+  Built-ins не дублируются; orchestrator-роль исполняет сам main thread.
+- **Spawn subagent'а оправдан только** при (а) изоляции контекста, (б)
+  параллельности независимых проверок, (в) auto-compact rescue. В остальном —
+  main thread сам, даже если описание агента подходит «по ассоциации».
+  Scope больше одного контекста → built-in dynamic workflow (`ultracode`), НЕ
+  кастомный pipeline. Дисциплина и цифры: [multi-agent.md](docs/multi-agent.md).
+- **Независимый judge для silent-wrong класса** (парсеры, guards, инвариантные
+  рефакторы) — ревьюер другого вендора, Codex через MCP `codex_peer` (скилл
+  `codex-mcp`). Не subagent и не нарушение api-constraint: сторонний CLI на
+  своей подписке. Замер на Opus 5: devlog #130.
 
 ## Anti-patterns
 
-- Не создавать многоступенчатый PM→Architect→Dev→QA pipeline
-- Не писать Generator/Evaluator контракт для каждого sprint'а
-- Не блокировать writes mid-thought через hooks (block-at-submit, не
-  block-at-write)
-- Не лить мегарайлзы в CLAUDE.md (контекст-бюджет — public good)
+- Многоступенчатый PM→Architect→Dev→QA pipeline.
+- Generator/Evaluator контракт под каждый sprint.
+- Блокировка writes mid-thought хуками (block-at-submit, не block-at-write).
+- Мегарайлзы в CLAUDE.md: контекст-бюджет — public good, а правило, которое
+  устарело, ограничивает решения сильнее, чем помогает.
 
 ## First-session contract
 
 <important if="this harness applied to a new project repo without project CLAUDE.md">
-Перед написанием кода зафиксировать с разработчиком:
-- Стек (язык, фреймворк, package manager) — без default'ов
-- Project mode (new/mature)
-- Acceptance criteria первого deliverable
-- Verification механизм (test command, lint, screenshot, manual)
-- Sensitive paths/команды для DENY в settings.json
-Сохранить в проектном CLAUDE.md (в корне репо, не здесь).
+До кода зафиксировать с разработчиком: стек · project mode (new/mature) ·
+acceptance criteria первого deliverable · механизм верификации · sensitive
+paths для DENY. Сохранить в проектном CLAUDE.md (в корне репо, не здесь).
 
-Это **soft guidance**, не invariant. Под способной моделью в agentic workflow
-эти пункты часто появляются органически из conversation — формальное
-upfront-интервью **не обязательно** (см. ADR-014 evidence). Built-in
-`/init` документирует repo-state; недостающие куски контракта
-проявляются в первой задаче и фиксируются по необходимости.
+Это **soft guidance**, не invariant: под способной моделью пункты часто
+появляются из разговора, формальное upfront-интервью не обязательно. Built-in
+`/init` документирует repo-state; недостающее проявится в первой задаче.
 </important>
 
 ## Self-evolution
 
-- skill-creator подключается через marketplace (`anthropics/skills`),
-  не форкается локально.
-- Расширение harness'а (agents/hooks/commands) main thread делает
-  нативно; skills — через skill-creator plugin.
-- `.claude/skills/` содержит ТОЛЬКО action-skills (workflow-templates
-  для конкретных операций main thread'а): `update-plan-progress`
-  (см. ADR-017). Devlog едет плагином `devlog@skills-dir` (скилл + `devlog-reindex`
-  на PATH + SessionStart-дайджест); в репо ничего devlog'ового не дублируется.
-  `project-docs-bootstrap`
-  в harness не входит — native + WORKFLOW.md §3 + docs-discipline
-  покрывают bootstrap без отдельного skill'а.
-  Self-описывающие skills (повторяют CLAUDE.md о роли main thread'а)
-  — anti-pattern, не создаются.
-- Каноничное знание о дизайне harness'а (bootstrap / audit / extend /
-  explain) — **глобальный** скилл `~/.claude/skills/claude-code-harness/`.
+- Расширение harness'а (agents/hooks/commands) main thread делает нативно;
+  skills — через плагин skill-creator из marketplace, не форком.
+- `.claude/skills/` содержит ТОЛЬКО action-skills: `update-plan-progress`.
+  Devlog едет плагином `devlog@skills-dir`; в репо ничего devlog'ового не
+  дублируется. Self-описывающие skills не создаются.
+- Каноничное знание о дизайне harness'а — глобальный скилл
+  `claude-code-harness` (он же плагин `~/PROJECTS/claude-code-harness`).
 
 ## Reference materials
 
-**Workflow (Plan→Work→Review spine + slice docs)** — читать при работе над фичей:
-- `.claude/docs/workflow.md` — тонкий spine (decision tree, routing к slice docs)
-- Built-ins current-срез — **единственный canonical** источник: `~/.claude/skills/claude-code-harness/references/native-capabilities.md`. Это **единственный файл харнеса, который пинится к версии CC и поколению моделей**; все остальные доки (включая этот) пишутся version-free и ссылаются сюда. Не дублируй его содержимое здесь — копия протухает молча.
-- `.claude/docs/workflow-async.md` — Monitor tool / Task* / Cron* / SendMessage / `/loop` / Routines reference
-- `.claude/docs/workflow-orchestration.md` — worktree / `claude agents` dispatch / session lifecycle / agent-view
-- `.claude/docs/workflow-cloud-offload.md` — `/ultraplan` / `/ultrareview` / Routines (cloud-side)
-- `.claude/docs/workflow-evolution.md` — measurement-driven harness evolution (AHE/AgentFlow/SLIM-grounded)
+**Workflow** — при работе над фичей:
+- [workflow.md](docs/workflow.md) — тонкий spine, routing к slice docs
+  ([async](docs/workflow-async.md) · [orchestration](docs/workflow-orchestration.md)
+  · [cloud-offload](docs/workflow-cloud-offload.md) · [evolution](docs/workflow-evolution.md)).
+- Built-ins current-срез — **единственный** canonical источник:
+  `~/.claude/skills/claude-code-harness/references/native-capabilities.md`. Это
+  единственный файл харнеса, пиннящийся к версии CC и поколению моделей; все
+  остальные доки version-free и ссылаются сюда.
 
-**Harness foundation** — читать перед расширением:
-- `.claude/docs/principles.md` — harness principles (Anthropic-canonical evidence-based)
-- `.claude/docs/harness-architecture.md` — evergreen reference: слои компонентов, context-бюджеты, границы
-- `.claude/docs/external-sources.md` — каталог внешних источников (T1-T7 rubric) для research-pass
-- `.claude/docs/multi-agent.md` — multi-agent дисциплина, on-demand при делегировании
-- `.claude/docs/benchmark.md` — 4-layer benchmark methodology
-- `.claude/docs/memory-layers.md` — 5-layer memory reference + curation rituals
-- `.claude/docs/archive/decisions-2026Q2.md` — frozen ADR log (для «почему так» вопросов)
-- `.claude/docs/archive/workflow-2026-05-10.md` — frozen pre-split workflow doc (empirical baseline)
-- `.claude/rules/api-constraint.md` — API/CLI constraint invariants (no Anthropic API).
-- `.claude/rules/testing.md` — testing invariants.
-- `.claude/rules/docs-discipline.md` — documentation invariants.
-- `.claude/skills/update-plan-progress/` — action-skill для progress-журнала multi-session задачи (rule #7 docs-discipline).
-- `.claude/devlog/entries/` — recent entries (live); архив `entries/archive/`. Index via `devlog-reindex` (плагин `devlog`).
-- `.claude/agents/` — каталога нет (custom-агентов нет; audit-роли едут плагином `claude-code-harness`).
-- `.claude/audits/` — provenance прогонов `/external-audit` (AUDIT-*.json + логи).
-- `.claude/hooks/` — каталога нет: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером). Активны два внешних: PreToolUse (`system-guard`, DENY catastrophic) — глобальный `~/.claude/hooks/`; SessionStart (devlog + active-progress surfacing) — плагин `devlog`. Test-quality (§5) и lint остаются за глобальным CLAUDE.md + LSP — хуками не дублируются.
+**Foundation** — перед расширением: [principles.md](docs/principles.md) ·
+[harness-architecture.md](docs/harness-architecture.md) ·
+[multi-agent.md](docs/multi-agent.md) · [benchmark.md](docs/benchmark.md) ·
+[memory-layers.md](docs/memory-layers.md) ·
+[external-sources.md](docs/external-sources.md) (каталог T1-T7).
+
+**Инварианты** (загружены всегда): [testing](rules/testing.md) ·
+[docs-discipline](rules/docs-discipline.md) · [api-constraint](rules/api-constraint.md).
+
+**История и провенанс:** `.claude/devlog/entries/` (индекс — `devlog-reindex`) ·
+`docs/archive/` (frozen: ADR-лог, pre-split workflow) · `.claude/audits/` ·
+`.claude/benchmark/` (в т.ч. `guard-ab/` — A/B ваниль vs harness vs §8).
+
+Каталогов `.claude/agents/` и `.claude/hooks/` нет: custom-агентов harness не
+держит (audit-роли едут плагином), проектных хуков тоже — активны глобальный
+SessionStart-дайджест из плагина `devlog`. Глобального `system-guard` тоже больше нет —
+ретайрен 2026-08-29 в пользу нативного слоя (auto-mode классификатор + встроенный блок
+деструктивных git/IaC); devlog #134.

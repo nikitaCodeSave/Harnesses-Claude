@@ -1,6 +1,6 @@
 ---
 owner: @harness
-last-updated: 2026-06-10
+last-updated: 2026-08-29
 ---
 
 # Memory layers (harness reference)
@@ -20,7 +20,7 @@ last-updated: 2026-06-10
 | L2 episodic | session summaries, recurring patterns | `~/.claude/projects/<hash>/memory/MEMORY.md` + per-topic `.md` | cross-session, user-scoped | user |
 | L3 durable artifacts | what happened, why | `.claude/devlog/entries/*.md` + `index.json` | cross-session, в git | repo |
 | L4 semantic / decisions | architectural rationale | `.claude/docs/principles.md` (active), `.claude/docs/archive/` (frozen) | cross-session, в git | repo |
-| inter-agent | filesystem blackboard | `.claude/audit/<slug>/AUDIT-{EVIDENCE,PROCESS,REFUTER,VERDICT}.json` через `/external-audit` (плагин claude-code-harness) | per-deliverable, transient | repo |
+| inter-agent | filesystem blackboard | `.claude/audits/<slug>/*.json` — вердикт свежей сессии; внутри dynamic workflow состояние несут сами агент-узлы | per-deliverable, transient | repo |
 
 ## Curation rituals
 
@@ -41,14 +41,13 @@ last-updated: 2026-06-10
 
 Соответствует Anthropic multi-agent-research-system: subagents пишут прямо в filesystem, минуя «game of telephone» через main thread.
 
-Текущая реализация — `/external-audit` плагина `claude-code-harness` (3 роли параллельно, каждая пишет свой JSON-вердикт на диск, adjudicator сводит):
+Носитель паттерна — нативный, своей оркестрации harness не держит:
 
-- **evidence-executor** → `.claude/audit/<slug>/AUDIT-EVIDENCE.json` (исполняет живой стек)
-- **process-auditor** → `AUDIT-PROCESS.json` (git history / scope / red→green, без исполнения)
-- **code-refuter** → `AUDIT-REFUTER.json` (опровергает код)
-- **adjudicator** (main thread свежей сессии) → `AUDIT-VERDICT.json` по правилу «исполненное доказательство сильнее прочитанного»
+- **Свежая сессия, промптнутая рефьютить** (не авторская) → JSON-вердикт в `.claude/audits/<slug>/`. Дефолтная ступень для deliverable'а; правило разрешения конфликтов — «исполненное доказательство сильнее прочитанного», поэтому сессию просят не только читать scope, но и **исполнить живой стек**.
+- **`/code-review ultra`** → флот на изменении (working diff / PR), результат сводит сам built-in.
+- **Dynamic workflow** (`ultracode`) → узлы пишут в собственные артефакты, скрипт сводит; для codebase-scale sweep, где одного контекста не хватает.
 
-Opt-in: оператор вызывает в свежей (не авторской) сессии.
+Opt-in: вызывает оператор, за пределами авторского контекста.
 
 ## Что специально НЕ делаем
 

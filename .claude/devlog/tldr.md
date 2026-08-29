@@ -8,6 +8,76 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #135 · 2026-08-29 · Поведенческая проба не отвечала на вопрос, который задавали
+
+**Tags:** harness, test, agents-md, external-audit
+
+Аудит харнеса против внешнего среза (см. devlog кита #49) дал семь зазоров; оператор снял два — guardrails и observability — и попросил закрыть остальные с тестированием. Главным был AGENTS.md: кросс-вендорный стандарт, которого харнес не знал, при том что у оператора Codex…
+
+[→ entries/0135-povedencheskaya-proba-ne-otvechala-na-vopros-kotoryy-zadaval.md](entries/0135-povedencheskaya-proba-ne-otvechala-na-vopros-kotoryy-zadaval.md)
+
+---
+
+## #134 · 2026-08-29 · Порог был мой, а не объективный: guard и машинерия удалены
+
+**Tags:** harness, cleanup, guard, breaking
+
+Запись #133 закрылась выводом «костылей практически не нашлось». Оператор ответил директивой: удалять обязательно и максимально приближаться к дефолтному бэкенду Claude Code. После смены порога из того же инвентаря удалилось почти всё, что я тремя часами раньше защитил.
+
+[→ entries/0134-porog-byl-moy-a-ne-obektivnyy-guard-i-mashineriya-udaleny.md](entries/0134-porog-byl-moy-a-ne-obektivnyy-guard-i-mashineriya-udaleny.md)
+
+---
+
+## #133 · 2026-08-29 · Внешний интейк на 25 релизов: кит на 2.1.251, костылей не нашлось
+
+**Tags:** harness, docs, external-intake
+
+Задача от оператора: полностью актуализировать кит, удалить собственные костыли в пользу родного функционала новой версии и применить обновления к процессам лабы. Ledger кита стоял на CC v2.1.226, живой клиент — v2.1.251.
+
+[→ entries/0133-vneshniy-inteyk-na-25-relizov-kit-na-2-1-251-kostyley-ne-nas.md](entries/0133-vneshniy-inteyk-na-25-relizov-kit-na-2-1-251-kostyley-ne-nas.md)
+
+---
+
+## #132 · 2026-08-27 · Ротация sudo-audit.log: байтовый потолок вместо строчного
+
+**Tags:** feature, harness, test
+
+LOG-tier в system-guard.sh дописывал каждый sudo-вызов в ~/.claude/sudo-audit.log без потолка — 1.5 МБ / 20888 строк за три месяца, единственная часть guard'а без ограничения. Наивная ротация «оставить последние N строк» оказалась не потолком вообще: команды логируются целиком…
+
+[→ entries/0132-rotatsiya-sudo-audit-log-baytovyy-potolok-vmesto-strochnogo.md](entries/0132-rotatsiya-sudo-audit-log-baytovyy-potolok-vmesto-strochnogo.md)
+
+---
+
+## #131 · 2026-08-08 · Чистка always-loaded слоя дошла до самой фабрики
+
+**Tags:** cleanup, harness, docs
+
+Оператор наблюдал на боевом Greenplun-router-runtime, что в always-loaded слое копятся инструкции, которые становятся «правилами»: агент им следует, а правила уже некорректны и сужают решения. Диагноз подтвердился на конкретном случае — и оказался применим к самой лаборатории…
+
+[→ entries/0131-chistka-always-loaded-sloya-doshla-do-samoy-fabriki.md](entries/0131-chistka-always-loaded-sloya-doshla-do-samoy-fabriki.md)
+
+---
+
+## #130 · 2026-08-08 · A/B на Opus 5: §8 дал лифт, preload-контекст — нет
+
+**Tags:** test, harness, benchmark
+
+Инвариант «независимый fresh-context judge для silent-wrong класса» держался на эмпирике прошлого поколения (seeded-defect A/B на 4.8) и висел watch-item'ом после того, как first-party Prompting Opus 5 назвал «use a subagent to verify» источником over-verification. Замер на Opus…
+
+[→ entries/0130-a-b-na-opus-5-8-dal-lift-preload-kontekst-net.md](entries/0130-a-b-na-opus-5-8-dal-lift-preload-kontekst-net.md)
+
+---
+
+## #129 · 2026-08-07 · Чистка живого слоя от архаизмов: фабрика на актуальном срезе
+
+**Tags:** cleanup, docs, harness
+
+Ресерч внешней дельты за три недели (ledger стоял на CC 2.1.211 / 16 июля, живая версия — 2.1.224) показал, что живой слой фабрики держит устаревшее как действующее руководство: /ultraplan удалён из CLI ещё в 2.1.222, а на нём был построен весь workflow-cloud-offload.md; в ките…
+
+[→ entries/0129-chistka-zhivogo-sloya-ot-arkhaizmov-fabrika-na-aktualnom-sre.md](entries/0129-chistka-zhivogo-sloya-ot-arkhaizmov-fabrika-na-aktualnom-sre.md)
+
+---
+
 ## #128 · 2026-08-03 · Preview-фикс из плагина: артефакты лабы перегенерированы, три записи выправились
 
 **Tags:** devlog, tooling, docs

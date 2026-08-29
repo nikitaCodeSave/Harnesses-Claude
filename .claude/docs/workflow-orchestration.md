@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-06-07
+last-updated: 2026-08-07
 status: active
 ---
 
@@ -12,10 +12,10 @@ status: active
 
 ## TL;DR
 
-Parallel-session story **stabilized** в v2.1.139-143. Три canonical surfaces:
+Parallel-session story стабильна. Три canonical surfaces:
 
 1. **Worktree** (`-w` + `--tmux` + `worktree.baseRef` + `worktree.bgIsolation`) — isolated working copies одного repo
-2. **`claude agents`** subsystem с dispatch flags (v2.1.142) — background agent fleet
+2. **`claude agents`** subsystem с dispatch flags — background agent fleet
 3. **`--remote-control` / `--from-pr` / `--fork-session`** — session lifecycle controls
 
 Empirical positioning (per [arXiv 2604.18071](https://arxiv.org/abs/2604.18071) — 70-project survey): **multi-level recursive subagent = 12.9% корпуса**. Наша restraint-policy (main thread owns end-to-end) — **unusual but deliberate trade-off**, не default failure.
@@ -61,10 +61,10 @@ State: `~/.claude/worktrees/` + git's `.git/worktrees/`.
 
 ### Settings (project-scoped, `.claude/settings.json`)
 
-| Setting | Default (v2.1.143) | What it does |
-|---------|--------------------|--------------|
-| `worktree.baseRef` | `origin/<default>` (since w15) | Branch base. Was `HEAD` in v2.1.128-132 (regression, reverted) |
-| `worktree.bgIsolation` | `"worktree"` (default) / `"none"` (since v2.1.143) | Whether background tasks get isolated FS view |
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `worktree.baseRef` | `origin/<default>` | Branch base для создаваемого worktree |
+| `worktree.bgIsolation` | `"worktree"` / `"none"` | Whether background tasks get isolated FS view |
 | `--tmux` mode | Native iTerm2 panes if available; `--tmux=classic` для traditional tmux | Pane orchestration |
 
 ### When to use
@@ -79,15 +79,17 @@ State: `~/.claude/worktrees/` + git's `.git/worktrees/`.
 - Worktree сессии разделяют git history → плохо для concurrent merges
 - `.claude/` shared между worktrees (config inherited), но `~/.claude/projects/<slug>/` отдельный
 - Auto-cleanup если agent сделал no changes (per Agent tool description)
-- **`EnterWorktree` switches between Claude-managed worktrees mid-session** (v2.1.157); managed worktrees оставляются **unlocked** при finish, так что `git worktree remove`/`prune` их чистят (v2.1.157)
+- **`EnterWorktree` switches between Claude-managed worktrees mid-session**; managed worktrees оставляются **unlocked** при finish, так что `git worktree remove`/`prune` их чистят
+- **Изоляция worktree-сессии распространяется на Bash, а не только на file edits**, и действует во всех типах сессий — деструктивные git-команды против main checkout из изолированной сессии заблокированы
+- **`/fork` создаёт собственный worktree**, а не работает в checkout'е исходной сессии
 
 ---
 
 ## `claude agents` subsystem (background fleet)
 
-`claude agents` subcommand manages **background agents**: sessions running asynchronously, dispatched from CLI, observable via `claude agents` UI (since v2.1.139 «agent view»).
+`claude agents` subcommand manages **background agents**: sessions running asynchronously, dispatched from CLI, observable via `claude agents` UI («agent view»).
 
-### Dispatch flags (all added in v2.1.142, 2026-05-14)
+### Dispatch flags
 
 ```bash
 claude agents dispatch <agent> \
@@ -103,13 +105,14 @@ claude agents dispatch <agent> \
 
 ### Background session settings
 
-- **Background sessions preserve model+effort after waking** (v2.1.143)
-- **Background sessions honor `permissions.defaultMode`** из settings.json (v2.1.142)
-- **`Shift+Tab`** в attached agent session cycles modes включая auto (v2.1.143)
-- **`settings.json` `agent` field honored** для dispatched sessions; `--agent <name>` override (v2.1.157)
-- **`claude agents --json` adds `waitingFor`** — на чём заблокирована waiting-session (e.g. permission prompt, v2.1.162); rows show `done/total` при fan-out (v2.1.161). **v2.1.169:** `--json` теперь включает blocked/just-dispatched sessions + поля `id` и `state`; флаг `--all` добавляет completed — точнее observability фронта fan-out'а.
-- **Cross-session `SendMessage` relay не несёт user-authority** (v2.1.166) — receiver отклоняет relayed permission requests, auto mode их блокирует. Security-инвариант для любого multi-session fan-out.
-- **Background sessions заранее знают про shared-checkout block** (v2.1.169) — до `EnterWorktree` edits в shared checkout заблокированы, и сессии об этом сообщается заранее (нет впустую отклонённого первого edit). Усиливает worktree-isolation-first discipline выше.
+- **Background sessions preserve model+effort after waking**
+- **Background sessions honor `permissions.defaultMode`** из settings.json
+- **`Shift+Tab`** в attached agent session cycles modes включая auto
+- **`settings.json` `agent` field honored** для dispatched sessions; `--agent <name>` override
+- **`claude agents --json`** несёт `waitingFor` (на чём заблокирована сессия — например permission prompt), `id`, `state` и включает blocked/just-dispatched; `--all` добавляет completed; rows показывают `done/total` при fan-out
+- **Background-сессии сами сохраняют работу**: коммитят и пушат, открывают draft PR только когда задача этого требует, следуют git-инструкциям из CLAUDE.md и в финале сообщают, где лежит результат
+- **Background sessions заранее знают про shared-checkout block** — до `EnterWorktree` edits в shared checkout заблокированы, и сессии об этом сообщается заранее (нет впустую отклонённого первого edit). Усиливает worktree-isolation-first discipline выше.
+- **Лимита в 200 субагентов на сессию нет** — долгие сессии не упираются в отказ спавна (concurrency и depth-лимиты остаются)
 
 ### When to dispatch vs single CLI
 
@@ -137,7 +140,7 @@ Continue last session in current cwd. Default — preserves session ID.
 ```bash
 claude -r                          # picker
 claude -r <id>                     # specific ID
-claude -r <pr-url>                 # PR URL (week 18 feature)
+claude -r <pr-url>                 # PR URL
 ```
 
 ### `--from-pr`
@@ -168,6 +171,21 @@ Enables `SendUserMessage` tool — agent can ping user mid-flight. Use cases:
 - Background agent surfacing decision point
 
 Без `--brief` — agent commits decisions silently или blocks.
+
+### Cross-session `SendMessage` / `ListAgents`
+
+Сессии Claude Code переписываются между собой — в том числе на разных твоих машинах;
+`ListAgents` показывает доступных адресатов (macOS/Linux). Настройки: `crossSessionInbound`
+(сообщения в сессию с обойдёнными permissions придерживаются на подтверждение; в остальные
+доставляются сами) и `dialogExpiry`. Провал доставки теперь рапортуется ошибкой, а не «Message sent».
+
+**Security-инварианты этого канала** (соблюдать при любом multi-session fan-out):
+- relay **не несёт user-authority** — receiver отклоняет проброшенные permission requests, auto mode их блокирует;
+- исходящие `SendMessage` проходят через permission-классификатор до отправки;
+- агент, у которого есть доступ к другим агентам, фактически имеет их права. First-party
+  инцидент: incident-response-агент по своей инициативе написал другому Claude и попросил
+  запушить фикс ([Anthropic SDLC](https://claude.com/blog/how-anthropic-secures-its-ai-native-software-development-lifecycle)).
+  Границы агента обязаны включать **доступ к другим агентам**, не только к файлам и сети.
 
 ### `--remote-control`
 
@@ -234,9 +252,10 @@ Emit hook lifecycle events for observability tooling. Use for:
 
 ## Sources
 
-- [github.com/anthropics/claude-code releases v2.1.139-143](https://github.com/anthropics/claude-code/releases) — dispatch flags, worktree settings
+- [code.claude.com/docs/en/changelog](https://code.claude.com/docs/en/changelog) — dispatch flags, worktree settings, cross-session messaging (актуальный срез фич — `native-capabilities.md` в ките)
 - [code.claude.com/docs/en/agent-view](https://code.claude.com/docs/en/agent-view) — agent view feature
-- [claude.com/blog/agent-view-in-claude-code](https://www.claude.com/blog/agent-view-in-claude-code) (2026-05-11)
+- [claude.com/blog/agent-view-in-claude-code](https://www.claude.com/blog/agent-view-in-claude-code)
+- [claude.com/blog — How Anthropic secures its AI-native SDLC](https://claude.com/blog/how-anthropic-secures-its-ai-native-software-development-lifecycle) — hard access boundaries, инцидент agent-to-agent
 - arXiv [2604.18071 — Architectural Design Decisions in AI Agent Harnesses](https://arxiv.org/abs/2604.18071) (Hu Wei, 70-project survey)
 - arXiv [2604.14228 — Dive into Claude Code](https://arxiv.org/abs/2604.14228) — subagent isolation pattern via worktree
 - [multi-agent.md](multi-agent.md) — full subagent discipline (§7 patterns, §10 verification checklist)

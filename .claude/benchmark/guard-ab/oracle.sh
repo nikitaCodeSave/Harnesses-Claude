@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# HELD-OUT ORACLE for the guard A/B (copy; per-call 10s timeout added).
 # Behavior test for the GLOBAL ~/.claude/hooks/system-guard.sh PreToolUse guard.
 # Cases are fed via crafted PreToolUse JSON on stdin (NOT via the real tool call),
 # so trigger substrings never touch the operator's own command line.
@@ -16,7 +17,7 @@ pass=0; fail=0
 verdict() {
     local out
     out=$(jq -n --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c},cwd:"/home/nikita/x"}' \
-          | bash "$GUARD" 2>/dev/null)
+          | timeout 10 bash "$GUARD" 2>/dev/null)
     if [ -z "$out" ]; then echo "safe"; return; fi
     printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "safe"' 2>/dev/null || echo "PARSE_ERR"
 }
@@ -24,7 +25,7 @@ verdict() {
 # verdict_edit <file_path> -> deny|ask|safe
 verdict_edit() {
     local out
-    out=$(jq -n --arg f "$1" '{tool_name:"Edit",tool_input:{file_path:$f}}' | bash "$GUARD" 2>/dev/null)
+    out=$(jq -n --arg f "$1" '{tool_name:"Edit",tool_input:{file_path:$f}}' | timeout 10 bash "$GUARD" 2>/dev/null)
     [ -z "$out" ] && { echo "safe"; return; }
     printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "safe"'
 }

@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-07-15
+last-updated: 2026-08-29
 ---
 
 # Harness architecture (evergreen reference)
@@ -15,19 +15,20 @@ Reference doc: что этот проект производит, где как�
 
 | Артефакт | Где | Что | Роль |
 |---|---|---|---|
-| **Плагин `claude-code-harness`** | marketplace → `~/.claude/skills/claude-code-harness/` | режимы bootstrap / audit / extend / explain + `references/` (native-capabilities, harness-discipline, practice-baseline §1–8, harness-evolution, evidence-base) + audit-роли (evidence-executor ∥ process-auditor ∥ code-refuter) | **канон**: как поставить harness в любой проект |
-| **Глобальная обвязка** | `~/.claude/` | practice baseline §1–8 (в `CLAUDE.md`), глобальный hook `system-guard`, skills-dir плагины (`claude-code-harness`, `devlog` — последний несёт SessionStart-дайджест) | **practice-слой**, действующий во всех проектах без копирования |
+| **Плагин `claude-code-harness`** | marketplace → `~/.claude/skills/claude-code-harness/` | режимы bootstrap / audit / extend / explain + `references/` (native-capabilities, harness-discipline, harness-evolution, evidence-base). Ни агентов, ни команд, ни хуков — с v1.23.0 кит везёт только скилл и справочники | **канон**: как поставить harness в любой проект |
+| **Глобальная обвязка** | `~/.claude/` | practice baseline §1–8 (в `CLAUDE.md`), skills-dir плагины (`claude-code-harness`, `devlog` — последний несёт SessionStart-дайджест). Своих хуков нет: `system-guard` ретайрен 2026-08-29 | **practice-слой**, действующий во всех проектах без копирования |
 | **Лаборатория** (этот репо) | `.claude/` | R&D: эволюция канона через devlog/benchmark; архив ретайренных экспериментов | питает первые два, сам не отгружается |
 
-Следствие для этого репо: проектных hooks/commands harness **не держит** — safety (`system-guard`)
-закрыт глобальным `~/.claude/hooks/`, continuity (`session-start-digest` inject devlog+progress) —
-плагином `devlog`, verify (§5) — глобальным practice-слоем без хука. Дублировать их проектной
+Следствие для этого репо: hooks/commands harness **не держит** ни проектных, ни своих глобальных —
+safety закрыт нативным слоем (auto-mode классификатор + встроенный блок деструктивных git/IaC),
+continuity (`session-start-digest` inject devlog+progress) — плагином `devlog`, verify (§5) —
+глобальным practice-слоем без хука. Дублировать их проектной
 копией — anti-pattern.
 
 ## Foundational principle
 
-**Минимум обвязки → максимум продуктивности под способной моделью.** (Model-agnostic; последнее re-grounding —
-поколение Opus 4.8, июль 2026.)
+**Минимум обвязки → максимум продуктивности под способной моделью.** (Model-agnostic; провенанс
+последнего re-grounding — refresh-ledger в `harness-evolution.md` кита.)
 
 > «As models improve, developers should strip away unnecessary scaffolding rather than accumulate
 > complexity» — Rajasekaran, Anthropic (March 2026)
@@ -86,10 +87,10 @@ is too long» — Anthropic).
 | Компонент | Trust | Info | Containment |
 |---|---|---|---|
 | `settings.json` permissions | ✅ | — | — |
-| глобальный `PreToolUse` (`system-guard`) | ✅ | partial (reason) | — |
+| нативный auto-mode классификатор | ✅ (вероятностно) | partial (reason) | — |
 | Plugin-`SessionStart` (`devlog:session-start-digest`) | — | ✅ | — |
-| Plugin-агент (`claude-code-harness:code-refuter`) | partial (whitelist) | ✅ (только audited surface) | ✅ (fresh context) |
-| Slash command (`external-audit`) | — | ✅ | partial (bounded scope) |
+| Свежая сессия, промптнутая рефьютить | partial (whitelist) | ✅ (только audited surface) | ✅ (fresh context) |
+| Built-in `/code-review ultra` | — | ✅ | ✅ (изолированный флот) |
 | Skill (`devlog`) | — | ✅ (при триггере) | — |
 | Always-loaded rule (`testing.md`) | — | ✅ | — |
 
@@ -146,8 +147,8 @@ decision в L0 scratchpad — компонент сломан.
 - **Stale компонент без retire trigger** — паразитный по умолчанию.
 - **Vague always-loaded rule** («be careful», «write clean code») — empirically ignored; specific
   bans / verification criteria > vague guidance.
-- **Проектная копия глобального слоя** — дублировать `system-guard`/devlog-скилл с его
-  reindex-скриптом и SessionStart-дайджестом/practice §1–8 в репо (они уже действуют глобально).
+- **Проектная копия глобального слоя** — дублировать devlog-скилл с его reindex-скриптом и
+  SessionStart-дайджестом или practice §1–8 в репо (они уже действуют глобально).
 
 ## Sources
 

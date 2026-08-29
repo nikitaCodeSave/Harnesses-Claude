@@ -1,25 +1,27 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-07-16
+last-updated: 2026-08-07
 status: active
 ---
 
 # Cloud-offload workflow
 
-> Operational layer для **cloud-side execution** heavy phases: `/ultraplan`, `/ultrareview`, `Routines`. Local CLI становится **coordination layer**; cloud runs the fleet.
+> Operational layer для **cloud-side execution** heavy phases: `/code-review ultra`, Routines,
+> Claude Code on the web. Local CLI становится **coordination layer**; cloud runs the fleet.
 >
 > Companion к [workflow.md](workflow.md) spine, [workflow-orchestration.md](workflow-orchestration.md) (local parallel), [workflow-async.md](workflow-async.md) (`/loop`/Monitor pair).
 
 ## TL;DR
 
-**Архитектурный сдвиг 2026 Q2**: planning и code-review перемещаются в Anthropic's CCR (Cloud Container Runtime). Terminal остаётся free для координации.
+Heavy review и long-running автоматизация уезжают в Anthropic's CCR (Cloud Container Runtime).
+Terminal остаётся free для координации.
 
 Cherny (Code w/ Claude 2026 keynote, 2026-05-06): *«Routines = higher-order prompts — setup async automations и wake up to PRs that are ready to merge.»*
 
 3 surfaces:
-- **`/ultraplan`** — cloud planning, **3 A/B variants** (Simple / Visual / Deep)
 - **`/code-review ultra`** (алиас `/ultrareview`) — cloud bug-hunting fleet (multi-agent, ~$5-20/run via usage credits, ~5-10min)
 - **`Routines`** — cron- / GitHub-event- / API-triggered cloud agents
+- **Claude Code on the web** — полноценная cloud-сессия (в т.ч. plan mode); результат забирается локально через `claude --teleport <session id>`
 
 **Reframe meta-orchestrator role**: ты больше не «configures inner executor» — ты **picks which executor (local CLI или cloud fleet)** для каждой phase.
 
@@ -36,8 +38,8 @@ Cloud-offload features работают **только на Claude subscription*
 
 ```
 Heavy planning task (architectural design, multi-component spec)?
-  └─ Yes → /ultraplan (cloud) — 3 A/B variants, picks best
-        Local alt: built-in Plan agent + ultrathink
+  └─ Локально: built-in Plan agent + xhigh/ultrathink — дефолт при 1M context
+        Cloud alt: сессия на claude.ai/code в plan mode → claude --teleport <id>
 
 High-stakes PR / bug-hunt sweep needed?
   └─ Yes → /code-review ultra (алиас /ultrareview) или `claude ultrareview` (CLI)
@@ -54,31 +56,24 @@ CI auto-fix loop on PR?
 
 ---
 
-## `/ultraplan` (cloud planning)
+## Планирование: локально по умолчанию
 
-Three A/B-tested variants (per leaked Claude Code source, March 2026):
+Отдельного cloud-planning-командного surface у CLI нет — планирование живёт в локальном plan mode
+(built-in `Plan` agent, Shift+Tab×2, `xhigh` + `ultrathink`), а облако подключается как обычная
+сессия Claude Code on the web в plan mode, если нужно освободить терминал или уйти с машины.
+План возвращается локально через `claude --teleport <session id>` (в cloud-сессии подсказка
+приходит по `/teleport`).
 
-| Variant | Style |
-|---------|-------|
-| **Simple** | Direct step-list |
-| **Visual** | Tree / diagram-oriented |
-| **Deep** | Extended reasoning, multi-hop dependencies |
+### Когда локального Plan достаточно (почти всегда)
 
-Anthropic itself doesn't yet know which planning style is best universally — A/B picks per task.
+- Bug fix с known root cause, single-file refactor, trivial feature add
+- Любая задача, где `xhigh effort + ultrathink` укладываются в 1M context — это большинство
 
-### When to use
+### Когда есть смысл увести планирование в облако
 
-- Architectural design touching ≥3 modules
-- Multi-component spec where local Plan agent runs out of context
-- High-stakes irreversible decision (data migration / payment flow / public API)
-- When deliverable spec is ambiguous and you want diverse strategy proposals
-
-### When local Plan is enough
-
-- Bug fix с known root cause
-- Single-file refactor
-- Trivial feature add
-- Когда `xhigh effort + ultrathink trigger` достаточны (most cases при 1M context)
+- Терминал нужен свободным под параллельную работу, а планирование длинное
+- Продолжение с телефона / другой машины
+- Планирование по репозиторию, который не выкачан локально
 
 ---
 
@@ -89,6 +84,9 @@ Multi-agent cloud review of the current branch or a PR. **~5-10 minutes wall-clo
 Surfaces:
 - **`/code-review ultra`** slash-command in interactive session (алиас — `/ultrareview`)
 - **`claude ultrareview [PR-number | base-branch]`** CLI subcommand (`--json`, `--timeout` default 30 min)
+
+`/review` — алиас `/code-review`; без явного уровня команда переиспользует последний заданный
+(`/code-review high` меняет его).
 
 ### When to use
 
@@ -128,7 +126,7 @@ Per [code.claude.com/docs/en/code-review](https://code.claude.com/docs/en/code-r
 - **GitHub event** (issue / PR open / comment / merge)
 - **API call** (custom integration)
 
-### Use cases (community-reported, 2026 Q2)
+### Use cases (community-reported)
 
 - Daily PR digest landing in Slack
 - Auto-PR на dependency updates (renovate + Claude)
@@ -159,7 +157,7 @@ State runs in CCR; results land as PRs / Slack messages / API responses.
 | Anti-pattern | Why | Replacement |
 |--------------|-----|-------------|
 | `/code-review ultra` для every PR | $5-20 × N usage credits — drains budget | `/code-review` локально, cloud-прогон только high-stakes |
-| `/ultraplan` для trivial task | Cloud roundtrip > task time | Local Plan + `xhigh` |
+| Cloud-планирование для trivial task | Cloud roundtrip > task time | Local Plan + `xhigh` |
 | Routines для one-shot automation | Cron* simpler | Local `Cron*` if applicable |
 | Cloud-offload на Bedrock/Vertex | Not compatible | Use local primitives only |
 | Skipping local `/code-review` because cloud will catch it | Misses fast feedback loop | Both: local first, cloud high-stakes |
@@ -168,12 +166,13 @@ State runs in CCR; results land as PRs / Slack messages / API responses.
 
 ## Re-evaluation triggers
 
-Cloud-offload landscape moves быстро (research-preview features). Re-check этот doc когда:
+Cloud-offload landscape moves быстро (research-preview features живут и умирают — `/ultraplan`
+был удалён из CLI). Re-check этот doc когда:
 
-- New cloud feature releases (`/ultraplan` variant changes, new Routines triggers)
+- New cloud feature releases (new Routines triggers, изменения teleport-канала)
 - Pricing changes (`/ultrareview` cost shifts)
 - API surface stabilizes (research preview → GA may change defaults)
-- Anthropic publishes empirical data on which variant wins
+- Cloud-команда исчезает из `/help` — сверить с `native-capabilities.md` (kit)
 
 ---
 
@@ -181,9 +180,7 @@ Cloud-offload landscape moves быстро (research-preview features). Re-check
 
 - [Boris Cherny — Code w/ Claude 2026 keynote (Simon Willison live-blog)](https://simonwillison.net/2026/May/6/code-w-claude-2026/) — Routines paradigm, planning-as-printing-press
 - [TechCrunch — Cat Wu interview](https://techcrunch.com/2026/05/13/anthropics-cat-wu-says-that-in-the-future-ai-will-anticipate-your-needs-before-you-know-what-they-are/) — proactivity thesis, Routines as on-ramp
-- [/ultraplan tutorial — dev.to](https://dev.to/rams901/claude-code-ultraplan-cloud-based-ai-planning-in-2026-a-hands-on-tutorial-4id6)
-- [/ultrareview research preview — explainx.ai](https://explainx.ai/blog/claude-code-ultrareview-cloud-bug-hunt-research-preview)
-- [code.claude.com/docs/en/ultrareview](https://code.claude.com/docs/en/ultrareview) (first-party, Jun 2026) — timing / cost / free-run economics
+- [code.claude.com/docs/en/ultraplan](https://code.claude.com/docs/en/ultraplan) (first-party) — фиксирует удаление `/ultraplan` и рекомендованные замены (plan mode + Claude Code on the web)
+- [code.claude.com/docs/en/ultrareview](https://code.claude.com/docs/en/ultrareview) (first-party) — timing / cost / free-run economics
 - [code.claude.com/docs/en/code-review](https://code.claude.com/docs/en/code-review) — `/code-review` surfaces, severity tags + REVIEW.md customization
-- [code.claude.com/docs/en/whats-new — w15-w17](https://code.claude.com/docs/en/whats-new) — release-dated feature timeline
 - [api-constraint.md](../rules/api-constraint.md) — what's in/out of scope on subscription

@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-06-07
+last-updated: 2026-08-07
 status: active
 ---
 
@@ -45,7 +45,7 @@ Tools / middleware / memory contribute; prose tunings do not transfer. Practical
 
 ### Empirical baseline from THIS harness
 
-- **2026-05-11, devlog #24**: ECC raw inject neutral but breaks pytest discovery (90+ parasitic tests). Our harness +24-27% cost vs no-harness baseline на T01/T02 simple tasks под Opus 4.7 при идентичном quality. **ROI ∝ ambient exploration cost** — see [benchmark.md](benchmark.md).
+- **2026-05-11, devlog #24**: ECC raw inject neutral but breaks pytest discovery (90+ parasitic tests). Our harness +24-27% cost vs no-harness baseline на T01/T02 simple tasks (замер прошлого поколения) при идентичном quality. **ROI ∝ ambient exploration cost** — see [benchmark.md](benchmark.md).
 - **2026-05-11, devlog #26/27**: Ralph-loop self-improvement infrastructure validated через variance-checked fitness function + retire-bias=3 + protected-files guard. Cost envelope per iter: $1.30-2.50 benchmark-dominated.
 
 ## Retire ritual (current gap)
@@ -54,26 +54,19 @@ Tools / middleware / memory contribute; prose tunings do not transfer. Practical
 
 Method requires RL (out of scope per CLI constraint), но **principle** портируется:
 
-### What's missing у нас
+### Как ритуал исполняется сейчас
 
-Сейчас в harness'е:
 - ✅ Skills/agents add нативно main thread'ом (skills — через skill-creator plugin) + manual review
 - ✅ Anti-patterns retire через ADR (decisions-2026Q2.md)
-- ❌ **No measurement-driven retire ritual** — skills удаляются по интуиции, не по data
+- ✅ **Data-driven retire — нативно, через `/doctor`**: он считает фактические счётчики использования
+  (`skillUsage` / `pluginUsage` в `~/.claude.json`) и сканирует транскрипты, сопоставляет их с
+  context-cost каждого расширения и предлагает отключить мёртвый груз, а заодно — срезать из
+  CLAUDE.md то, что сессия выведет из кодовой базы, и увести always-loaded-текст в lazy skills.
+  Самописный retire-скрипт поверх этого — дублирование built-in.
 
-### Proposed retire criteria (when adding)
-
-Per skill / hook / agent / rule, track:
-1. **Last invocation date** (через telemetry / hook event logs)
-2. **Contribution to task pass-rate** (leave-one-out на calibration suite)
-3. **Token cost when active**
-
-Retire when:
-- Last invocation >90 days
-- Leave-one-out delta < +0.5pp (within variance)
-- Token cost > value-added (negative ROI)
-
-**Implementation pending** — это identified gap, не active mechanism. См. ADR roadmap в `principles.md`.
+Что `/doctor` **не** даёт и остаётся ручным: leave-one-out вклад в pass-rate (нужен свой
+calibration-набор — [benchmark.md](benchmark.md)). Порог для ручного разбора: расширение не
+вызывалось ни разу за окно наблюдения, но продолжает занимать место в листинге.
 
 ## What we know about harness evolution under CLI constraint
 
@@ -87,7 +80,7 @@ Portable **principles**:
 | AgentFlow ([2604.20801](https://arxiv.org/abs/2604.20801)) | Joint search axes (roles + prompts + tools + topology) > single-axis | Multi-axis benchmark ablations — already partially in [benchmark.md](benchmark.md) |
 | Meta-Harness ([2603.28052](https://arxiv.org/abs/2603.28052)) | Discovered harness +7.7pp at −75% tokens | Aggressive retire-bias justified empirically |
 | 70-project survey ([2604.18071](https://arxiv.org/abs/2604.18071)) | Multi-level recursive = 12.9% corpus | Our restraint = deliberate, not default; D-022 opt-in для high-stakes |
-| SLIM ([2605.10923](https://arxiv.org/abs/2605.10923)) | Lifecycle (retain/retire/expand) > creation-only | Identified gap → retire ritual proposal above |
+| SLIM ([2605.10923](https://arxiv.org/abs/2605.10923)) | Lifecycle (retain/retire/expand) > creation-only | Закрыто нативно — `/doctor` считает usage против context-cost (см. выше) |
 | TDD Governance ([2604.26615](https://arxiv.org/abs/2604.26615)) | Bounded repair loops + atomic mutation control | `.claude/rules/testing.md` aligns; bound enforcement через `Stop` hook |
 
 ## Loop pattern under CLI constraint

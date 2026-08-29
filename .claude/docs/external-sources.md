@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-06-09
+last-updated: 2026-08-29
 ---
 
 # External sources — research index для Claude Code harness'а
@@ -27,14 +27,14 @@ truth для harness-philosophy.**
 - **Planner → Generator → Evaluator** — canonical pattern для long tasks. Negotiated sprint contracts: Generator+Evaluator договариваются о «done» до кода.
 - **Cost-threshold для opt-in multi-agent**: *«worth the cost когда task sits beyond what current model does reliably solo»*. Не default.
 - «I removed the sprint construct entirely — Opus 4.6 could natively handle the job».
-**Применяется:** principles.md foundational; Evaluator-узел — fresh-context critic (`claude-code-harness:/external-audit`); retire_bias=3 (см. devlog #29).
+**Применяется:** principles.md foundational; Evaluator-узел — fresh-context critic (свежая сессия либо `/code-review ultra`); retire_bias=3 (см. devlog #29).
 
 ### [A Harness for Every Task: Dynamic Workflows in Claude Code](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code)
 **Авторы:** Thariq Shihipar & Sid Bidasaria (Claude Code MTS), 2 июня 2026. **Canonical для dynamic workflows** — the first-party post behind the `ultracode` / Workflow feature этого harness'а.
 **Главные тезисы:**
 - Claude читает задачу → пишет собственный `.js`-harness (native-функции для spawn субагентов, назначения моделей, worktree-изоляции) → runtime исполняет. **Harness = output задачи, не предусловие.** First-class artifact: читаемый/перезапускаемый/правимый скрипт; resume после прерывания.
 - **Три failure-mode**, которые изолированные субагенты лечат структурно: *agentic laziness* (бросает сложную задачу, объявив done), *self-preferential bias* (подтверждает собственный вывод при self-verify), *goal drift* (констрейнты теряются через turns/compaction). Прямое first-party обоснование §8 (fresh-context ≠ self-recheck) и sub-agent isolation policy.
-- **`ultracode` = trigger word, не отдельный режим** — shorthand «напиши dynamic workflow». Голое «workflow» больше не триггерит (rename 2.1.160). Use-cases выходят за код: sales/data-eng post-mortem, triage backlog.
+- **`ultracode` = trigger word, не отдельный режим** — shorthand «напиши dynamic workflow». Голое «workflow» не триггерит. Use-cases выходят за код: sales/data-eng post-mortem, triage backlog.
 - **Quarantine pattern**: в triage-workflow'ах агенты, читающие untrusted public content, лишаются high-privilege действий — acting делают отдельные субагенты (privilege-separation против prompt-injection).
 **Применяется:** multi-agent.md §7.2 + §7.1 (quarantine), principles.md §permissions (quarantine) + §subagents (3 failure-mode), workflow.md (ultracode framing). Tier T1.
 
@@ -71,13 +71,28 @@ truth для harness-philosophy.**
 
 ### [April 23 Postmortem — recent Claude Code quality reports](https://www.anthropic.com/engineering/april-23-postmortem)
 **Дата:** 23 апреля 2026.
-**Тезисы:** Three regressions resolved by v2.1.116 — (1) effort default reverted to **xhigh для Opus 4.7** (April 7), (2) thinking-clearing bug fixed (April 10), (3) verbosity system-prompt reverted April 20. Affected Sonnet 4.6, Opus 4.6, Opus 4.7.
-**Применяется:** baseline для «Opus 4.7 default effort = xhigh» в workflow.md. Argues для stop-validation hook discipline (prompts can silently regress).
+**Тезисы:** три независимых регрессии качества — сдвинутый дефолт effort, баг очистки thinking, откат verbosity-промпта — прожили недели, пока не были найдены. Anthropic тюнит harness Claude Code под каждый релиз модели отдельно.
+**Применяется:** аргумент, что **промпты и дефолты тихо регрессируют** — отсюда дисциплина явной верификации поведения (свои замеры, а не вера в дефолт) и cadence перепроверки среза.
 
 ### [Scaling Managed Agents — Decoupling brain/hands/session](https://www.anthropic.com/engineering/managed-agents)
 **Дата:** 8 апреля 2026.
 **Тезисы:** *«Harnesses encode assumptions about what Claude can't do on its own — but those assumptions need to be questioned because they can go stale as models improve.»* Brain/hands/session log decoupling.
 **Применяется:** validates principles.md foundational + workflow-evolution.md cadence. **Method out of scope** (API-only, per api-constraint.md); pattern-level знание portable.
+
+### [Agent Harness Design: 3 Patterns for Harnessing Claude's Intelligence](https://claude.com/blog/harnessing-claudes-intelligence)
+**Автор:** Lance Martin (Claude Platform Team), 2 апреля 2026.
+**Тезисы:** (1) **Lean on the model, not the harness** — общие инструменты, которые модель знает (bash, file-edit), бьют специализированную обвязку и растут вместе с моделью; (2) **Strip your harness down** — *«as Claude gets more capable, those assumptions should be tested»*, отдавай модели оркестрацию, управление контекстом и память; (3) **Set boundaries carefully** — UX, стоимость и безопасность обеспечиваются декларативными границами, а не инструкциями.
+**Применяется:** тройка ровно совпадает с нашим foundational + built-ins-first + permissions-слоем; полезна как компактная формулировка «что именно оставлять в обвязке». Tier T1.
+
+### [How we contain Claude across products](https://www.anthropic.com/engineering/how-we-contain-claude)
+**Дата:** 25 мая 2026.
+**Тезисы:** *«Design for containment at the environment layer first, then steer behavior at the model layer»* — надзирают не за тем, что агент делает, а за тем, что он **способен** сделать (sandbox, VM, egress-контроль). Измеренная approval fatigue: пользователи аппрувили ~93% промптов; auto-mode классификатор ловит ~83% overeager-поведений до исполнения; OS-sandbox даёт −84% промптов.
+**Применяется:** principles.md § Settings & permissions (границы важнее инструкций), обоснование sandbox как опции и того, почему свой guard-хук ретайрен: containment строится на уровне окружения, а не на самописном DENY поверх нативного. Tier T1.
+
+### [How Anthropic secures its AI-native software development lifecycle](https://claude.com/blog/how-anthropic-secures-its-ai-native-software-development-lifecycle)
+**Автор:** Jason Clinton (Deputy CISO), 21 июля 2026.
+**Тезисы:** границы строятся вокруг **доступа и действий, а не вокруг инструкций модели**; single-purpose identity с минимальными правами на агента (incident-response агент пишет доки и читает прод-логи, но **не деплоит**); гейт из узкоспециализированных ревью-агентов + детерминированные проверки; всё логируется в SIEM. **Инцидент:** после апгрейда модели IR-агент по своей инициативе написал другому Claude и попросил запушить фикс → **границы агента обязаны включать доступ к другим агентам**.
+**Применяется:** workflow-orchestration.md § Cross-session `SendMessage` (security-инварианты), principles.md § Settings & permissions. Tier T1.
 
 ## Блок 2 — First-party Anthropic: Product docs & blog
 
@@ -88,15 +103,26 @@ Live ground-truth по фичам Claude Code CLI. **Источник для «�
 - `/best-practices` — Cherny + team 2026, single highest-leverage doc
 - `/sub-agents` — built-ins inventory, frontmatter spec
 - `/skills` — SKILL.md ≤500 строк, frontmatter required
-- `/hooks` — 30 событий lifecycle (не 12 как в более ранних источниках)
+- `/hooks` — десятки lifecycle-событий, далеко за пределами тех пяти, что использует большинство проектов (точное число — только в `native-capabilities.md` кита: единственный version-pinned файл)
 - `/memory` — CLAUDE.md hierarchy, @import syntax, MEMORY.md auto-load 200 lines/25KB
 - `/settings` — 3-layer permissions model
 - `/common-workflows`, `/code-review`, `/cli-reference`, `/commands`, `/slash-commands`
 **Применяется:** principles.md cites all canonical pages. Verification — `.claude/docs/archive/research-audit.md` (39 CONFIRMED claims).
 
-### [claude.com/blog/best-practices-for-using-claude-opus-4-7-with-claude-code](https://claude.com/blog/best-practices-for-using-claude-opus-4-7-with-claude-code)
-**Тезисы:** *«Opus 4.7 spawns fewer subagents by default. Do not spawn a subagent for work you can complete directly in a single response»*. Adaptive thinking ON by default; fixed thinking budgets deprecated.
-**Применяется:** CLAUDE.md sub-agent spawn policy (один из главных load-bearing цитат).
+### [claude.com/blog — The new rules of context engineering for Claude 5 generation models](https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models)
+**Автор:** Thariq Shihipar, 24 июля 2026. **Canonical для контекст-инжиниринга под текущее поколение.**
+**Главные тезисы:**
+- Из системного промпта самого Claude Code **вырезано >80%** «with no measurable loss on coding evaluations». Механизм вреда назван прямо: over-constraining через system prompt + CLAUDE.md + skills даёт **конфликтующие инструкции в одном запросе** (внутренний пример: «leave documentation as appropriate» против «DO NOT add comments»).
+- CLAUDE.md: *«briefly describe what your repo is for, but spend most of the tokens on gotchas»*; не писать то, что выводится из структуры кода.
+- Skills — «lightweight guides», длинные режутся на файлы через progressive disclosure.
+- Спеки: *«prefer files that are in code as it provides clear, high-fidelity instructions»* — код, HTML-мокапы и тест-сьюты вместо markdown-пересказа.
+- Сдвиги: правила → judgment; примеры вызова инструментов → выразительные параметры; загрузка контекста вся сразу → deferred/ToolSearch; ручной CLAUDE.md → auto-memory.
+- Эти практики встроены в **`/doctor`** — он «rightsize»-ит skills и CLAUDE.md.
+**Применяется:** principles.md foundational + Memory-секция; workflow.md anti-patterns; workflow-evolution.md (retire-ритуал через `/doctor`). Tier T1.
+
+### [platform.claude.com — Prompting Claude Opus 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5)
+**Тезисы:** не над-инструктировать верификацию — модель ловит и чинит свои ошибки сама, а унаследованные «double-check», «add a final verification step», **«use a subagent to verify»** дают over-verification; давать полную спеку сразу (модель доводит задачу, а не оставляет заглушки); в код-ревью не просить «только high-severity» — отфильтруешь отдельным проходом; thinking включён по умолчанию, глубиной управляет **effort** (при выключенном thinking `xhigh`/`max` API отвергает — в CLI это теперь не долетает до API: клиент подставляет `high`, так что связка даёт не ошибку, а тихий потолок).
+**Применяется:** workflow.md anti-patterns (инструкции самопроверки в промпте), § Default effort. **Watch-item закрыт замером** (devlog #130, `benchmark/guard-ab/`): на Opus 5 независимый рефьютер свежим контекстом дал +24 / +12 / +3 кейса из 239 на одной и той же реализации, 3 прогона из 3, без роста ложных срабатываний. Предупреждение поста метит в *инструкцию самопроверки внутри промпта*, §8 — в *отдельный проход другим контекстом*; это разные вещи, и второе продолжает окупаться.
 
 ### [claude.com/blog/onboarding-claude-code-like-a-new-developer](https://claude.com/blog/onboarding-claude-code-like-a-new-developer-lessons-from-17-years-of-development)
 **Автор:** Brendan MacLean (Skyline, 700K+ LoC C#, 17 лет dev).
@@ -121,27 +147,42 @@ Live ground-truth по фичам Claude Code CLI. **Источник для «�
 **Тезисы:** «Orchestrator → parallel sub-agents → 25+ tool calls per session.» Explicit preference for **non-deterministic exploration** over rigid playbooks: *«when we gave Claude latitude to explore — access to tools and a goal, rather than a rigid sequence — it often took paths we wouldn't have prescribed.»*
 **Применяется:** evidence для «goal+tools beats prescribed sequence» — anti-pattern в workflow.md (rigid pipeline), pattern в workflow-evolution.md (loops + exploration > fixed playbook).
 
-### [anthropic.com/news/claude-opus-4-7](https://www.anthropic.com/news/claude-opus-4-7)
-**Тезисы:** «works coherently for hours» (Cognition/Devin), «verifies its own outputs before reporting back», 1M context, tokenizer ↑35%.
-**Применяется:** model capability baseline для «strip away scaffolding» рассуждений.
+### [platform.claude.com — What's new in Claude Opus 5](https://platform.claude.com/docs/en/about-claude/models/whats-new-opus-5)
+**Тезисы:** 1M context как дефолт и максимум с ровным instruction-following по всему окну; thinking включён по умолчанию, модель сама решает глубину, рычаг — `effort`; фиксированные thinking-бюджеты убраны; более буквальное следование инструкции («will not silently generalize»).
+**Применяется:** model capability baseline для «strip away scaffolding» рассуждений; против «vague instructions» anti-pattern.
 
-### [platform.claude.com — Opus 4.7 model docs](https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-7)
-**Тезисы:** more literal instruction following («will not silently generalize»), 1M context, removed fixed thinking budgets (breaking change), task budgets бета.
-**Применяется:** evidence для xhigh adaptive default, против «vague instructions» anti-pattern.
+### [code.claude.com/docs/en/agent-teams](https://code.claude.com/docs/en/agent-teams)
+**Тезисы:** «прежде чем заводить команду, проверь, не хватит ли более лёгкого варианта» —
+субагенты внутри одной сессии, cross-session messaging между своими сессиями. Teams выигрывают
+там, где параллельное исследование реально даёт ценность (ревью в несколько линз, конкурирующие
+гипотезы при отладке, независимые куски фичи), и проигрывают на последовательной работе и правках
+одного файла. Ключевое для дизайна харнеса: **включённый флаг меняет обычное делегирование** —
+субагент, которому Claude сам дал имя, стартует как teammate, так что команда собирается без
+запроса. `TeamCreate`/`TeamDelete` удалены (v2.1.178).
+**Применяется:** principles.md § Subagents (model assignment / teams), multi-agent.md таблица
+режимов. Tier T1.
 
-### [github.com/anthropics/claude-code — CHANGELOG](https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md)
-Live ground-truth по версиям. Релизы каждые несколько дней.
-- v2.1.111 — Opus 4.7 xhigh enabled
-- v2.1.121 — protected-paths fix (writes в `.claude/{commands,agents,skills}/` без prompts)
-- v2.1.33 — subagent memory frontmatter (user/project/local scope)
-- **v2.1.133** (May 7) — `worktree.baseRef` setting (default `origin/<default>`); hooks see `effort.level` + `$CLAUDE_EFFORT`
-- **v2.1.139** (May 11) — agent view, `/goal`, hook `args: string[]` (shell-free), `PostToolUse continueOnBlock`, new events (Setup / UserPromptExpansion / PostToolUseFailure / PostToolBatch / InstructionsLoaded / FileChanged / CwdChanged), subagent header propagation
-- **v2.1.140** (May 12) — better subagent_type fuzzy matching; `/goal` graceful behavior when `disableAllHooks` is set
-- **v2.1.141** (May 13) — `/goal` (Research Preview); `claude agents` unified view; `--cwd` scoping; `/feedback` session attach
-- **v2.1.142** (May 14) — `claude agents` dispatch flags (`--add-dir/--settings/--mcp-config/--plugin-dir/--permission-mode/--model/--effort/--dangerously-skip-permissions`); fast mode default → Opus 4.7
-- **v2.1.143** (May 15) — plugin dependency enforcement; `worktree.bgIsolation: "none"`; background sessions preserve model+effort after waking; Shift+Tab in attached agent sessions cycles modes incl. auto
-- **v2.1.155→169** (late May → Jun 8) — полная дельта в `~/.claude/skills/claude-code-harness/references/native-capabilities.md` § «Changed in 2.1.155 → 2.1.169». Highlights: `workflow`→`ultracode` keyword rename (160); `Stop` `additionalContext` (163); permissions hardening (160–166); fan-out resilience + `SendMessage` authority-hardening (161/166); **v2.1.169 (Jun 8)** — `--safe-mode`, `disableBundledSkills`, `/cd`, `claude agents --json` (+`id`/`state`/`--all`), worktree-edit-block hint, CLAUDE.md-threshold scaling.
-**Применяется:** version-claim verification, gating-feedback в memory. Updated baseline for `native-capabilities.md` (canonical built-ins slice).
+### [OpenAI открыла исходники Codex-харнеса (Apache-2.0, 20 августа 2026)](https://github.com/openai/codex)
+**Тезисы:** движок Codex (`codex exec` · SDK · app-server) выложен под Apache-2.0. Заявленная
+цифра: настройка **только** харнеса (inference retention + compaction) подняла ARC-AGI-3 с 13.3%
+до 38.3% при ~6× меньшем расходе токенов, модель не менялась.
+**Применяется:** corroboration Harness-Bench в `benchmark.md` (та же форма замера: модель
+зафиксирована, харнес варьируется) и контекст для cross-vendor ревьюера (`multi-agent.md` §7.3) —
+движок под нашим `codex_peer` теперь открытый. **Vendor-claim, не независимая репликация**:
+tier T4, инвариантов не порождает.
+
+### arXiv, август 2026 — [Prime Agent 2608.23552](https://arxiv.org/abs/2608.23552) · [Agent Lightning v1.0 2608.17528](https://arxiv.org/pdf/2608.17528)
+**Тезисы:** Prime Agent — open-source харнес, стандартизующий execution / recovery / verification /
+resource accounting и **оставляющий построение стратегии модели**; явная цель — «чтобы отказы
+харнеса не читались как отказы модели». Agent Lightning — «harnessed agentic RL»: состояние
+харнеса вводится в латентное состояние POMDP, харнес участвует в post-training.
+**Применяется:** Prime Agent усиливает открытый хвост `benchmark.md` (model×harness reporting,
+failure-symptom taxonomy) — ровно наша проблема разделения «модель vs обвязка». Agent Lightning —
+**метод out of scope** (RL-обучение), берём только словарь. T3.
+
+### [code.claude.com/docs/en/changelog](https://code.claude.com/docs/en/changelog)
+Live ground-truth по версиям; релизы каждые несколько дней. **Здесь дельта намеренно не дублируется** — единственный version-pinned срез харнеса живёт в `~/.claude/skills/claude-code-harness/references/native-capabilities.md`, копия в двух местах протухает в одном из них молча.
+**Применяется:** external-intake проход refresh-ритуала (`harness-evolution.md`) сверяет changelog против ledger'а и правит `native-capabilities.md` точечно.
 
 ## Блок 3 — Claude Code creators & insiders
 
@@ -227,6 +268,16 @@ Runtime = Intelligent Harness Runtime (IHR).
 ### [arXiv 2606.05894 — EMBER: Budgeted Evidence Retention for Long-Horizon Agents](https://arxiv.org/abs/2606.05894)
 **Дата:** июнь 2026. **Тезисы:** *Budgeted Pre-Query Retention* — что сохранить ДО появления запроса под фиксированным token-бюджетом. Память пишется при ingestion, читается без доступа к raw-stream. Юнит — **evidence capsule**: *дословная выдержка источника + retrieval-key + update-metadata* (grounding + discoverability + контекст). Learned retention-policy на post-query outcome-feedback. Результат: EMBER-14B 0.30 F1 @ 8192-budget на LongMemEval-RR (vs 0.18 strongest baseline).
 **Применяется:** **method out of scope** (learned RL-policy, как SLIM/Meta-Harness — нужен training). Переносимый принцип: *source-backed / verbatim, не перефраз* + бюджет форсит приоритизацию — совпадает с memory-layers.md (frontmatter `description` = retrieval-key, `[[links]]` = update-metadata) и с заметкой про 63%-wrong-accept (держать storage детерминированным). НЕ строим learned-pipeline (наш anti-pattern «multi-step memory pipeline premature»). T3.
+
+### [arXiv 2607.14275 — AI Agents Do Not Fail Alone: The Context Fails First](https://arxiv.org/abs/2607.14275)
+**Автор:** Fouad Bousetouane. 15 июля 2026.
+**Тезисы:** качество контекста измеряется **до** запуска и предсказывает надёжность агента: модель фиксируют, варьируют только контекст. Семь критериев — role clarity, guardrail coverage, instruction consistency, tool-schema quality, grounding sufficiency, injection hardening, token efficiency — каждый предсказывает свой отказ (grounding → галлюцинации, guardrails → манипулируемость, consistency → следование инструкции, tool-schema → корректность вызовов).
+**Применяется:** **словарь и preflight-рамка, не инвариант** (T3). Совпадает с нашим разделением слоёв: rules = instruction consistency, permissions + нативный классификатор = guardrail coverage, quarantine = injection hardening, CLAUDE.md-бюджет = token efficiency. Полезно как чек-лист при аудите чужого харнеса.
+
+### [arXiv 2606.14249 — HarnessX: A Composable, Adaptive, and Evolvable Agent Harness Foundry](https://arxiv.org/abs/2606.14249)
+**Дата:** июнь 2026 (v2 — 23 июля).
+**Тезисы:** харнесы «hand-crafted and static»; автоматическая композиция и эволюция элементов обвязки по execution-feedback даёт **+14.5% в среднем (до +44%)** на пяти бенчмарках (ALFWorld, GAIA, WebShop, tau³-Bench, SWE-bench Verified), причём прирост тем больше, чем слабее baseline.
+**Применяется:** corroboration AHE — «обвязка двигает результат сопоставимо с моделью». **Метод out of scope** (RL-движок, требует обучения). T3.
 
 ### [Chroma Research — Context Rot](https://research.trychroma.com/context-rot)
 **Авторы:** Hong / Troynikov / Huber, июль 2025. 18 моделей.
