@@ -112,7 +112,7 @@ Per [code.claude.com/docs/en/code-review](https://code.claude.com/docs/en/code-r
 - 🟡 **Nit** — style / minor
 - 🟣 **Pre-existing** — unrelated to PR
 
-`REVIEW.md` в проекте customizes severity calibration.
+`REVIEW.md` в проекте настраивает **управляемый GitHub-сервис** Code Review (Team/Enterprise); локальный `/code-review` его не читает — там рычаг калибровки это уровень effort.
 
 ---
 
