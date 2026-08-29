@@ -230,7 +230,7 @@ Emit hook lifecycle events for observability tooling. Use for:
 |--------------|--------|-------------|
 | Multi-level recursive subagent для most coding | [arXiv 2604.18071](https://arxiv.org/abs/2604.18071) — 12.9% corpus; Anthropic "ill-suited" | Main thread orchestration |
 | Parallel writes к same files через worktree | git merge hell | Sequential или separate features |
-| `claude agents dispatch` для one-shot lookup | Spawn overhead | `claude --print "..."` |
+| Фоновая сессия ради one-shot lookup | Spawn overhead | `claude --print "..."` |
 | `--remote-control` для local dev | Adds overhead | Standard interactive session |
 | `--add-dir /` (root grant) | Permission blast radius | Specific dirs only |
 | Worktree без cleanup | Disk space + git confusion | Auto-cleanup + manual `git worktree prune` |
