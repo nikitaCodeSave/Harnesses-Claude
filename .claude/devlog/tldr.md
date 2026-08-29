@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #137 · 2026-08-29 · Документацию душил не дрейф, а стоимость её поддержки
+
+**Tags:** docs-discipline, empirical, cleanup, kit
+
+Оператор принёс наблюдение из Greenplun-router-runtime: харнесс порождает остаточные артефакты, они перерастают в правила, правила быстро устаревают и душат разработку, а уследить за ними невозможно — при том что Claude Code достаточно одного источника истины, кода. Проверка на…
+
+[→ entries/0137-dokumentatsiyu-dushil-ne-dreyf-a-stoimost-ee-podderzhki.md](entries/0137-dokumentatsiyu-dushil-ne-dreyf-a-stoimost-ee-podderzhki.md)
+
+---
+
 ## #136 · 2026-08-29 · Живой слой предписывал инструменты, которых в сессии нет
 
 **Tags:** harness, audit, currency, cleanup
