@@ -102,7 +102,7 @@ skills:
 
 ## 4. Built-ins-first
 
-Перед созданием custom subagent — `claude agents` lookup:
+Перед созданием custom subagent — сверка с инвентарём built-in'ов (`native-capabilities.md` кита; `claude agents` типы не перечисляет — это менеджер фоновых сессий):
 
 | Built-in            | Покрывает                                      | Заменяет custom-агентов |
 | ------------------- | ---------------------------------------------- | ----------------------- |
@@ -111,7 +111,7 @@ skills:
 | `general-purpose`   | open-ended multi-step research                 | catch-all               |
 | `statusline-setup`  | niche                                          | —                       |
 
-В **нашем harness'е** custom-агентов в репо нет: дубли нативной способности, built-in `/security-review` и `/code-review ultra` не создаются; независимую верификацию несёт свежая сессия, промптнутая рефьютить, а не собственный набор ролей. Built-ins — **5** (вкл. `claude-code-guide`). Любое расширение — через симметричное правило (N≥3 промахи).
+В **нашем harness'е** custom-агентов в репо нет: дубли нативной способности, built-in `/security-review` и `/code-review ultra` не создаются; независимую верификацию несёт свежая сессия, промптнутая рефьютить, а не собственный набор ролей. Built-in специалистов — **5** (вкл. `claude-code-guide`), плюс catch-all `claude`. Любое расширение — через симметричное правило (N≥3 промахи).
 
 ---
 
@@ -197,12 +197,12 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 
 | Anti-pattern                                 | ADR / источник                  | Замена                                                    |
 | -------------------------------------------- | ------------------------------- | --------------------------------------------------------- |
-| TDD-тройка test-writer / impl / refactor     | ADR-002                         | Single context + TaskCreate phases + `rules/testing.md`   |
+| TDD-тройка test-writer / impl / refactor     | ADR-002                         | Single context, фазы внутри одного прохода + `rules/testing.md` |
 | PM → Architect → Dev → QA pipeline           | meta-CLAUDE.md                  | Main thread + built-in `Plan` для design                  |
 | Generator/Evaluator контракт каждый sprint   | meta-CLAUDE.md                  | модель сама «devises ways to verify own outputs»; high-stakes — dynamic workflow opt-in |
-| Custom subagent дублирующий built-in         | ADR-007                         | `claude agents` check **до** создания                     |
+| Custom subagent дублирующий built-in         | ADR-007                         | сверка с инвентарём built-in'ов **до** создания           |
 | code-reviewer как custom agent               | ADR-011                         | Built-in `/code-review` или main thread + diff            |
-| Multi-agent для sequential dependency chain  | Anthropic [multi-agent-systems] | Single agent + TaskCreate                                 |
+| Multi-agent для sequential dependency chain  | Anthropic [multi-agent-systems] | Single agent, последовательно в одном контексте            |
 | Subagent как wrapper над одним tool call     | принцип                         | Direct tool call в main thread                            |
 | Multi-agent для most coding                  | Anthropic explicit              | Main thread; для scope>1 контекста — built-in dynamic workflow, не кастомный pipeline |
 
@@ -228,7 +228,7 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 5 вопросов main thread'а перед `Agent` tool call:
 
 1. **Trigger** (§2): один из (а), (б), (в)? Если ни один — main thread сделает сам.
-2. **Built-in coverage**: `claude agents` checked? Если built-in покрывает — без custom.
+2. **Built-in coverage**: инвентарь built-in'ов сверен? Если built-in покрывает — без custom.
 3. **Brief completeness**: цель + формат + boundaries + sources + exclusions — все 5 есть?
 4. **Effort scaling**: complexity matches количеству subagents (§3.2)?
 5. **Result format**: structured? Не raw dump?

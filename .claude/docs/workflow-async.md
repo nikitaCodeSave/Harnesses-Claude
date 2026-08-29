@@ -19,7 +19,7 @@ status: active
 4. **`SendMessage`** — agent-to-agent mid-flight communication
 5. **`Routines`** — Anthropic web «higher-order prompts that wake up to merged PRs» (Cherny, Code w/ Claude 2026)
 
-Anti-pattern: `bash sleep` loops для wait. Всегда Monitor.
+Anti-pattern: `bash sleep` loops для wait. Monitor; там, где он в профиле недоступен (условия — в Availability выше), его место занимает background Bash с уведомлением по завершении.
 
 ## Decision tree
 
@@ -102,6 +102,8 @@ Explicit anti-pattern per [code.claude.com/docs/en/tools-reference](https://code
 
 L0 in-session scratchpad — **session-scoped**, not persisted между сессиями (per [memory-layers.md](memory-layers.md)).
 
+**Доступность.** `TaskCreate` / `TaskGet` / `TaskUpdate` / `TaskList` и `TodoWrite` не выдаются текущему поколению моделей без явного opt-in (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` либо перечисление в `--tools` / `--allowedTools`): эти модели ведут многошаговую работу без письменного чеклиста, а определения тулов стоят контекста. `TaskOutput` и `TaskStop` под это ограничение не попадают. Версии и точные условия — `native-capabilities.md` кита. Таблица ниже описывает поверхность, когда тулы включены.
+
 | Tool | Use |
 |------|-----|
 | `TaskCreate({subject, description, activeForm?})` | Create new task (status `pending`) |
@@ -122,7 +124,7 @@ L0 in-session scratchpad — **session-scoped**, not persisted между сес
 
 ### Cross-session — что делать?
 
-`TaskCreate` state NOT персистится между сессиями (L0 by design). Для cross-session goals → `.claude/progress/<slug>.md` (L3 — durable artefact, docs-discipline rule 7).
+Task-list state NOT персистится между сессиями (L0 by design), а на текущем поколении моделей эти тулы вообще не выдаются без opt-in — тем более для cross-session goals → `.claude/progress/<slug>.md` (L3 — durable artefact, docs-discipline rule 7).
 
 ---
 

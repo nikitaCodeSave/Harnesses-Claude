@@ -107,8 +107,10 @@ continuity (devlog/progress/memory) · mechanical-guardrails · independent-veri
 
 - **API:** строго CLI-подписка Claude Code. Anthropic API, managed-agents, beta headers,
   `--bare`, `--max-budget-usd` — **out of scope** (`.claude/rules/api-constraint.md`).
-- **Built-ins first:** перед любым custom-субагентом — `claude agents`. 5 built-in типов
-  (Explore, Plan, general-purpose, statusline-setup, claude-code-guide) дублировать нельзя.
+- **Built-ins first:** перед любым custom-субагентом — сверка с инвентарём в
+  `native-capabilities.md` кита. Пять специалистов (Explore, Plan, general-purpose,
+  statusline-setup, claude-code-guide) дублировать нельзя; шестой, catch-all `claude`, —
+  дефолт фонового dispatch.
 - **Single-agent default:** один main thread — дефолт для most coding. Bounded fan-out —
   только когда scope превышает один контекст, и тогда через **dynamic workflows** (keyword
   `ultracode`), а не кастомный subagent-pipeline.

@@ -36,7 +36,7 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 ### Work
 - 1 main thread на топовой модели (1M context = весь feature lifecycle помещается без handoff)
 - Sequential: read → write test (RED) → implement → run test (GREEN) → refactor — [testing rules](../rules/testing.md)
-- `TaskCreate`/`TaskUpdate` для multi-step (>3 substantive steps)
+- Многошаговую работу текущее поколение ведёт без письменного чеклиста (task-list тулы выключены по умолчанию); что должно пережить сессию — в `.claude/progress/<slug>.md`
 - Subagents on demand only — дисциплина в [multi-agent.md](multi-agent.md)
 
 ### Review
@@ -52,7 +52,7 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 |--------|------------------|------------|
 | Structured feature workflow (7-phase) | `/feature-dev` plugin (anthropics/claude-plugins-official) | `native-capabilities.md` (kit) |
 | Long-running iterative refinement | `/ralph-loop` plugin (canonical Ralph pattern) | [workflow-async.md](workflow-async.md) |
-| Async / background watch | `Monitor` tool | [workflow-async.md](workflow-async.md) |
+| Async / background watch | `Monitor` tool, а где он недоступен — background Bash + output-file | [workflow-async.md](workflow-async.md) |
 | Parallel feature branches | `-w` worktree + `claude agents` dispatch flags | [workflow-orchestration.md](workflow-orchestration.md) |
 | Codebase-scale sweep / migration / multi-angle convergence (local) | **dynamic workflow** (keyword `ultracode`); find→refute→converge | [multi-agent.md](multi-agent.md) |
 | Heavy planning | built-in `Plan` + `xhigh`/`ultrathink` (локально); облако — сессия на web в plan mode + `--teleport` | [workflow-cloud-offload.md](workflow-cloud-offload.md) |
@@ -87,7 +87,7 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 
 | Anti-pattern | Evidence | Replacement |
 |--------------|----------|-------------|
-| Bash `sleep` loops для wait | Anthropic docs (tools-reference) | `Monitor` tool (event-driven) — см. [workflow-async.md](workflow-async.md) |
+| Bash `sleep` loops для wait | Anthropic docs (tools-reference) | `Monitor` tool (event-driven) либо background Bash, если `Monitor` в профиле отсутствует — см. [workflow-async.md](workflow-async.md) |
 | Polling для CI/PR status | community 2026 | `/autofix-pr` + `Monitor` |
 | Vibe coding (one-shot без Plan) | SonarSource 16.4% conceptual-bug rate | Plan → Work → Review default |
 | Спека фиксирует реализацию (имена/пути/схема/библиотека) | A/B `spec-upstream-ab` 2026-07-22: 6/6 утечек в 3/3, одна подменила acceptance-критерий | детектор «что/зачем — явно, как — не пиши» (WORKFLOW.md §2) |

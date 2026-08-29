@@ -120,7 +120,7 @@ ops-сложности: больше компонентов → больше con
 
 | Layer | Что | Persistence |
 |---|---|---|
-| **L0 in-session scratchpad** | `TaskCreate`/`TaskUpdate` (built-in) | session |
+| **L0 in-session scratchpad** | task-list тулы, по умолчанию выключенные на текущем поколении моделей | session |
 | **L1 procedural** | CLAUDE.md, rules, skills | cross-session, в git |
 | **L2 episodic** | `~/.claude/projects/<hash>/memory/MEMORY.md` + topic files | cross-session, user-scoped |
 | **L3 durable artifacts** | `.claude/devlog/entries/` + `index.json` | cross-session, в git |

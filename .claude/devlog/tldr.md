@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #136 · 2026-08-29 · Живой слой предписывал инструменты, которых в сессии нет
+
+**Tags:** harness, audit, currency, cleanup
+
+Пять независимых аудиторов свежим контекстом (детали и находки по киту — devlog кита #50) прошли по лаборатории, глобальному слою и плагину с установкой опровергать. По лаборатории вскрылся один системный перекос и один класс дефектов, который дороже остальных.
+
+[→ entries/0136-zhivoy-sloy-predpisyval-instrumenty-kotorykh-v-sessii-net.md](entries/0136-zhivoy-sloy-predpisyval-instrumenty-kotorykh-v-sessii-net.md)
+
+---
+
 ## #135 · 2026-08-29 · Поведенческая проба не отвечала на вопрос, который задавали
 
 **Tags:** harness, test, agents-md, external-audit

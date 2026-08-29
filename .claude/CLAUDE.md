@@ -37,17 +37,20 @@ executor напишет код. Skill / agent / hook как environment configur
   `--bare`, `--max-budget-usd` — вне scope. Инварианты и допустимые переносы —
   [rules/api-constraint.md](rules/api-constraint.md) (загружен всегда, здесь не
   пересказывается).
-- **Built-ins first.** Перед созданием custom subagent'а — `claude agents`.
-  Built-ins не дублируются; orchestrator-роль исполняет сам main thread.
+- **Built-ins first.** Перед созданием custom subagent'а — сверься с инвентарём
+  в `native-capabilities.md` кита (`claude agents` — менеджер фоновых сессий, типы
+  он не перечисляет). Built-ins не дублируются; orchestrator-роль — сам main thread.
 - **Spawn subagent'а оправдан только** при (а) изоляции контекста, (б)
   параллельности независимых проверок, (в) auto-compact rescue. В остальном —
   main thread сам, даже если описание агента подходит «по ассоциации».
   Scope больше одного контекста → built-in dynamic workflow (`ultracode`), НЕ
   кастомный pipeline. Дисциплина и цифры: [multi-agent.md](docs/multi-agent.md).
 - **Независимый judge для silent-wrong класса** (парсеры, guards, инвариантные
-  рефакторы) — ревьюер другого вендора, Codex через MCP `codex_peer` (скилл
-  `codex-mcp`). Не subagent и не нарушение api-constraint: сторонний CLI на
-  своей подписке. Замер на Opus 5: devlog #130.
+  рефакторы). Что измерено (devlog #130, Opus 5): окупается сам **независимый
+  свежий контекст** — вендор в том замере не варьировался, оба плеча свои.
+  Кросс-вендорный ревьюер (Codex через MCP `codex_peer`, скилл `codex-mcp`) —
+  отдельное усиление на другой эмпирике (#127), не подпёртое #130. Не subagent
+  и не нарушение api-constraint: сторонний CLI на своей подписке.
 
 ## Anti-patterns
 

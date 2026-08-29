@@ -15,7 +15,7 @@ last-updated: 2026-08-29
 
 | Layer | Что | Где у нас | Persistence | Owner |
 |---|---|---|---|---|
-| L0 in-session scratchpad | runtime task list | `TaskCreate`/`TaskUpdate` (built-in) | session | session |
+| L0 in-session scratchpad | runtime task list | **на текущем поколении моделей пуст**: task-list тулы и `TodoWrite` не выдаются без явного opt-in (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`) — модель ведёт многошаговую работу без письменного чеклиста; версии и точные условия — `native-capabilities.md` кита | session | session |
 | L1 procedural | как работать, инварианты, action-skills | `.claude/CLAUDE.md`, `.claude/rules/`, `.claude/skills/{devlog,update-plan-progress}/` | cross-session, в git | repo |
 | L2 episodic | session summaries, recurring patterns | `~/.claude/projects/<hash>/memory/MEMORY.md` + per-topic `.md` | cross-session, user-scoped | user |
 | L3 durable artifacts | what happened, why | `.claude/devlog/entries/*.md` + `index.json` | cross-session, в git | repo |
@@ -51,6 +51,6 @@ Opt-in: вызывает оператор, за пределами авторс�
 
 ## Что специально НЕ делаем
 
-- Не персистим `TaskCreate`/`TaskUpdate` state между сессиями — это L0 (session-scoped) by design; cross-session goals переходят в L3 (devlog) или progress.md.
+- Не персистим task-list state между сессиями — это L0 (session-scoped) by design; cross-session goals переходят в L3 (devlog) или progress.md. На текущем поколении L0 пуст by default, и это усиливает то же правило: in-flight состояние живёт на диске, а не в тулах сессии.
 - Не делаем nested CLAUDE.md per subdir (Boris допускает lazy-load, у нас не нужен — single repo, плоская структура).
 - Не делаем semantic search над devlog — `grep` справляется при ~40 entries; пересмотреть при ≥200.

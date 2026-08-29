@@ -91,8 +91,11 @@ State: `~/.claude/worktrees/` + git's `.git/worktrees/`.
 
 ### Dispatch flags
 
+Подкоманды `dispatch` нет — это опции самой `claude agents`, задающие дефолты для сессий,
+отправляемых из agent view:
+
 ```bash
-claude agents dispatch <agent> \
+claude agents \
   --add-dir <dirs...> \
   --settings <path-or-json> \
   --mcp-config <files...> \
@@ -109,7 +112,7 @@ claude agents dispatch <agent> \
 - **Background sessions honor `permissions.defaultMode`** из settings.json
 - **`Shift+Tab`** в attached agent session cycles modes включая auto
 - **`settings.json` `agent` field honored** для dispatched sessions; `--agent <name>` override
-- **`claude agents --json`** несёт `waitingFor` (на чём заблокирована сессия — например permission prompt), `id`, `state` и включает blocked/just-dispatched; `--all` добавляет completed; rows показывают `done/total` при fan-out
+- **`claude agents --json`** отдаёт по сессии `pid`, `cwd`, `kind`, `startedAt`, `sessionId`, `name`, `status`; `--all` добавляет завершённые
 - **Background-сессии сами сохраняют работу**: коммитят и пушат, открывают draft PR только когда задача этого требует, следуют git-инструкциям из CLAUDE.md и в финале сообщают, где лежит результат
 - **Background sessions заранее знают про shared-checkout block** — до `EnterWorktree` edits в shared checkout заблокированы, и сессии об этом сообщается заранее (нет впустую отклонённого первого edit). Усиливает worktree-isolation-first discipline выше.
 - **Лимита в 200 субагентов на сессию нет** — долгие сессии не упираются в отказ спавна (concurrency и depth-лимиты остаются)
@@ -119,9 +122,9 @@ claude agents dispatch <agent> \
 | Need | Use |
 |------|-----|
 | Single iteration of task | Standard `claude -p "..."` |
-| Long-running agent fleet | `claude agents dispatch` |
+| Long-running agent fleet | agent view (`claude agents`) |
 | Parallel exploration of independent angles | Multiple `Agent` calls в main thread (см. [multi-agent.md](multi-agent.md)) |
-| CI/CD integration | `claude agents dispatch` + `--output-format=json` + `--json-schema` |
+| CI/CD integration | `claude -p` + `--output-format=json` + `--json-schema` |
 
 ### Settings inheritance
 

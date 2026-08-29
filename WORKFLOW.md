@@ -55,7 +55,7 @@ Workflow для разработчика высокого класса на те
 
 Вход в фазу **Plan** (механика — в Спине ниже). Здесь фиксируешь *что решено и почему*.
 
-- Архитектурные развилки — built-in **`Plan`-агент** / Plan mode; тяжёлое планирование — `/ultraplan` (cloud, 3 A/B-варианта). [[3]]
+- Архитектурные развилки — built-in **`Plan`-агент** / Plan mode с `xhigh` + `ultrathink`; облако — обычная сессия Claude Code on the web в plan mode, план забирается `claude --teleport <session id>`. [[3]]
 - **Каждое нетривиальное решение → ADR** (Context / Decision / Consequences / Alternatives). Порог простой: *объяснение заняло бы >5 мин → ADR*.
 - **Brownfield + трогаешь инварианты** → сначала read-only разведка built-in **`Explore`** (карта затронутых модулей · инварианты, которые нельзя сломать · blast-radius). Вывод **остаётся в контексте** — отдельный `docs/context/*.md` НЕ заводим (Explore перезапускаем по требованию под 1M-окном). Если fresh-context критику нужно прочитать карту через compaction — пришпиль её в context-секцию ADR или progress-журнал, не в новый формат.
 - **Design-lite → (large only) грилл → ADR, в этом порядке.** Нетривиальное решение сначала живёт как *мутабельный* набросок (модель данных · ≥2 РЕАЛЬНЫЕ альтернативы · acceptance). На **medium** это абзац в плане — без spawn'а. На **large ∧ необратимо ∧ трогает инвариант** — прогони по нему тот же fresh-context рефутер, что в REVIEW/§8, с фальсифицируемым мандатом: «убей ≥1 альтернативу конкретным failure-сценарием или цифрой стоимости» (у прозы нет исполняемого оракула — грилл дизайна ловит меньше, чем грилл кода; это опция для дорогого-необратимого, не станция funnel'а). Победившее решение застывает в ADR; альтернативы не дублируй в обоих.
@@ -84,7 +84,7 @@ DENY-правила     GLOSSARY             ADR / docs      ultracode если 
 Масштабируй воронку под изменение, дефолт — **вниз**: trivial (1 строка) → сразу Work→Review · small (1 файл, ясный spec) → только acceptance-оракул · medium (multi-file / реальная развилка) → + design-lite абзац · large (cross-cutting / миграция / трогает **общий инвариант** / **незнакомая** brownfield-подсистема) → полный набор гейтов (Discovery-разведка · PRD+NON-GOALS · design-lite+грилл · ADR). Полный набор — нижняя строка и **исключение**, не ритуал; при сомнении классифицируй на класс ниже.
 
 ### PLAN — отделить «понять» от «делать»
-- **Plan mode** (`Shift+Tab`×2 или `--permission-mode plan`): read-only разведка до первой записи на диск. Тяжёлое планирование — built-in `Plan`-агент через Task, либо `/ultraplan` (cloud) для архитектурных развилок.
+- **Plan mode** (`Shift+Tab`×2 или `--permission-mode plan`): read-only разведка до первой записи на диск. Тяжёлое планирование — built-in `Plan`-агент через Task; отдельного cloud-planning surface у CLI нет, облако подключается как сессия на web в plan mode с возвратом через `claude --teleport`.
 - **Acceptance criteria явно** (что = «done»), critical files, альтернативы. Это оракул, против которого крутится Review. Решение, объяснять которое >5 мин → ADR.
 - Формализация «done» как **sprint-contract** (deliverables + success metrics до кода). [[3]]
 
@@ -93,12 +93,12 @@ DENY-правила     GLOSSARY             ADR / docs      ultracode если 
 - **Test-driven как runnable-оракул**, не как догма очерёдности: read → тест на наблюдаемое поведение через публичный интерфейс (RED) → impl → GREEN → refactor. Тест обязан быть способен упасть. **Никогда не ослабляй тест ради зелёного.**
 - **5 тест-инвариантов** (компактно): тест в **той же сессии**, что и код · способен упасть · живёт **рядом с кодом** · **один тест — одно поведение** · **регрессионный тест перед фиксом бага** (воспроизвести RED → фикс → GREEN). Мокай только реально внешнюю границу (tool/API/network), не внутренности.
 - **Surgical changes:** трогай только то, что требует задача — каждая изменённая строка трассируется к запросу. Не «улучшай» соседний код / форматирование, матчи существующий стиль; убирай только орфаны, созданные твоей же правкой (pre-existing dead code — упомяни, не трогай).
-- `TaskCreate`/`TaskUpdate` для >3 шагов (L0, session-scoped).
+- Письменный чеклист шагов текущему поколению не выдаётся (task-list тулы off by default) — план держится в голове модели, а всё, что должно пережить сессию, пишется на диск.
 - **Subagent — только** при (а) изоляции контекста (broad scan загрязнит main), (б) параллельности независимых проверок, (в) auto-compact rescue. Иначе main thread сам. [[4]]
 
 ### REVIEW — главный рычаг
 - Self-review + tests/lint/type-check всегда. **«Looks done ≠ is done»** — гоняй фичу end-to-end, не только unit/`curl`.
-- **`/code-review`** — дефолтная ступень на каждый substantive change: built-in skill по рабочему диффу, локально и бесплатно, codebase-aware (`--fix` применяет находки, `--comment` кладёт inline-комментарии в PR). `/review` — про **PR на GitHub**, рабочий дифф он не смотрит. Калибровка severity — `REVIEW.md` в корне. [[10]]
+- **`/code-review`** — дефолтная ступень на каждый substantive change: built-in skill по рабочему диффу, локально и бесплатно, codebase-aware (`--fix` применяет находки, `--comment` кладёт inline-комментарии в PR). `/review` — алиас `/code-review`. Калибровка severity — `REVIEW.md` в корне. [[10]]
 - **`/code-review ultra`** (алиас `/ultrareview`, CLI `claude ultrareview`) — cloud-fleet для high-stakes (security-путь, миграция, платежи): типично **5–10 мин, ~$5–20 за прогон через usage credits** (3 бесплатных на Pro/Max). Не на каждый PR — на каждый есть `/code-review`. [[10]]
 - **Независимая верификация = fresh context, не self-recheck.** In-context «перепроверь себя» добавляет ≈0 — автор якорится на своём решении (Anthropic называет это **self-preferential bias** — одна из трёх failure-mode длинных/параллельных прогонов, наряду с *agentic laziness* «бросил, объявив done» и *goal drift* «констрейнты ушли через compaction»; изолированные субагенты лечат все три структурно [[7]]). Рычаг — **отдельный fresh-context критик (subagent / новая сессия), которому велено опровергать, а не подтверждать** (judge≠author / Planner→Generator→Evaluator). Сильный вариант: evaluator взаимодействует с **живым приложением** (Playwright MCP) перед оценкой, калиброван быть скептичным. [[3]] Это ⊥ TDD: TDD — *как строить*, это — *кто судит*.
 
@@ -137,7 +137,7 @@ Scope **превышает один контекст** (codebase-sweep, мигр
 - **Built-in dynamic workflows** — keyword **`ultracode`** (trigger word, не отдельный режим; голое «workflow» не триггерит) или просто попроси. Claude пишет собственный `.js`-harness под задачу: скрипт держит план/цикл/промежуточные результаты, в контекст входит только финал; **harness = output задачи, не предусловие**, переживает прерывание (resume). Стоит **заметно больше токенов** — не дефолт. [[7]]
 - **НЕ** строй кастомный PM→Architect→Dev→QA pipeline (built-ins-first).
 - **Недоверенный вход в fan-out → quarantine**: субагенты, читающие untrusted-контент (web/issues/email), отделены от тех, кто выполняет high-privilege действия — privilege-separation против prompt-injection. [[7]]
-- Параллельные ветки — `-w` worktree + `claude agents` (`--json` отдаёт `id`/`state`/`--all` для observability фронта). Async-ожидание — `Monitor` tool, **никогда** bash `sleep`.
+- Параллельные ветки — `-w` worktree + `claude agents` (`--json` отдаёт `sessionId`/`status`/`pid`/`cwd`, `--all` добавляет завершённые). Async-ожидание — `Monitor` tool, а где он недоступен (Bedrock/Vertex/Foundry, `DISABLE_TELEMETRY`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`) — background Bash с output-file и уведомлением по завершении. Bash `sleep`-цикл не годится ни там, ни там.
 - **Backlog для large/кампаний — ОДИН редактируемый носитель, генерируемый one-way из spec** (переиспользуй `features.json` или Plan-файл — не заводи новый store и не строй md↔json зеркала с sync-машинерией). Не мандат единого формата: A/B (`campaign-backlog-ab`, drift=0, N=3) показал dual-canon безопасен — рычаг в one-way-генерации без mirror-sync, не в структуре.
 
 ---
