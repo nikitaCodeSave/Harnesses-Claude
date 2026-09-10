@@ -36,7 +36,7 @@ Default для **нетривиальной** задачи. Trivial (typo / form
 ### Work
 - 1 main thread на топовой модели (1M context = весь feature lifecycle помещается без handoff)
 - Sequential: read → write test (RED) → implement → run test (GREEN) → refactor — [testing rules](../rules/testing.md)
-- Многошаговую работу текущее поколение ведёт без письменного чеклиста (task-list тулы выключены по умолчанию); что должно пережить сессию — в `.claude/progress/<slug>.md`
+- Многошаговую работу текущее поколение ведёт без письменного чеклиста (task-list тулы выключены по умолчанию); что должно пережить сессию — в открытой спеке (operator-global §6)
 - Subagents on demand only — дисциплина в [multi-agent.md](multi-agent.md)
 
 ### Review

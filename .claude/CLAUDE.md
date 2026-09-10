@@ -76,9 +76,10 @@ paths для DENY. Сохранить в проектном CLAUDE.md (в кор
 
 - Расширение harness'а (agents/hooks/commands) main thread делает нативно;
   skills — через плагин skill-creator из marketplace, не форком.
-- `.claude/skills/` содержит ТОЛЬКО action-skills: `update-plan-progress`.
+- Проектных skills нет — каталога `.claude/skills/` в репо не существует.
   Devlog едет плагином `devlog@skills-dir`; в репо ничего devlog'ового не
-  дублируется. Self-описывающие skills не создаются.
+  дублируется. Self-описывающие skills не создаются; action-skill появляется
+  только под повторяющуюся операцию, которой нет built-in'а.
 - Каноничное знание о дизайне harness'а — глобальный скилл
   `claude-code-harness` (он же плагин `~/PROJECTS/claude-code-harness`).
 

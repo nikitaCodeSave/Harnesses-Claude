@@ -52,12 +52,11 @@ WORKFLOW.md              — портативный human-facing гайд: ст�
 │                          · multi-agent · memory-layers · benchmark · external-sources
 ├── rules/               — 3 инварианта: api-constraint · testing · docs-discipline
 │                          (проектных hooks/commands нет — ретайрены 2026-07-15; единственный внешний хук — SessionStart-дайджест плагина devlog)
-├── skills/              — 1 action-skill: update-plan-progress (progress-журнал multi-session задач)
-├── devlog/              — 135 записей (live + archive/), index.json/tldr.md (авто, через devlog-reindex)
+├── devlog/              — записи (live + archive/), index.json/tldr.md (авто, через devlog-reindex)
 ├── benchmark/           — 4-layer измерительная методология (static → headless → cross-fixture → smoke), text2sql-оракулы
 ├── memory/              — JSONL event-логи (session-starts, agent-spawn, denied, …) для continuity
 ├── audits/              — provenance независимых аудитов (AUDIT-*.json + логи), frozen
-├── plans/ · progress/   — долгоживущие планы + in-flight состояние (progress gitignored)
+├── plans/               — долгоживущие планы (in-flight состояние держит открытая спека, per operator-global §6)
 └── worktrees/           — эфемерные git-worktree'ы (gitignored)
 ```
 

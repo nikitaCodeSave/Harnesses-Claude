@@ -8,6 +8,26 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #139 · 2026-09-10 · Spec-ядро обкатано на живом проекте и перенесено в кит
+
+**Tags:** spec, kit, tracking, empirical, cross-vendor-review
+
+Соглашение и журнал лежали в одном файле и росли от каждого замера: 412 строк в HEAD → 1585 в дереве, соглашение — 81 строка (5%). Объявленный ## Acceptance описывал фазы, закрытые несколько дней назад; действующий порог (191/207 в каждом из ≥2 полных повторов) лежал на 970…
+
+[→ entries/0139-spec-yadro-obkatano-na-zhivom-proekte-i-pereneseno-v-kit.md](entries/0139-spec-yadro-obkatano-na-zhivom-proekte-i-pereneseno-v-kit.md)
+
+---
+
+## #138 · 2026-09-09 · Артефакты порождал глобальный §6, а не кит
+
+**Tags:** empirical, docs-discipline, spec, global-baseline, kit
+
+Оператор принёс наблюдение: в новом проекте Claude отказался использовать скилл claude-code-harness и остался на дефолте, а артефакты и правила при этом всё равно наросли и душат разработку. Тезис оператора: истина для агента — код и спецификации, написанные вместе с ним; агент…
+
+[→ entries/0138-artefakty-porozhdal-globalnyy-6-a-ne-kit.md](entries/0138-artefakty-porozhdal-globalnyy-6-a-ne-kit.md)
+
+---
+
 ## #137 · 2026-08-29 · Документацию душил не дрейф, а стоимость её поддержки
 
 **Tags:** docs-discipline, empirical, cleanup, kit

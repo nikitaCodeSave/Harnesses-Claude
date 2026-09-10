@@ -18,7 +18,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 ## Components inventory (current state)
 
-- **Skills** (action-only, workflow-templates): `update-plan-progress`. Devlog — плагин `devlog@skills-dir` (скилл + `devlog-reindex` на PATH + SessionStart-дайджест), в репо не дублируется. SKILL.md ≤500 строк. Каноничное знание о дизайне harness'а — глобальный `~/.claude/skills/claude-code-harness/`. (`project-docs-bootstrap` в harness не входит — native + WORKFLOW.md §3 + docs-discipline покрывают bootstrap.)
+- **Skills** (action-only, workflow-templates): проектных нет. Devlog — плагин `devlog@skills-dir` (скилл + `devlog-reindex` на PATH + SessionStart-дайджест), в репо не дублируется. SKILL.md ≤500 строк. Каноничное знание о дизайне harness'а — глобальный `~/.claude/skills/claude-code-harness/`. (`project-docs-bootstrap` в harness не входит — native + WORKFLOW.md §3 + docs-discipline покрывают bootstrap.)
 - **Custom agents**: нет. Дубли built-in не создаются: orchestrator-роль — сам main thread, security — built-in `/security-review`, audit — `/code-review ultra` для изменения и свежая сессия для deliverable'а.
 - **Built-in agents** — пять специалистов: `Explore` (read-only research), `Plan` (architect-level planning), `general-purpose` (open-ended), `statusline-setup` (UI), `claude-code-guide` (вопросы про Claude Code); плюс catch-all `claude` — дефолт для фонового dispatch, не специалист для пересоздания.
 - **Hooks**: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером), глобальных своих — тоже: `system-guard` ретайрен 2026-08-29, его землю занял нативный слой (auto-mode классификатор адъюдицирует опасный `rm`, деструктивные git/IaC блокируются из коробки). Активен один внешний: `session-start-digest` (SessionStart: devlog + active-progress inject) из плагина `devlog`. Test-quality — за глобальным CLAUDE.md §5, хуком не дублируется.
@@ -36,7 +36,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 ## Skills (Agent Skills)
 
-- **Action-skills only**. Workflow-templates для конкретной операции (`devlog`, `update-plan-progress`). Self-описывающие skills (повторяют CLAUDE.md о role main thread'а) — anti-pattern.
+- **Action-skills only**. Workflow-templates для конкретной операции (`devlog`). Self-описывающие skills (повторяют CLAUDE.md о role main thread'а) — anti-pattern.
 - **Frontmatter required**: `name` (lowercase, hyphens, ≤64 chars), `description` (когда применять, обязательно включать trigger-контекст).
 - **Optional**: `allowed-tools`, `model`, `paths` (glob для auto-load), `disable-model-invocation`, `user-invocable`.
 - **SKILL.md ≤500 строк**. Длинный reference content — в `references/` subfolder, читается on-demand.
@@ -86,7 +86,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 - **Project docs layout** (bootstrap нативно под способной моделью — рычаг `WORKFLOW.md` §3 + `docs-discipline.md`): `docs/ARCHITECTURE.md`, `docs/CODE-MAP.md`, `docs/GLOSSARY.md`, `docs/CONVENTIONS.md`, `docs/ADR/`, `docs/RUNBOOKS/`. Read-before-write — каждый doc отражает реальное состояние, не template.
 - **Harness docs** (этого pack'а): `.claude/docs/principles.md` (этот файл, current state), `workflow.md`, `multi-agent.md`, `benchmark.md`. Archive layer (`.claude/docs/archive/`) — frozen historical snapshot.
 - **Live vs archive**: active docs редактируются inline для evolve; archive — frozen, изменяется только через structural migrations.
-- 7 invariants в `.claude/rules/docs-discipline.md`: doc-with-code rule / CLAUDE.md как indexer / live vs archive / owner+last-updated / glossary first-use / ADR для non-trivial decisions / progress journal для long-running task.
+- 6 invariants в `.claude/rules/docs-discipline.md`: doc-with-code rule / CLAUDE.md как indexer / live vs archive / owner+last-updated / glossary first-use / ADR для non-trivial decisions. Continuity туда не входит — где живёт состояние между сессиями, решает operator-global §6.
 
 ## Process
 
