@@ -63,6 +63,48 @@ grep -rnE "Opus 4\.[0-9]|Opus [0-9]|Sonnet [0-9]|v?2\.1\.[0-9]{3}" --include="*.
 - **The devlog is in Russian, the shipped kit is in English.** That split is deliberate: the kit
   travels to other people, the lab's journal does not.
 
+## TypeSafe (Jev) — rules for writing integrations
+
+TypeSafe is not an LLM. Jev takes a `state` plus typed questions and returns typed answers with
+probabilities; it generates no text. Integration sandbox: `integrations/typesafe/` (own uv project
+and venv — the repo-root `.venv` is unrelated and must not be pulled under a uv lock). Docs snapshot
+of 2026-09-19: `docs/typesafe/` (start at its `README.md`; `llms.txt` lists the cookbooks).
+
+- **Pin the version, never an alias.** `model="jev-1.13.0"`, not `jev-latest`. An alias moves on
+  release and drags calibrated thresholds onto a different model. The response's `model` field
+  reports which version actually answered — log it.
+- **Arithmetic, dates, counting and exact lookups belong in code.** Jev is not a calculator: it
+  recognizes the shape of an answer instead of tallying, and reads dates as text rather than as
+  ordered quantities. Give it the extraction (a Choice over enumerated parts), keep ordering,
+  duration and every comparison in code.
+- **Every Choice carries a no-match option** (`other` / `none of the above`). For "is there an
+  answer at all", ask a *separate* Noul: Choice probabilities always sum to 1, so a Choice is
+  relative — it settles *which* option, never *whether* any applies. A Noul is absolute and may be
+  low for all of them.
+- **Filter the state before sending it.** Accuracy falls as unrelated detail grows; Jev suffers
+  context rot. Retrieve and filter in code, send only the fields the question needs.
+- **Question ids never reach the model.** The map key is for your code only. All meaning must live
+  inside `instructions` and `criteria`.
+- **Do not carry a threshold across primitives.** A cutoff calibrated on a Noul is meaningless on a
+  Choice and vice versa. Do not expect `P(x)` and `1 − P(not x)` to agree — measured in the docs at
+  0.72 and 0.47 for the same judgment. Choice/Score `confidence` describes distribution
+  concentration, not correctness.
+- **Set confidence thresholds per action, by the cost of being wrong** — not one number for the
+  whole system. A harmless preference tolerates low confidence; an irreversible action does not.
+- **Weights and policy stay in code.** Score dimensions once, then let code change weights,
+  rankings and filters — changing a weight must not require a new inference.
+- **Limits.** 64k tokens per request; 32k for `state` plus the single longest question. A Choice
+  accepts at most 255 options. Text input only. Rate limits (250k tok/s, 1200 req/min) adjust
+  without notice.
+- **Language.** English is the primary training language and where accuracy is best; other
+  languages are handled but not equally well. Calibrate and test every threshold on real Russian
+  examples before trusting it — the docs make no accuracy claim for Russian specifically.
+- **Write against v1, not older examples.** The field is `state` (never `document`), questions are
+  a map (not a `prompts` array), answers come back as `answers`/`nouls`/`choices`/`scores` with
+  fields `noul` / `choice` / `score` (not `probability` / `chosen` / `expectation`). The package is
+  `typesafe-sdk` (import `typesafe_sdk`); the old `typesafe-client` sends `document` and no longer
+  works. The console's own docs still show the stale versions — `docs.typesafe.ai` is the truth.
+
 ## Reviewing work here
 
 Prefer refuting to confirming: name the invariant, then look for an input or a state that breaks
