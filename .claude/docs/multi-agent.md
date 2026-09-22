@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-08-29
+last-updated: 2026-09-19
 ---
 
 # Multi-agent baseline (frontier-модель + наш harness)
@@ -174,16 +174,16 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 
 **P/G/E нативно на CLI-подписке**: паттерн Planner→Generator→Evaluator и adversarial-convergence (find→refute→converge) доступны через built-in **dynamic workflows** (keyword `ultracode`, или просто попроси) — **без** API/managed-agents. First-party источник — [«A harness for every task» (Shihipar & Bidasaria, 2 июня 2026)](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code): Claude читает задачу, пишет собственный `.js`-harness (spawn субагентов, назначение моделей, worktree-изоляция, resume после прерывания), и harness становится **output задачи, не предусловием**. Обоснование изоляции — три failure-mode длинных/параллельных прогонов, которые отдельные context-окна лечат структурно: **agentic laziness** (бросает сложную задачу, объявив done), **self-preferential bias** (подтверждает собственный вывод при self-verify — ровно §8 fresh-context ≠ self-recheck), **goal drift** (констрейнты теряются через turns/compaction). `ultracode` = trigger word, не отдельный режим. [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) (API-only beta) остаются out of scope; концепт больше не нужно вручную портировать на CLI-примитивы — он встроен.
 
-### 7.3 Cross-vendor fresh-context ревьюер (Codex через MCP)
+### 7.3 Cross-vendor fresh-context ревьюер (Codex CLI через Bash)
 
-§8 личного baseline требует, чтобы high-stakes deliverable судил **независимый свежий контекст**. Обычный subagent даёт свежий контекст, но остаётся тем же семейством моделей и разделяет наши же слепые пятна. Codex CLI умеет работать MCP-сервером (`codex mcp-server`), а Claude Code — его клиентом: получается ревьюер **другого вендора**, который не якорится на решении, построенном нами.
+§8 личного baseline требует, чтобы high-stakes deliverable судил **независимый свежий контекст**. Обычный subagent даёт свежий контекст, но остаётся тем же семейством моделей и разделяет наши же слепые пятна. Claude Code вызывает Codex CLI через Bash: получается ревьюер **другого вендора**, который не якорится на решении, построенном нами.
 
-**Как включено** (user scope, один раз): `claude mcp add -s user -t stdio codex_peer -- "$(command -v codex)" mcp-server`. Инструменты — `mcp__codex_peer__codex` / `mcp__codex_peer__codex-reply`. Полная поверхность вызова (параметры через дефис, effort через `config.model_reasoning_effort`, таймауты, auto-backgrounding >2 мин, чем ограничена ChatGPT-авторизация) заморожена в **глобальном скилле `~/.claude/skills/codex-mcp/`** — не перепроверять её каждую сессию.
+**Как вызывать**: user-scope скилл `/codex-mcp` в **`~/.claude/skills/codex-mcp/SKILL.md`** задаёт вызов `codex exec --json` через Bash и продолжение через `codex exec resume <SESSION_ID>` по точному ID из результата первого вызова. Новый независимый ревьюер получает новую сессию; resume сохраняет контекст выбранного ревьюера для уточнений. Команды, параметры и проверка готовности живут в скилле; подключение MCP не требуется.
 
 **Когда применять**: тот же триггер, что и §8 per-change — silent-wrong класс (парсеры/переписчики недоверенного ввода, guards/валидаторы, инвариант-сохраняющие рефакторы). Плюс тупик в реализации: второй вендор вместо повторных попыток в том же контексте.
 
 **Дисциплина применения** (эмпирика devlog #127 — 7 раундов на `system-guard.sh`):
-- **Промпт на опровержение**, не на подтверждение, и `sandbox: "read-only"` для ревью — ревьюеру запись не нужна по определению.
+- **Промпт на опровержение**, не на подтверждение, и `--sandbox read-only` для ревью — ревьюеру запись не нужна по определению.
 - **Вывод — сырьё для триажа, не список задач.** Реальные находки идут вперемешку с уже задокументированными резидуалами и с adversarial-обфускацией, защищаться от которой бессмысленно. Ретрансляция as-is даёт 16 «багов» вместо 5.
 - **Каждую находку воспроизводить самому** — падающим тестом до фикса. Агент другого вендора ошибается так же, как свой.
 - **Цикл find→fix→refute не сходится сам.** Каждый следующий раунд находит новое, включая регрессии от предыдущих фиксов. Сигнал остановки — не «ничего не нашёл», а «находки перестали быть регрессиями и зависаниями»; плюс объективный слой рядом (дифференциальный прогон старой и новой версии на реальном корпусе команд).

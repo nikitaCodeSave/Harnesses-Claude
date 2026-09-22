@@ -8,6 +8,16 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #140 · 2026-09-19 · Вызов Codex в документации переведён на CLI
+
+**Tags:** bugfix, docs, cross-vendor-review
+
+Инструкции лаборатории направляли Claude к сломанному MCP-подключению Codex. Маршрут к внешнему ревьюеру должен совпадать с существующим user-scope скиллом, а параметры вызова должны оставаться в одном месте.
+
+[→ entries/0140-vyzov-codex-v-dokumentatsii-pereveden-na-cli.md](entries/0140-vyzov-codex-v-dokumentatsii-pereveden-na-cli.md)
+
+---
+
 ## #139 · 2026-09-10 · Spec-ядро обкатано на живом проекте и перенесено в кит
 
 **Tags:** spec, kit, tracking, empirical, cross-vendor-review
