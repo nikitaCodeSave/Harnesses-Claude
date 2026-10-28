@@ -102,7 +102,7 @@ Explicit anti-pattern per [code.claude.com/docs/en/tools-reference](https://code
 
 L0 in-session scratchpad — **session-scoped**, not persisted между сессиями (per [memory-layers.md](memory-layers.md)).
 
-**Доступность.** `TaskCreate` / `TaskGet` / `TaskUpdate` / `TaskList` и `TodoWrite` не выдаются текущему поколению моделей без явного opt-in (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` либо перечисление в `--tools` / `--allowedTools`): эти модели ведут многошаговую работу без письменного чеклиста, а определения тулов стоят контекста. `TaskOutput` и `TaskStop` под это ограничение не попадают. Версии и точные условия — `native-capabilities.md` кита. Таблица ниже описывает поверхность, когда тулы включены.
+**Доступность.** `TaskCreate` / `TaskGet` / `TaskUpdate` / `TaskList` и `TodoWrite` не выдаются текущему поколению моделей без явного opt-in (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` либо перечисление в `--tools` / `--allowedTools`): эти модели ведут многошаговую работу без письменного чеклиста, а определения тулов стоят контекста. `TaskOutput` и `TaskStop` под это ограничение не попадают. Версии и точные условия — `native-capabilities.md`. Таблица ниже описывает поверхность, когда тулы включены.
 
 | Tool | Use |
 |------|-----|

@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "spec",
+ "role": "dev",
+ "session": "9df23c58-2183-4f7e-aa26-88e5a070a133",
+ "resume": false,
+ "prompt": "Customers can't change plan right now: support has to cancel and resubscribe them by hand.\nAdd mid-cycle plan changes to the billing package: upgrades and downgrades, optionally\nswitching between monthly and annual billing, prorated so nobody pays twice for the same days.\n\nInterface (other code will call exactly this):\n- `BillingService.change_plan(subscription_id: str, new_plan_code: str, new_interval: Interval | None = None) -> Invoice | None`\n  in `src/billing/service.py`. `new_interval=None` keeps the subscription's current interval.\n- Return the invoice issued for the change (recorded in the store like every other invoice),\n  or `None` when nothing is billed at the moment of the request.\n- Add `InvalidPlanChange(BillingError)` to `src/billing/errors.py` for change requests that\n  can't be honoured; keep using the existing error classes where they already fit.\n\nInterview me until you could write the spec, then write it to SPEC.md. The spec says what and why (acceptance criteria as checkable statements, non-goals), not how. Copy any interface my request fixes (module paths, signatures, error classes) into it verbatim.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:17:21 socat[663237] W exiting on signal 15\n",
+ "wall_s": 61.5,
+ "result": "I've read the whole package (about 700 lines). Some things the code already settles, so I won't ask about them:\n\n- **Errors that already fit:** unknown subscription → `SubscriptionNotFound`. Canceled subscription → `SubscriptionNotActive`. Unknown target plan → `PlanNotFound`. Retired target plan → `PlanNotAvailable`.\n- **What we have to work with:** money is in whole cents, rounded half-up. Periods are half-open `[start, end)` and use real calendar months. Invoice lines can already be negative.\n- **A constraint:** the store has a production database version \"with the same methods\". So anything that needs new persisted state, like a stored credit balance or a pending change on `Subscription`, is a schema change. Several of the questions below depend on that.\n\nEach question has my recommendation. Answering \"agree\" is fine.\n\n**1. Downgrades (the change is worth less than the unused time already paid for).** This is the biggest decision.\n- **A.** Switch now and issue an invoice with a negative total. Something outside this package handles the refund.\n- **B.** Switch now and keep the surplus as account credit, taken off future renewals. This needs a stored balance, plus rules for when the credit outlasts renewals or the customer cancels.\n- **C.** Keep the current plan until the period ends, then switch at renewal. Nothing is billed now, so the method returns `None`. This needs one stored \"pending change\" on the subscription.\n\n*I recommend C:* it's the only option where a downgrade never creates money to give back. **A** only works if something downstream can pay out negative invoices. Can anything?\n\n**2. Switching between monthly and annual.** *I recommend:* the new period starts today. The customer pays the full price for the new interval, minus a credit for the unused days of the current period. (If that comes out negative, it counts as a downgrade under Q1.) When the interval stays the same, the period dates don't change and the customer pays only for the remaining days.\n\n**3. Trial subscriptions.** *I recommend:* the plan and/or interval change right away, the trial end date stays the same, nothing is billed, and the method returns `None`.\n\n**4. Overdue renewal** (today is on or after `period_end` but `renew_due` hasn't run yet). *I recommend:* reject with `InvalidPlanChange` instead of quietly catching up renewals. Catching up could issue several invoices, and the method only returns one.\n\n**5. Retired plans.** *I recommend:* customers can always move off a retired plan. Moving onto one raises `PlanNotAvailable`, including a customer already on that plan who only wants to change interval.\n\n**6. Requests that change nothing** (same plan, same interval). *I recommend:* `InvalidPlanChange`. If C is chosen: a new request replaces any pending change. A request that matches the current plan and interval cancels the pending change and returns `None`.\n\n**7. How proration is calculated.** *I recommend:*\n- Prorate by the actual number of calendar days in the current period.\n- The day of the change is billed at the new plan.\n- The credit for the old plan and the charge for the new plan go on separate lines, each rounded to cents.\n- The invoice is dated today.\n\n**8. Net zero** (for example, two plans with the same price). *I recommend:* switch right away, issue no invoice, and return `None`.",
+ "is_error": false,
+ "num_turns": 3,
+ "total_cost_usd": 0.2632792,
+ "usage": {
+  "input_tokens": 6,
+  "cache_creation_input_tokens": 19586,
+  "cache_read_input_tokens": 47636,
+  "output_tokens": 4852,
+  "output_tokens_details": {
+   "thinking_tokens": 3458
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 19586,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 6,
+   "outputTokens": 4852,
+   "cacheReadInputTokens": 47636,
+   "cacheCreationInputTokens": 19586,
+   "webSearchRequests": 0,
+   "costUSD": 0.2632792,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 3458,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 19586,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 60982,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "9df23c58-2183-4f7e-aa26-88e5a070a133"
+}

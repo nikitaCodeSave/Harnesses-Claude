@@ -1,0 +1,84 @@
+{
+ "n": 9,
+ "label": "build",
+ "role": "dev",
+ "session": "d031f28c-da1e-47e4-bcb7-2ac2fbf6036d",
+ "resume": false,
+ "prompt": "Build what SPEC.md describes. tests/acceptance/ is the agreed check and is read-only for you. Done means tests/acceptance/ and the existing test suite pass; report the command and its output.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:31:14 socat[718035] W exiting on signal 15\n",
+ "wall_s": 72.6,
+ "result": "I've added stock reservations as SPEC.md describes, and both the acceptance tests and the existing suite pass.\n\n**Command and output** (from the repo root; `python` isn't installed here, so it's `python3`):\n\n```\n$ python3 -m pytest -q -p no:cacheprovider\n........................................................................ [ 55%]\n.........................................................                [100%]\n129 passed in 0.15s\n```\n\nThat's 109 acceptance tests plus the 20 existing ones; run separately they give `109 passed` and `20 passed`. Nothing under `tests/` was edited.\n\n**How it works**\n- **Expiry without a background job:** a hold counts as held only while it is ACTIVE and the injected clock is before `expires_at`. This is checked every time stock is counted, so freed units show up in `available` as soon as the clock passes `expires_at`. When a reservation is returned, an ACTIVE one whose time is up is marked EXPIRED and saved that way.\n- **Availability:** a new `held(sku, warehouse)` method counts the units under live holds, and `available` is now `on_hand − allocated − held`, never below zero. `allocated` and the `stock_report` columns are unchanged.\n- **Reserve:** the request is checked the same way `place_order` checks it, then the idempotency key is checked, then each line takes as much as is available.\n  - Lines that get nothing are left out, and if no line gets anything you get `InsufficientStock` and nothing is created.\n  - The original request is saved with the reservation, so a repeat with the same key is compared against what was asked for, not what was held.\n  - A key is only recorded when a reservation is actually created, so failed calls don't use it up.\n- **Confirm** creates a normal PLACED order from the held items using the usual `ORD-` numbers. It doesn't re-check stock, so it still works after a write-off. Confirming twice returns the same order.\n- **Hold length:** set it with the `hold_lifetime=` keyword on the constructor; the default is 20 minutes.\n\n**Files changed:** `models.py` (new `Reservation` and `ReservationStatus`), `errors.py` (the four new errors), `repository.py` (stores reservations and idempotency keys alongside orders), `service.py`, `__init__.py` (exports), and `README.md` (explains held stock and the reservation lifecycle).\n\n**Two choices to review:**\n- `Reservation` has two fields the spec doesn't list, `requested` and `idempotency_key`; the replay comparison needs them.\n- When nothing at all can be held, `InsufficientStock` names the first requested line and reports 0 available.\n\nNothing is committed.",
+ "is_error": false,
+ "num_turns": 12,
+ "total_cost_usd": 0.5346428,
+ "usage": {
+  "input_tokens": 22,
+  "cache_creation_input_tokens": 36539,
+  "cache_read_input_tokens": 372314,
+  "output_tokens": 8389,
+  "output_tokens_details": {
+   "thinking_tokens": 1177
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 36539,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 22,
+   "outputTokens": 8389,
+   "cacheReadInputTokens": 372314,
+   "cacheCreationInputTokens": 36539,
+   "webSearchRequests": 0,
+   "costUSD": 0.5346428,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1177,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 36539,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 72045,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "d031f28c-da1e-47e4-bcb7-2ac2fbf6036d"
+}

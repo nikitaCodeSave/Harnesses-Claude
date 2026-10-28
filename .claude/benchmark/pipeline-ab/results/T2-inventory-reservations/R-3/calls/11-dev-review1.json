@@ -1,0 +1,84 @@
+{
+ "n": 11,
+ "label": "review1",
+ "role": "dev",
+ "session": "1a71c596-cd3d-4c2e-8fe5-7c2efc72174e",
+ "resume": false,
+ "prompt": "Review the changes since commit 8bbb0e616cf6047ac588921ff1b534ae2728df96 (committed and uncommitted) against SPEC.md. Report only gaps that affect correctness, each with file:line; skip style. If there is nothing to fix, say so. End with one line: FINDINGS: <number>.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 02:34:01 socat[3426835] W exiting on signal 15\n",
+ "wall_s": 33.2,
+ "result": "I found no correctness gaps against SPEC.md. Nothing needs fixing.\n\nI compared the diff against all 37 acceptance criteria and the \"Left to the implementer\" choices. The full suite (`python3 -m pytest`) passes: 157 tests, including the existing tests and `tests/acceptance/`.\n\nThe points most likely to go wrong are all handled correctly:\n\n- **Expiry at the exact instant (3, 28, 33):** the check uses `now >= expires_at` (`src/inventory/service.py:242`). It runs when a reservation is loaded and inside `_held`, so `get_reservation`, `available`, `confirm_reservation` and `release_reservation` all see expiry without a sweep. Only ACTIVE reservations expire, so CONFIRMED and RELEASED keep their status.\n- **Idempotency (18–22):** a key is bound to the requested items, not the held ones. It is saved only after a reservation is actually created (`service.py:186`). A retry returns the current state and never changes `expires_at`. A different warehouse or different items raises `IdempotencyConflict`, whatever the original's status.\n- **Failed `reserve` calls leave no trace (14, 16, 22):** validation and the \"nothing to hold\" check both run before a reservation ID is taken or anything is saved. The ID sequence and the key stay untouched.\n- **Availability (6–10, 25, 35):** `available` subtracts held units on top of allocated ones. `allocated`, `on_hand`, `adjust` and the stock report path are otherwise unchanged. Confirming moves the units from held to allocated, so the net is zero. `place_order` stays all-or-nothing against the new `available`.\n- **Confirm and release states (23, 24, 26–32, 34):** confirming twice returns the same order, even after expiry. Confirming an expired reservation raises `ReservationExpired`, and a released one raises `InvalidReservationState`. Releasing a CONFIRMED reservation raises, releasing a RELEASED or EXPIRED one does nothing, and unknown IDs raise `ReservationNotFound`.\n- **Clock and hold duration (1, 2, 5, 37):** the hold lasts 20 minutes by default and can only be changed when the service is built. Nothing in the package reads the wall clock.\n\nFINDINGS: 0",
+ "is_error": false,
+ "num_turns": 4,
+ "total_cost_usd": 0.2703508,
+ "usage": {
+  "input_tokens": 8,
+  "cache_creation_input_tokens": 23748,
+  "cache_read_input_tokens": 87774,
+  "output_tokens": 3139,
+  "output_tokens_details": {
+   "thinking_tokens": 1906
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 23748,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 3139,
+   "cacheReadInputTokens": 87774,
+   "cacheCreationInputTokens": 23748,
+   "webSearchRequests": 0,
+   "costUSD": 0.2703508,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1906,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 23748,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 32734,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "1a71c596-cd3d-4c2e-8fe5-7c2efc72174e"
+}

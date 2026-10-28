@@ -1,0 +1,1594 @@
+diff --git a/README.md b/README.md
+index 8ad6142..1862e86 100644
+--- a/README.md
++++ b/README.md
+@@ -15,7 +15,7 @@ src/billing/
+   subscriptions.py  Subscription, SubscriptionStatus
+   invoices.py       Invoice, LineItem
+   store.py          InMemoryStore (plans, subscriptions, invoices)
+-  service.py        BillingService: subscribe / renew_due / cancel
++  service.py        BillingService: subscribe / renew_due / cancel / change_plan
+ ```
+ 
+ ## Conventions
+diff --git a/src/billing/__init__.py b/src/billing/__init__.py
+index cfe5c0f..e87bb6c 100644
+--- a/src/billing/__init__.py
++++ b/src/billing/__init__.py
+@@ -4,6 +4,7 @@ from billing.clock import Clock, FixedClock
+ from billing.errors import (
+     BillingError,
+     InvalidPlan,
++    InvalidPlanChange,
+     InvoiceError,
+     PlanNotAvailable,
+     PlanNotFound,
+@@ -25,6 +26,7 @@ __all__ = [
+     "InMemoryStore",
+     "Interval",
+     "InvalidPlan",
++    "InvalidPlanChange",
+     "Invoice",
+     "InvoiceError",
+     "LineItem",
+diff --git a/src/billing/__pycache__/__init__.cpython-312.pyc b/src/billing/__pycache__/__init__.cpython-312.pyc
+new file mode 100644
+index 0000000..543e24a
+Binary files /dev/null and b/src/billing/__pycache__/__init__.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/clock.cpython-312.pyc b/src/billing/__pycache__/clock.cpython-312.pyc
+new file mode 100644
+index 0000000..13efff0
+Binary files /dev/null and b/src/billing/__pycache__/clock.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/errors.cpython-312.pyc b/src/billing/__pycache__/errors.cpython-312.pyc
+new file mode 100644
+index 0000000..bdb3a6a
+Binary files /dev/null and b/src/billing/__pycache__/errors.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/invoices.cpython-312.pyc b/src/billing/__pycache__/invoices.cpython-312.pyc
+new file mode 100644
+index 0000000..51ebf6c
+Binary files /dev/null and b/src/billing/__pycache__/invoices.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/money.cpython-312.pyc b/src/billing/__pycache__/money.cpython-312.pyc
+new file mode 100644
+index 0000000..54ff302
+Binary files /dev/null and b/src/billing/__pycache__/money.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/periods.cpython-312.pyc b/src/billing/__pycache__/periods.cpython-312.pyc
+new file mode 100644
+index 0000000..58b1d67
+Binary files /dev/null and b/src/billing/__pycache__/periods.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/plans.cpython-312.pyc b/src/billing/__pycache__/plans.cpython-312.pyc
+new file mode 100644
+index 0000000..8b52725
+Binary files /dev/null and b/src/billing/__pycache__/plans.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/service.cpython-312.pyc b/src/billing/__pycache__/service.cpython-312.pyc
+new file mode 100644
+index 0000000..4546baa
+Binary files /dev/null and b/src/billing/__pycache__/service.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/store.cpython-312.pyc b/src/billing/__pycache__/store.cpython-312.pyc
+new file mode 100644
+index 0000000..3d8b170
+Binary files /dev/null and b/src/billing/__pycache__/store.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/subscriptions.cpython-312.pyc b/src/billing/__pycache__/subscriptions.cpython-312.pyc
+new file mode 100644
+index 0000000..4f73c99
+Binary files /dev/null and b/src/billing/__pycache__/subscriptions.cpython-312.pyc differ
+diff --git a/src/billing/errors.py b/src/billing/errors.py
+index ef85b3e..429454c 100644
+--- a/src/billing/errors.py
++++ b/src/billing/errors.py
+@@ -27,3 +27,7 @@ class SubscriptionNotActive(BillingError):
+ 
+ class InvoiceError(BillingError):
+     """An invoice or line item is malformed."""
++
++
++class InvalidPlanChange(BillingError):
++    """A plan change request cannot be honoured as asked."""
+diff --git a/src/billing/service.py b/src/billing/service.py
+index aa6734c..2c6603c 100644
+--- a/src/billing/service.py
++++ b/src/billing/service.py
+@@ -1,13 +1,15 @@
+-"""Billing operations: subscribe, renew, cancel."""
++"""Billing operations: subscribe, renew, cancel, change plan."""
+ 
+ from __future__ import annotations
+ 
+ from dataclasses import replace
+ from datetime import date, timedelta
++from decimal import Decimal
+ 
+ from billing.clock import Clock
+-from billing.errors import PlanNotAvailable, SubscriptionNotActive
++from billing.errors import InvalidPlanChange, PlanNotAvailable, SubscriptionNotActive
+ from billing.invoices import Invoice, LineItem
++from billing.money import to_money
+ from billing.periods import period_end
+ from billing.plans import Interval, Plan
+ from billing.store import InMemoryStore
+@@ -92,9 +94,95 @@ class BillingService:
+         self._store.save_subscription(canceled)
+         return canceled
+ 
++    def change_plan(
++        self,
++        subscription_id: str,
++        plan_code: str,
++        new_interval: Interval | None = None,
++    ) -> Invoice | None:
++        """Move a subscription to ``plan_code`` on ``new_interval``.
++
++        ``new_interval=None`` means the subscription's current interval. Each
++        request states the full target and replaces any pending change.
++
++        - Target equal to the current plan and interval: cancels the pending
++          change (an error if nothing is pending).
++        - During a trial: applied at once, nothing billed.
++        - Upgrade (higher monthly list price): the plan changes now, the period
++          is kept, and an invoice credits the unused days of the current plan
++          and charges them on the new plan, both at the current interval's
++          prices. An interval switch is left pending for the renewal.
++        - Anything else (downgrade, interval switch only): pending until the
++          renewal, nothing billed and nothing refunded.
++
++        Returns the proration invoice for an upgrade, otherwise ``None``.
++        """
++        subscription = self._store.get_subscription(subscription_id)
++        if subscription.is_canceled:
++            raise SubscriptionNotActive(subscription_id)
++        target = self._store.get_plan(plan_code)
++        interval = new_interval or subscription.interval
++        is_current = target.code == subscription.plan_code and interval is subscription.interval
++        if not is_current and not target.active:
++            raise PlanNotAvailable(plan_code)
++
++        today = self._clock.today()
++        if subscription.period_end <= today:
++            raise InvalidPlanChange(f"{subscription_id}: renewal due on {subscription.period_end} not billed yet")
++
++        if is_current:
++            if not subscription.has_pending_change:
++                raise InvalidPlanChange(f"{subscription_id} is already on {plan_code} ({interval.value})")
++            self._store.save_subscription(_without_pending(subscription))
++            return None
++
++        if subscription.status is SubscriptionStatus.TRIALING:
++            self._store.save_subscription(
++                replace(_without_pending(subscription), plan_code=target.code, interval=interval)
++            )
++            return None
++
++        current = self._store.get_plan(subscription.plan_code)
++        if target.monthly_price <= current.monthly_price:
++            self._store.save_subscription(
++                replace(subscription, pending_plan_code=target.code, pending_interval=interval)
++            )
++            return None
++
++        lines = self._proration_lines(subscription, current, target, today)
++        if sum(line.amount for line in lines) < 0:
++            raise InvalidPlanChange(f"{subscription_id}: upgrade to {plan_code} would have a negative total")
++        upgraded = replace(_without_pending(subscription), plan_code=target.code)
++        if interval is not subscription.interval:
++            upgraded = replace(upgraded, pending_plan_code=target.code, pending_interval=interval)
++        self._store.save_subscription(upgraded)
++        return self._issue_invoice(upgraded, lines, today)
++
+     # internals
+ 
++    @staticmethod
++    def _proration_lines(subscription: Subscription, current: Plan, target: Plan, today: date) -> list[LineItem]:
++        """Credit and charge for the rest of the period, each rounded on its own."""
++        interval = subscription.interval
++        remaining = (subscription.period_end - today).days
++        total = (subscription.period_end - subscription.period_start).days
++
++        def prorate(plan: Plan) -> Decimal:
++            return to_money(plan.price_for(interval) * remaining / total)
++
++        span = f"{today.isoformat()} to {subscription.period_end.isoformat()}"
++        return [
++            LineItem(f"Unused {current.name} ({interval.value}) {span}", -prorate(current)),
++            LineItem(f"{target.name} ({interval.value}) {span}", prorate(target)),
++        ]
++
+     def _renew(self, subscription: Subscription) -> tuple[Subscription, Invoice]:
++        if subscription.has_pending_change:
++            subscription = replace(
++                _without_pending(subscription),
++                plan_code=subscription.pending_plan_code,
++                interval=subscription.pending_interval,
++            )
+         plan = self._store.get_plan(subscription.plan_code)
+         start = subscription.period_end
+         renewed = replace(
+@@ -128,3 +216,7 @@ class BillingService:
+         )
+         self._store.add_invoice(invoice)
+         return invoice
++
++
++def _without_pending(subscription: Subscription) -> Subscription:
++    return replace(subscription, pending_plan_code=None, pending_interval=None)
+diff --git a/src/billing/subscriptions.py b/src/billing/subscriptions.py
+index 8135d10..97753dd 100644
+--- a/src/billing/subscriptions.py
++++ b/src/billing/subscriptions.py
+@@ -23,6 +23,9 @@ class Subscription:
+     While ``TRIALING`` the current period is the free trial; the first paid
+     period starts on ``period_end``.
+ 
++    ``pending_plan_code``/``pending_interval`` hold a plan change requested
++    for the next renewal (both set or both ``None``).
++
+     Instances are immutable: build a changed copy with
+     ``dataclasses.replace`` and save it through the store.
+     """
+@@ -35,11 +38,19 @@ class Subscription:
+     period_start: date
+     period_end: date
+     canceled_on: date | None = None
++    pending_plan_code: str | None = None
++    pending_interval: Interval | None = None
+ 
+     def __post_init__(self) -> None:
+         if self.period_end <= self.period_start:
+             raise ValueError(f"{self.id}: period_end must be after period_start")
++        if (self.pending_plan_code is None) != (self.pending_interval is None):
++            raise ValueError(f"{self.id}: pending plan and interval must be set together")
+ 
+     @property
+     def is_canceled(self) -> bool:
+         return self.status is SubscriptionStatus.CANCELED
++
++    @property
++    def has_pending_change(self) -> bool:
++        return self.pending_plan_code is not None
+diff --git a/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..a3cb097
+Binary files /dev/null and b/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_domain.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_domain.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..621f467
+Binary files /dev/null and b/tests/__pycache__/test_domain.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_money_and_periods.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_money_and_periods.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..2dfca09
+Binary files /dev/null and b/tests/__pycache__/test_money_and_periods.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_service.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_service.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..63a2bfa
+Binary files /dev/null and b/tests/__pycache__/test_service.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..6ecef1e
+Binary files /dev/null and b/tests/acceptance/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/plan_change_support.cpython-312.pyc b/tests/acceptance/__pycache__/plan_change_support.cpython-312.pyc
+new file mode 100644
+index 0000000..9dc7a0e
+Binary files /dev/null and b/tests/acceptance/__pycache__/plan_change_support.cpython-312.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_plan_change_deferred.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_plan_change_deferred.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..977adf0
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_plan_change_deferred.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_plan_change_general.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_plan_change_general.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..2b1fbdb
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_plan_change_general.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_plan_change_rejections.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_plan_change_rejections.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..b0d62cd
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_plan_change_rejections.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_plan_change_renewal.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_plan_change_renewal.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..cd289de
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_plan_change_renewal.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_plan_change_same_target.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_plan_change_same_target.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..b0e89c9
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_plan_change_same_target.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_plan_change_trialing.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_plan_change_trialing.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..dafd3f0
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_plan_change_trialing.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_plan_change_upgrades.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_plan_change_upgrades.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..33ff28a
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_plan_change_upgrades.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/conftest.py b/tests/acceptance/conftest.py
+new file mode 100644
+index 0000000..cc3b072
+--- /dev/null
++++ b/tests/acceptance/conftest.py
+@@ -0,0 +1,8 @@
++import pytest
++
++from plan_change_support import build_env
++
++
++@pytest.fixture
++def make_env():
++    return build_env
+diff --git a/tests/acceptance/plan_change_support.py b/tests/acceptance/plan_change_support.py
+new file mode 100644
+index 0000000..a089bed
+--- /dev/null
++++ b/tests/acceptance/plan_change_support.py
+@@ -0,0 +1,66 @@
++"""Shared setup for the mid-cycle plan change acceptance tests (SPEC.md).
++
++Plans follow the spec's worked examples: Basic 10.00/100.00, Pro 30.00/300.00,
++Premium 75.00/750.00 (monthly/annual).
++"""
++
++from dataclasses import dataclass
++from datetime import date
++from decimal import Decimal
++
++from billing.clock import FixedClock
++from billing.invoices import Invoice
++from billing.plans import Interval, Plan
++from billing.service import BillingService
++from billing.store import InMemoryStore
++from billing.subscriptions import Subscription
++
++
++@dataclass
++class Env:
++    store: InMemoryStore
++    clock: FixedClock
++    service: BillingService
++
++    def at(self, day: date) -> "Env":
++        self.clock.move_to(day)
++        return self
++
++    def subscribe(
++        self,
++        plan_code: str,
++        interval: Interval = Interval.MONTHLY,
++        *,
++        on: date,
++        trial_days: int = 0,
++        customer_id: str = "cus_1",
++    ) -> Subscription:
++        self.at(on)
++        return self.service.subscribe(customer_id, plan_code, interval, trial_days=trial_days)
++
++    def sub(self, subscription_id: str) -> Subscription:
++        return self.store.get_subscription(subscription_id)
++
++    def invoices(self, subscription_id: str) -> list[Invoice]:
++        return self.store.invoices_for(subscription_id)
++
++    def add_plan(self, code: str, monthly: str, annual: str) -> None:
++        self.store.add_plan(Plan(code, code.title(), Decimal(monthly), Decimal(annual)))
++
++
++def build_env(start: date = date(2026, 1, 1)) -> Env:
++    store = InMemoryStore()
++    store.add_plan(Plan("basic", "Basic", Decimal("10.00"), Decimal("100.00")))
++    store.add_plan(Plan("pro", "Pro", Decimal("30.00"), Decimal("300.00")))
++    store.add_plan(Plan("premium", "Premium", Decimal("75.00"), Decimal("750.00")))
++    clock = FixedClock(start)
++    return Env(store, clock, BillingService(store, clock))
++
++
++def amounts(invoice: Invoice) -> list[Decimal]:
++    """Line amounts, smallest first (credit before charge)."""
++    return sorted(line.amount for line in invoice.lines)
++
++
++def D(value: str) -> Decimal:
++    return Decimal(value)
+diff --git a/tests/acceptance/test_plan_change_deferred.py b/tests/acceptance/test_plan_change_deferred.py
+new file mode 100644
+index 0000000..bca2bc6
+--- /dev/null
++++ b/tests/acceptance/test_plan_change_deferred.py
+@@ -0,0 +1,186 @@
++"""SPEC.md acceptance criteria 21-24: downgrades and interval switches."""
++
++from datetime import date
++
++import pytest
++
++from billing.plans import Interval
++from plan_change_support import D, amounts
++
++MONTHLY, ANNUAL = Interval.MONTHLY, Interval.ANNUAL
++
++
++def _unchanged_terms(sub):
++    return (sub.plan_code, sub.interval, sub.status, sub.period_start, sub.period_end)
++
++
++# 21-22
++#
++# (base interval, base subscribe date, request date, target, new_interval,
++#  renewal date, expected plan, expected interval, price, new period end)
++DEFERRED = [
++    pytest.param(
++        MONTHLY, date(2026, 3, 1), date(2026, 3, 11), "basic", None,
++        date(2026, 4, 1), "basic", MONTHLY, "10.00", date(2026, 5, 1), id="downgrade",
++    ),
++    pytest.param(
++        MONTHLY, date(2026, 3, 1), date(2026, 3, 11), "pro", ANNUAL,
++        date(2026, 4, 1), "pro", ANNUAL, "300.00", date(2027, 4, 1), id="monthly-to-annual",
++    ),
++    pytest.param(
++        MONTHLY, date(2026, 3, 1), date(2026, 3, 11), "basic", ANNUAL,
++        date(2026, 4, 1), "basic", ANNUAL, "100.00", date(2027, 4, 1), id="downgrade-to-annual",
++    ),
++    pytest.param(
++        ANNUAL, date(2026, 1, 15), date(2026, 7, 15), "pro", MONTHLY,
++        date(2027, 1, 15), "pro", MONTHLY, "30.00", date(2027, 2, 15), id="annual-to-monthly",
++    ),
++    pytest.param(
++        ANNUAL, date(2026, 1, 15), date(2026, 7, 15), "basic", MONTHLY,
++        date(2027, 1, 15), "basic", MONTHLY, "10.00", date(2027, 2, 15), id="downgrade-to-monthly",
++    ),
++    pytest.param(
++        ANNUAL, date(2026, 1, 15), date(2026, 7, 15), "basic", None,
++        date(2027, 1, 15), "basic", ANNUAL, "100.00", date(2028, 1, 15), id="annual-downgrade",
++    ),
++]
++
++DEFERRED_ARGS = "base, start, today, target, new_interval, renew_on, plan, interval, price, new_end"
++
++
++@pytest.mark.parametrize(DEFERRED_ARGS, DEFERRED)
++def test_21_22_deferred_change_bills_nothing_and_keeps_current_terms(
++    make_env, base, start, today, target, new_interval, renew_on, plan, interval, price, new_end
++):
++    env = make_env()
++    sub = env.subscribe("pro", base, on=start)
++    env.at(today)
++    before = env.sub(sub.id)
++    invoices_before = env.invoices(sub.id)
++
++    assert env.service.change_plan(sub.id, target, new_interval) is None
++
++    assert env.invoices(sub.id) == invoices_before
++    assert _unchanged_terms(env.sub(sub.id)) == _unchanged_terms(before)
++
++
++@pytest.mark.parametrize(DEFERRED_ARGS, DEFERRED)
++def test_21_22_deferred_change_is_recorded_as_pending(
++    make_env, base, start, today, target, new_interval, renew_on, plan, interval, price, new_end
++):
++    env = make_env()
++    sub = env.subscribe("pro", base, on=start)
++    env.at(today)
++    env.service.change_plan(sub.id, target, new_interval)
++
++    env.at(renew_on)
++    [renewal] = env.service.renew_due()
++
++    assert renewal.total == D(price)
++    assert all(line.amount >= 0 for line in renewal.lines)  # unused time is never refunded
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval) == (plan, interval)
++    assert (renewed.period_start, renewed.period_end) == (renew_on, new_end)
++
++
++def test_21_different_plan_with_equal_monthly_price_is_a_deferred_downgrade(make_env):
++    env = make_env()
++    env.add_plan("twin", "30.00", "290.00")
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    invoices_before = env.invoices(sub.id)
++
++    assert env.service.change_plan(sub.id, "twin") is None
++    assert env.invoices(sub.id) == invoices_before
++    assert env.sub(sub.id).plan_code == "pro"
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("30.00")
++    assert env.sub(sub.id).plan_code == "twin"
++
++
++# 23
++
++
++def test_23_worked_example_upgrade_with_interval_switch(make_env):
++    env = make_env()
++    sub = env.subscribe("basic", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++
++    invoice = env.service.change_plan(sub.id, "pro", ANNUAL)
++
++    assert amounts(invoice) == [D("-6.77"), D("20.32")]
++    assert invoice.total == D("13.55")
++    now = env.sub(sub.id)
++    assert (now.plan_code, now.interval) == ("pro", MONTHLY)
++    assert (now.period_start, now.period_end) == (date(2026, 3, 1), date(2026, 4, 1))
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert (renewal.issued_on, renewal.total) == (date(2026, 4, 1), D("300.00"))
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval) == ("pro", ANNUAL)
++    assert (renewed.period_start, renewed.period_end) == (date(2026, 4, 1), date(2027, 4, 1))
++
++
++def test_23_annual_upgrade_switching_to_monthly_prorates_at_annual_prices(make_env):
++    env = make_env()
++    sub = env.subscribe("basic", ANNUAL, on=date(2026, 1, 15))
++    env.at(date(2026, 7, 15))
++
++    invoice = env.service.change_plan(sub.id, "pro", MONTHLY)
++
++    assert amounts(invoice) == [D("-50.41"), D("151.23")]
++    assert invoice.total == D("100.82")
++    now = env.sub(sub.id)
++    assert (now.plan_code, now.interval, now.period_end) == ("pro", ANNUAL, date(2027, 1, 15))
++
++    env.at(date(2027, 1, 15))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("30.00")
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval, renewed.period_end) == ("pro", MONTHLY, date(2027, 2, 15))
++
++
++# 24
++
++
++def _renew_april(env, sub_id):
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    renewed = env.sub(sub_id)
++    return renewal.total, renewed.plan_code, renewed.interval, renewed.period_end
++
++
++def test_24_interval_switch_replaces_pending_downgrade(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "basic")
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "pro", ANNUAL)
++
++    assert _renew_april(env, sub.id) == (D("300.00"), "pro", ANNUAL, date(2027, 4, 1))
++
++
++def test_24_each_request_states_the_full_target(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "basic", ANNUAL)
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "basic")  # target: Basic + current (monthly) interval
++
++    assert _renew_april(env, sub.id) == (D("10.00"), "basic", MONTHLY, date(2026, 5, 1))
++
++
++def test_24_downgrade_replaces_pending_switch_left_by_an_upgrade(make_env):
++    env = make_env()
++    sub = env.subscribe("basic", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "premium", ANNUAL)  # now Premium monthly, Premium annual pending
++    env.at(date(2026, 3, 11))
++    assert env.service.change_plan(sub.id, "pro") is None  # downgrade from Premium, Pro monthly
++
++    assert _renew_april(env, sub.id) == (D("30.00"), "pro", MONTHLY, date(2026, 5, 1))
+diff --git a/tests/acceptance/test_plan_change_general.py b/tests/acceptance/test_plan_change_general.py
+new file mode 100644
+index 0000000..8224cad
+--- /dev/null
++++ b/tests/acceptance/test_plan_change_general.py
+@@ -0,0 +1,85 @@
++"""SPEC.md acceptance criteria 29-31: persistence, exports, existing behaviour."""
++
++from datetime import date
++
++import billing
++import billing.errors as errors
++from billing.clock import FixedClock
++from billing.errors import BillingError
++from billing.service import BillingService
++from plan_change_support import D
++
++# 29
++
++
++def test_29_new_service_over_same_store_applies_pending_change(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "basic")
++
++    other = BillingService(env.store, FixedClock(date(2026, 4, 1)))
++    [renewal] = other.renew_due()
++
++    assert renewal.total == D("10.00")
++    assert env.sub(sub.id).plan_code == "basic"
++
++
++def test_29_new_service_over_same_store_sees_pending_change(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "basic")
++
++    other = BillingService(env.store, FixedClock(date(2026, 3, 20)))
++    # Only possible if the pending change is visible: target == current cancels it (9).
++    assert other.change_plan(sub.id, "pro") is None
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("30.00")
++    assert env.sub(sub.id).plan_code == "pro"
++
++
++# 30
++
++
++def test_30_invalid_plan_change_is_exported_from_billing():
++    assert billing.InvalidPlanChange is errors.InvalidPlanChange
++    assert "InvalidPlanChange" in billing.__all__
++    assert issubclass(billing.InvalidPlanChange, BillingError)
++
++
++# 31 (the existing suite under tests/ must also pass unmodified)
++
++
++def test_31_other_subscriptions_renew_as_before(make_env):
++    env = make_env()
++    changed = env.subscribe("pro", on=date(2026, 3, 1), customer_id="cus_1")
++    untouched = env.subscribe("pro", on=date(2026, 3, 1), customer_id="cus_2")
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(changed.id, "basic")
++
++    env.at(date(2026, 4, 1))
++    env.service.renew_due()
++
++    [first, renewal] = env.invoices(untouched.id)
++    assert (renewal.issued_on, renewal.total) == (date(2026, 4, 1), D("30.00"))
++    renewed = env.sub(untouched.id)
++    assert (renewed.plan_code, renewed.period_start, renewed.period_end) == ("pro", date(2026, 4, 1), date(2026, 5, 1))
++
++
++def test_31_subscription_after_upgrade_renews_like_any_other(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "premium")
++
++    env.at(date(2026, 6, 1))
++    issued = env.service.renew_due()
++
++    assert [(inv.issued_on, inv.total) for inv in issued] == [
++        (date(2026, 4, 1), D("75.00")),
++        (date(2026, 5, 1), D("75.00")),
++        (date(2026, 6, 1), D("75.00")),
++    ]
+diff --git a/tests/acceptance/test_plan_change_rejections.py b/tests/acceptance/test_plan_change_rejections.py
+new file mode 100644
+index 0000000..9e5d740
+--- /dev/null
++++ b/tests/acceptance/test_plan_change_rejections.py
+@@ -0,0 +1,340 @@
++"""SPEC.md acceptance criteria 1-8: rejected change requests."""
++
++from datetime import date
++
++import pytest
++
++import billing.errors as errors
++from billing.errors import PlanNotAvailable, PlanNotFound, SubscriptionNotActive, SubscriptionNotFound
++from billing.plans import Interval
++from plan_change_support import D, amounts
++
++MONTHLY, ANNUAL = Interval.MONTHLY, Interval.ANNUAL
++
++
++# 1-3
++
++
++def test_1_unknown_subscription_raises_subscription_not_found(make_env):
++    env = make_env()
++    with pytest.raises(SubscriptionNotFound):
++        env.service.change_plan("sub_missing", "premium")
++
++
++def test_2_canceled_subscription_raises_subscription_not_active(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.service.cancel(sub.id)
++    env.at(date(2026, 3, 11))
++    with pytest.raises(SubscriptionNotActive):
++        env.service.change_plan(sub.id, "premium")
++
++
++def test_3_unknown_plan_raises_plan_not_found(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    with pytest.raises(PlanNotFound):
++        env.service.change_plan(sub.id, "gold")
++
++
++# 4
++
++
++@pytest.mark.parametrize(
++    "target, new_interval",
++    [
++        ("premium", None),  # upgrade
++        ("premium", ANNUAL),  # upgrade with interval switch
++        ("basic", None),  # downgrade
++        ("basic", ANNUAL),  # downgrade with interval switch
++    ],
++)
++def test_4_retired_target_plan_raises_plan_not_available(make_env, target, new_interval):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.store.retire_plan(target)
++    env.at(date(2026, 3, 11))
++    with pytest.raises(PlanNotAvailable):
++        env.service.change_plan(sub.id, target, new_interval)
++
++
++def test_4_retired_target_plan_is_rejected_during_trial(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1), trial_days=14)
++    env.store.retire_plan("premium")
++    env.at(date(2026, 3, 5))
++    with pytest.raises(PlanNotAvailable):
++        env.service.change_plan(sub.id, "premium")
++
++
++def test_4_upgrading_off_a_retired_plan_is_allowed(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.store.retire_plan("pro")
++    env.at(date(2026, 3, 11))
++    invoice = env.service.change_plan(sub.id, "premium")
++    assert amounts(invoice) == [D("-20.32"), D("50.81")]
++    assert env.sub(sub.id).plan_code == "premium"
++
++
++def test_4_downgrading_off_a_retired_plan_is_allowed(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.store.retire_plan("pro")
++    env.at(date(2026, 3, 11))
++    assert env.service.change_plan(sub.id, "basic") is None
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("10.00")
++    assert env.sub(sub.id).plan_code == "basic"
++
++
++def test_4_interval_switch_while_staying_on_retired_plan_raises_plan_not_available(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.store.retire_plan("pro")
++    env.at(date(2026, 3, 11))
++    with pytest.raises(PlanNotAvailable):
++        env.service.change_plan(sub.id, "pro", ANNUAL)
++
++
++def test_4_returning_to_retired_current_plan_cancels_pending_change(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "basic")
++    env.store.retire_plan("pro")
++    env.at(date(2026, 3, 11))
++    assert env.service.change_plan(sub.id, "pro") is None
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("30.00")
++    assert env.sub(sub.id).plan_code == "pro"
++
++
++def test_4_retired_current_plan_as_target_with_nothing_pending_raises_invalid_plan_change(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.store.retire_plan("pro")
++    env.at(date(2026, 3, 11))
++    with pytest.raises(errors.InvalidPlanChange):
++        env.service.change_plan(sub.id, "pro")
++
++
++# 5
++
++
++@pytest.mark.parametrize("target, new_interval", [("premium", None), ("basic", None), ("pro", ANNUAL)])
++@pytest.mark.parametrize("today", [date(2026, 4, 1), date(2026, 4, 20)])
++def test_5_overdue_active_renewal_raises_invalid_plan_change(make_env, today, target, new_interval):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(today)
++    with pytest.raises(errors.InvalidPlanChange):
++        env.service.change_plan(sub.id, target, new_interval)
++
++
++@pytest.mark.parametrize("target, new_interval", [("premium", None), ("basic", None), ("pro", ANNUAL)])
++def test_5_overdue_trial_end_raises_invalid_plan_change(make_env, target, new_interval):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1), trial_days=14)
++    env.at(date(2026, 3, 15))
++    with pytest.raises(errors.InvalidPlanChange):
++        env.service.change_plan(sub.id, target, new_interval)
++
++
++# 6
++
++
++@pytest.mark.parametrize("new_interval", [None, MONTHLY])
++def test_6_upgrade_with_negative_total_raises_invalid_plan_change(make_env, new_interval):
++    env = make_env()
++    # Higher monthly price than Pro (an upgrade) but a lower annual price.
++    env.add_plan("flex", "40.00", "200.00")
++    sub = env.subscribe("pro", ANNUAL, on=date(2026, 1, 15))
++    env.at(date(2026, 7, 15))
++    with pytest.raises(errors.InvalidPlanChange):
++        env.service.change_plan(sub.id, "flex", new_interval)
++
++
++# 7
++
++
++def test_7_unknown_subscription_beats_unknown_plan(make_env):
++    env = make_env()
++    with pytest.raises(SubscriptionNotFound):
++        env.service.change_plan("sub_missing", "gold")
++
++
++def test_7_unknown_subscription_beats_retired_plan(make_env):
++    env = make_env()
++    env.store.retire_plan("premium")
++    with pytest.raises(SubscriptionNotFound):
++        env.service.change_plan("sub_missing", "premium")
++
++
++def test_7_canceled_subscription_beats_unknown_plan(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.service.cancel(sub.id)
++    with pytest.raises(SubscriptionNotActive):
++        env.service.change_plan(sub.id, "gold")
++
++
++def test_7_canceled_subscription_beats_retired_plan(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.service.cancel(sub.id)
++    env.store.retire_plan("premium")
++    with pytest.raises(SubscriptionNotActive):
++        env.service.change_plan(sub.id, "premium")
++
++
++def test_7_unknown_plan_beats_overdue_renewal(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 4, 1))
++    with pytest.raises(PlanNotFound):
++        env.service.change_plan(sub.id, "gold")
++
++
++def test_7_retired_plan_beats_overdue_renewal(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.store.retire_plan("premium")
++    env.at(date(2026, 4, 1))
++    with pytest.raises(PlanNotAvailable):
++        env.service.change_plan(sub.id, "premium")
++
++
++def test_7_retired_plan_beats_negative_total(make_env):
++    env = make_env()
++    env.add_plan("flex", "40.00", "200.00")
++    sub = env.subscribe("pro", ANNUAL, on=date(2026, 1, 15))
++    env.store.retire_plan("flex")
++    env.at(date(2026, 7, 15))
++    with pytest.raises(PlanNotAvailable):
++        env.service.change_plan(sub.id, "flex")
++
++
++def test_7_interval_switch_on_retired_plan_beats_overdue_renewal(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.store.retire_plan("pro")
++    env.at(date(2026, 4, 1))
++    with pytest.raises(PlanNotAvailable):
++        env.service.change_plan(sub.id, "pro", ANNUAL)
++
++
++# 8
++#
++# Each case starts from a subscription with a pending downgrade to Basic (same
++# interval), makes a request that must be rejected, then checks that nothing moved:
++# the stored subscription and invoices are identical, and the pending downgrade
++# still takes effect at the next renewal.
++
++
++def _setup_unknown_plan(env):
++    return date(2026, 3, 11), ("gold", None), "PlanNotFound"
++
++
++def _setup_retired_target(env):
++    env.store.retire_plan("premium")
++    return date(2026, 3, 11), ("premium", None), "PlanNotAvailable"
++
++
++def _setup_retired_interval_switch(env):
++    env.store.retire_plan("pro")
++    return date(2026, 3, 11), ("pro", ANNUAL), "PlanNotAvailable"
++
++
++def _setup_overdue(env):
++    return date(2026, 4, 1), ("premium", None), "InvalidPlanChange"
++
++
++def _setup_negative_total(env):
++    env.add_plan("flex", "40.00", "200.00")
++    return date(2026, 7, 15), ("flex", None), "InvalidPlanChange"
++
++
++REJECTIONS = [
++    pytest.param(MONTHLY, _setup_unknown_plan, id="unknown-plan"),
++    pytest.param(MONTHLY, _setup_retired_target, id="retired-target"),
++    pytest.param(MONTHLY, _setup_retired_interval_switch, id="retired-interval-switch"),
++    pytest.param(MONTHLY, _setup_overdue, id="overdue"),
++    pytest.param(ANNUAL, _setup_negative_total, id="negative-total"),
++]
++
++
++@pytest.mark.parametrize("interval, setup", REJECTIONS)
++def test_8_rejected_request_changes_nothing(make_env, interval, setup):
++    env = make_env()
++    sub = env.subscribe("pro", interval, on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    assert env.service.change_plan(sub.id, "basic") is None  # pending downgrade
++
++    today, (target, new_interval), error_name = setup(env)
++    env.at(today)
++    before_sub = env.sub(sub.id)
++    before_invoices = env.invoices(sub.id)
++
++    with pytest.raises(getattr(errors, error_name)):
++        env.service.change_plan(sub.id, target, new_interval)
++
++    assert env.sub(sub.id) == before_sub
++    assert env.invoices(sub.id) == before_invoices
++
++    # The pending downgrade survived the rejected request.
++    end = before_sub.period_end
++    if today < end:
++        env.at(end)
++    [renewal, *_] = env.service.renew_due()
++    assert renewal.issued_on == end
++    assert renewal.total == (D("10.00") if interval is MONTHLY else D("100.00"))
++    assert env.sub(sub.id).plan_code == "basic"
++
++
++def test_8_rejected_request_on_canceled_subscription_changes_nothing(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "basic")
++    env.service.cancel(sub.id)
++    before_sub = env.sub(sub.id)
++    before_invoices = env.invoices(sub.id)
++
++    with pytest.raises(SubscriptionNotActive):
++        env.service.change_plan(sub.id, "premium")
++
++    assert env.sub(sub.id) == before_sub
++    assert env.invoices(sub.id) == before_invoices
++
++
++def test_8_rejected_overdue_trial_changes_nothing(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1), trial_days=14)
++    env.at(date(2026, 3, 15))
++    before_sub = env.sub(sub.id)
++
++    with pytest.raises(errors.InvalidPlanChange):
++        env.service.change_plan(sub.id, "premium")
++
++    assert env.sub(sub.id) == before_sub
++    assert env.invoices(sub.id) == []
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("30.00")
++
++
++def test_8_rejected_same_target_with_nothing_pending_changes_nothing(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    before_sub = env.sub(sub.id)
++    before_invoices = env.invoices(sub.id)
++
++    with pytest.raises(errors.InvalidPlanChange):
++        env.service.change_plan(sub.id, "pro")
++
++    assert env.sub(sub.id) == before_sub
++    assert env.invoices(sub.id) == before_invoices
+diff --git a/tests/acceptance/test_plan_change_renewal.py b/tests/acceptance/test_plan_change_renewal.py
+new file mode 100644
+index 0000000..0b59353
+--- /dev/null
++++ b/tests/acceptance/test_plan_change_renewal.py
+@@ -0,0 +1,160 @@
++"""SPEC.md acceptance criteria 25-28: renewal with a pending change."""
++
++from datetime import date
++
++import pytest
++
++import billing.errors as errors
++from billing.plans import Interval
++from billing.subscriptions import SubscriptionStatus
++from plan_change_support import D
++
++MONTHLY, ANNUAL = Interval.MONTHLY, Interval.ANNUAL
++
++
++# 25
++
++
++def test_25_renewal_moves_to_pending_plan_and_interval(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "basic", ANNUAL)
++
++    env.at(date(2026, 4, 1))
++    issued = env.service.renew_due()
++
++    [renewal] = issued
++    assert env.invoices(sub.id)[-1] == renewal
++    assert (renewal.issued_on, renewal.total) == (date(2026, 4, 1), D("100.00"))
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval, renewed.status) == ("basic", ANNUAL, SubscriptionStatus.ACTIVE)
++    assert (renewed.period_start, renewed.period_end) == (date(2026, 4, 1), date(2027, 4, 1))
++
++
++def test_25_annual_to_monthly_renewal_uses_new_interval_length(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", ANNUAL, on=date(2026, 1, 15))
++    env.at(date(2026, 7, 15))
++    env.service.change_plan(sub.id, "basic", MONTHLY)
++
++    env.at(date(2027, 1, 15))
++    [renewal] = env.service.renew_due()
++
++    assert (renewal.issued_on, renewal.total) == (date(2027, 1, 15), D("10.00"))
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval) == ("basic", MONTHLY)
++    assert (renewed.period_start, renewed.period_end) == (date(2027, 1, 15), date(2027, 2, 15))
++
++
++def test_25_pending_change_is_cleared_after_renewal(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "basic")
++    env.at(date(2026, 4, 1))
++    env.service.renew_due()
++
++    # Nothing is pending any more, so asking for the current plan is rejected (10).
++    env.at(date(2026, 4, 10))
++    with pytest.raises(errors.InvalidPlanChange):
++        env.service.change_plan(sub.id, "basic")
++
++    env.at(date(2026, 5, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("10.00")
++    assert env.sub(sub.id).plan_code == "basic"
++
++
++# 26
++
++
++def test_26_catch_up_applies_pending_change_to_first_missed_period(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "basic")
++
++    env.at(date(2026, 6, 1))
++    issued = env.service.renew_due()
++
++    assert [(inv.issued_on, inv.total) for inv in issued] == [
++        (date(2026, 4, 1), D("10.00")),
++        (date(2026, 5, 1), D("10.00")),
++        (date(2026, 6, 1), D("10.00")),
++    ]
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.period_start, renewed.period_end) == ("basic", date(2026, 6, 1), date(2026, 7, 1))
++
++
++def test_26_catch_up_after_annual_to_monthly_switch(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", ANNUAL, on=date(2026, 1, 15))
++    env.at(date(2026, 7, 15))
++    env.service.change_plan(sub.id, "pro", MONTHLY)
++
++    env.at(date(2027, 3, 15))
++    issued = env.service.renew_due()
++
++    assert [(inv.issued_on, inv.total) for inv in issued] == [
++        (date(2027, 1, 15), D("30.00")),
++        (date(2027, 2, 15), D("30.00")),
++        (date(2027, 3, 15), D("30.00")),
++    ]
++    renewed = env.sub(sub.id)
++    assert (renewed.interval, renewed.period_end) == (MONTHLY, date(2027, 4, 15))
++
++
++def test_26_catch_up_after_monthly_to_annual_switch(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "pro", ANNUAL)
++
++    env.at(date(2027, 4, 1))
++    issued = env.service.renew_due()
++
++    assert [(inv.issued_on, inv.total) for inv in issued] == [
++        (date(2026, 4, 1), D("300.00")),
++        (date(2027, 4, 1), D("300.00")),
++    ]
++    renewed = env.sub(sub.id)
++    assert (renewed.interval, renewed.period_start, renewed.period_end) == (ANNUAL, date(2027, 4, 1), date(2028, 4, 1))
++
++
++# 27
++
++
++def test_27_pending_change_to_plan_retired_later_is_honoured(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "basic", ANNUAL)
++    env.store.retire_plan("basic")
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++
++    assert renewal.total == D("100.00")
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval) == ("basic", ANNUAL)
++
++
++# 28
++
++
++def test_28_canceled_subscription_with_pending_change_is_never_renewed(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "basic", ANNUAL)
++    env.service.cancel(sub.id)
++    invoices_before = env.invoices(sub.id)
++
++    env.at(date(2026, 6, 1))
++    assert env.service.renew_due() == []
++
++    assert env.invoices(sub.id) == invoices_before
++    final = env.sub(sub.id)
++    assert final.status is SubscriptionStatus.CANCELED
++    assert (final.plan_code, final.interval) == ("pro", MONTHLY)
+diff --git a/tests/acceptance/test_plan_change_same_target.py b/tests/acceptance/test_plan_change_same_target.py
+new file mode 100644
+index 0000000..d04186f
+--- /dev/null
++++ b/tests/acceptance/test_plan_change_same_target.py
+@@ -0,0 +1,86 @@
++"""SPEC.md acceptance criteria 9-10: target equals the current plan and interval."""
++
++from datetime import date
++
++import pytest
++
++import billing.errors as errors
++from billing.plans import Interval
++from plan_change_support import D
++
++MONTHLY, ANNUAL = Interval.MONTHLY, Interval.ANNUAL
++
++
++# 9
++
++
++def test_9_worked_example_cancelling_a_pending_downgrade(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    assert env.service.change_plan(sub.id, "basic") is None
++    invoices_before = env.invoices(sub.id)
++
++    assert env.service.change_plan(sub.id, "pro", MONTHLY) is None
++    assert env.invoices(sub.id) == invoices_before
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("30.00")
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval) == ("pro", MONTHLY)
++    assert (renewed.period_start, renewed.period_end) == (date(2026, 4, 1), date(2026, 5, 1))
++
++
++def test_9_none_interval_means_current_interval_not_the_pending_one(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    assert env.service.change_plan(sub.id, "pro", ANNUAL) is None  # pending interval switch
++
++    # Target is Pro + current interval (monthly) == current: cancels the pending switch.
++    assert env.service.change_plan(sub.id, "pro") is None
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("30.00")
++    renewed = env.sub(sub.id)
++    assert renewed.interval is MONTHLY
++    assert renewed.period_end == date(2026, 5, 1)
++
++
++def test_9_cancels_pending_downgrade_with_interval_switch(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", ANNUAL, on=date(2026, 1, 15))
++    env.at(date(2026, 7, 15))
++    assert env.service.change_plan(sub.id, "basic", MONTHLY) is None
++    assert env.service.change_plan(sub.id, "pro", ANNUAL) is None
++
++    env.at(date(2027, 1, 15))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("300.00")
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval, renewed.period_end) == ("pro", ANNUAL, date(2028, 1, 15))
++
++
++# 10
++
++
++@pytest.mark.parametrize("interval", [MONTHLY, ANNUAL])
++@pytest.mark.parametrize("pass_interval", [False, True])
++def test_10_same_target_with_nothing_pending_raises_invalid_plan_change(make_env, interval, pass_interval):
++    env = make_env()
++    sub = env.subscribe("pro", interval, on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    with pytest.raises(errors.InvalidPlanChange):
++        env.service.change_plan(sub.id, "pro", interval if pass_interval else None)
++
++
++def test_10_worked_example_repeating_the_cancellation_raises(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "basic")
++    assert env.service.change_plan(sub.id, "pro", MONTHLY) is None
++    with pytest.raises(errors.InvalidPlanChange):
++        env.service.change_plan(sub.id, "pro", MONTHLY)
+diff --git a/tests/acceptance/test_plan_change_trialing.py b/tests/acceptance/test_plan_change_trialing.py
+new file mode 100644
+index 0000000..5fc4871
+--- /dev/null
++++ b/tests/acceptance/test_plan_change_trialing.py
+@@ -0,0 +1,87 @@
++"""SPEC.md acceptance criteria 11-13: changes during a free trial."""
++
++from datetime import date
++
++import pytest
++
++from billing.plans import Interval
++from billing.subscriptions import SubscriptionStatus
++from plan_change_support import D
++
++MONTHLY, ANNUAL = Interval.MONTHLY, Interval.ANNUAL
++
++TRIAL_START = date(2026, 3, 1)
++TRIAL_END = date(2026, 3, 15)  # 14-day trial
++
++# (base interval, target plan, new_interval, expected plan, expected interval, full price, first paid period end)
++TRIAL_CHANGES = [
++    pytest.param(MONTHLY, "premium", None, "premium", MONTHLY, "75.00", date(2026, 4, 15), id="upgrade"),
++    pytest.param(MONTHLY, "basic", None, "basic", MONTHLY, "10.00", date(2026, 4, 15), id="downgrade"),
++    pytest.param(MONTHLY, "pro", ANNUAL, "pro", ANNUAL, "300.00", date(2027, 3, 15), id="switch-to-annual"),
++    pytest.param(ANNUAL, "pro", MONTHLY, "pro", MONTHLY, "30.00", date(2026, 4, 15), id="switch-to-monthly"),
++    pytest.param(MONTHLY, "premium", ANNUAL, "premium", ANNUAL, "750.00", date(2027, 3, 15), id="upgrade-and-switch"),
++    pytest.param(ANNUAL, "basic", MONTHLY, "basic", MONTHLY, "10.00", date(2026, 4, 15), id="downgrade-and-switch"),
++]
++
++
++@pytest.mark.parametrize("base, target, new_interval, plan, interval, price, paid_end", TRIAL_CHANGES)
++def test_11_trial_change_applies_immediately_without_invoice(
++    make_env, base, target, new_interval, plan, interval, price, paid_end
++):
++    env = make_env()
++    sub = env.subscribe("pro", base, on=TRIAL_START, trial_days=14)
++    env.at(date(2026, 3, 5))
++
++    assert env.service.change_plan(sub.id, target, new_interval) is None
++
++    changed = env.sub(sub.id)
++    assert (changed.plan_code, changed.interval) == (plan, interval)
++    assert env.invoices(sub.id) == []
++
++
++@pytest.mark.parametrize("base, target, new_interval, plan, interval, price, paid_end", TRIAL_CHANGES)
++def test_12_trial_end_and_status_are_unchanged(make_env, base, target, new_interval, plan, interval, price, paid_end):
++    env = make_env()
++    sub = env.subscribe("pro", base, on=TRIAL_START, trial_days=14)
++    env.at(date(2026, 3, 5))
++
++    env.service.change_plan(sub.id, target, new_interval)
++
++    changed = env.sub(sub.id)
++    assert changed.period_end == TRIAL_END
++    assert changed.status is SubscriptionStatus.TRIALING
++
++
++@pytest.mark.parametrize("base, target, new_interval, plan, interval, price, paid_end", TRIAL_CHANGES)
++def test_13_trial_end_bills_full_price_of_new_plan_and_interval(
++    make_env, base, target, new_interval, plan, interval, price, paid_end
++):
++    env = make_env()
++    sub = env.subscribe("pro", base, on=TRIAL_START, trial_days=14)
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, target, new_interval)
++
++    env.at(TRIAL_END)
++    [renewal] = env.service.renew_due()
++
++    assert renewal.issued_on == TRIAL_END
++    assert renewal.total == D(price)
++    paid = env.sub(sub.id)
++    assert paid.status is SubscriptionStatus.ACTIVE
++    assert (paid.plan_code, paid.interval) == (plan, interval)
++    assert (paid.period_start, paid.period_end) == (TRIAL_END, paid_end)
++
++
++def test_13_trial_end_bills_the_plan_after_several_trial_changes(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=TRIAL_START, trial_days=14)
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "premium", ANNUAL)
++    env.at(date(2026, 3, 10))
++    env.service.change_plan(sub.id, "basic")  # interval None -> stays annual (now current)
++
++    env.at(TRIAL_END)
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("100.00")
++    paid = env.sub(sub.id)
++    assert (paid.plan_code, paid.interval, paid.period_end) == ("basic", ANNUAL, date(2027, 3, 15))
+diff --git a/tests/acceptance/test_plan_change_upgrades.py b/tests/acceptance/test_plan_change_upgrades.py
+new file mode 100644
+index 0000000..e84577e
+--- /dev/null
++++ b/tests/acceptance/test_plan_change_upgrades.py
+@@ -0,0 +1,225 @@
++"""SPEC.md acceptance criteria 14-20: upgrades of active subscriptions."""
++
++from datetime import date
++
++from billing.plans import Interval
++from billing.subscriptions import SubscriptionStatus
++from plan_change_support import D, amounts
++
++MONTHLY, ANNUAL = Interval.MONTHLY, Interval.ANNUAL
++
++
++# 14-15: worked example "Monthly upgrade"
++
++
++def test_14_upgrade_applies_now_without_restarting_the_period(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++
++    env.service.change_plan(sub.id, "premium")
++
++    upgraded = env.sub(sub.id)
++    assert upgraded.plan_code == "premium"
++    assert upgraded.interval is MONTHLY
++    assert (upgraded.period_start, upgraded.period_end) == (date(2026, 3, 1), date(2026, 4, 1))
++    assert upgraded.status is SubscriptionStatus.ACTIVE
++
++
++def test_15_upgrade_records_and_returns_one_two_line_invoice(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1), customer_id="cus_42")
++    env.at(date(2026, 3, 11))
++    invoices_before = env.invoices(sub.id)
++
++    invoice = env.service.change_plan(sub.id, "premium")
++
++    assert env.invoices(sub.id) == invoices_before + [invoice]
++    assert invoice.issued_on == date(2026, 3, 11)
++    assert (invoice.subscription_id, invoice.customer_id) == (sub.id, "cus_42")
++    assert len(invoice.lines) == 2
++    assert amounts(invoice) == [D("-20.32"), D("50.81")]
++    assert invoice.total == D("30.49")
++
++
++def test_15_monthly_upgrade_then_renewal_bills_new_plan(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "premium")
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert (renewal.issued_on, renewal.total) == (date(2026, 4, 1), D("75.00"))
++    assert env.sub(sub.id).period_end == date(2026, 5, 1)
++
++
++def test_15_worked_example_annual_upgrade(make_env):
++    env = make_env()
++    sub = env.subscribe("basic", ANNUAL, on=date(2026, 1, 15))
++    env.at(date(2026, 7, 15))
++
++    invoice = env.service.change_plan(sub.id, "pro")
++
++    assert amounts(invoice) == [D("-50.41"), D("151.23")]
++    assert invoice.total == D("100.82")
++    upgraded = env.sub(sub.id)
++    assert (upgraded.plan_code, upgraded.interval) == ("pro", ANNUAL)
++    assert (upgraded.period_start, upgraded.period_end) == (date(2026, 1, 15), date(2027, 1, 15))
++
++    env.at(date(2027, 1, 15))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("300.00")
++
++
++def test_15_annual_upgrade_over_a_366_day_period(make_env):
++    env = make_env(date(2027, 1, 1))
++    sub = env.subscribe("basic", ANNUAL, on=date(2027, 3, 1))  # period ends 2028-03-01: 366 days
++    env.at(date(2027, 9, 1))  # 182 remaining days
++
++    invoice = env.service.change_plan(sub.id, "pro")
++
++    # -(100 * 182/366) = -49.726..., +(300 * 182/366) = 149.180...
++    assert amounts(invoice) == [D("-49.73"), D("149.18")]
++    assert invoice.total == D("99.45")
++
++
++# 16
++
++
++def test_16_lines_are_rounded_separately_not_the_net(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 11))
++
++    invoice = env.service.change_plan(sub.id, "premium")
++
++    # Rounding the net (45 * 21/31 = 30.48) is wrong; rounding a daily rate
++    # (0.97 * 21 = 20.37, 2.42 * 21 = 50.82) is wrong too.
++    assert amounts(invoice) == [D("-20.32"), D("50.81")]
++    assert invoice.total == D("30.49")
++
++
++def test_16_each_line_is_rounded_half_up(make_env):
++    env = make_env()
++    env.add_plan("plus", "20.01", "200.10")
++    sub = env.subscribe("basic", on=date(2026, 2, 1))  # 28-day period
++    env.at(date(2026, 2, 15))  # 14 remaining days
++
++    invoice = env.service.change_plan(sub.id, "plus")
++
++    # 20.01 * 14/28 = 10.005 exactly -> 10.01 half up (half-even would give 10.00).
++    assert amounts(invoice) == [D("-5.00"), D("10.01")]
++    assert invoice.total == D("5.01")
++
++
++# 17
++
++
++def test_17_change_on_first_day_credits_whole_period(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++
++    invoice = env.service.change_plan(sub.id, "premium")
++
++    assert invoice.issued_on == date(2026, 3, 1)
++    assert amounts(invoice) == [D("-30.00"), D("75.00")]
++    assert invoice.total == D("45.00")
++
++
++def test_17_change_on_renewal_day_after_renewing_credits_whole_period(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", ANNUAL, on=date(2026, 3, 1))
++    env.at(date(2027, 3, 1))
++    env.service.renew_due()
++
++    invoice = env.service.change_plan(sub.id, "premium")
++
++    assert invoice.issued_on == date(2027, 3, 1)
++    assert amounts(invoice) == [D("-300.00"), D("750.00")]
++    assert invoice.total == D("450.00")
++
++
++# 18
++
++
++def test_18_upgrade_discards_pending_downgrade(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "basic")
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "premium")
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("75.00")
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval, renewed.period_end) == ("premium", MONTHLY, date(2026, 5, 1))
++
++
++def test_18_upgrade_without_switch_discards_pending_interval_switch(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "pro", ANNUAL)
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "premium")
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("75.00")
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval, renewed.period_end) == ("premium", MONTHLY, date(2026, 5, 1))
++
++
++def test_18_upgrade_with_switch_replaces_pending_change(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "basic")
++    env.at(date(2026, 3, 11))
++    env.service.change_plan(sub.id, "premium", ANNUAL)
++
++    env.at(date(2026, 4, 1))
++    [renewal] = env.service.renew_due()
++    assert renewal.total == D("750.00")
++    renewed = env.sub(sub.id)
++    assert (renewed.plan_code, renewed.interval, renewed.period_end) == ("premium", ANNUAL, date(2027, 4, 1))
++
++
++# 19
++
++
++def test_19_upgrade_with_pending_downgrade_is_prorated_from_current_plan(make_env):
++    env = make_env()
++    sub = env.subscribe("pro", on=date(2026, 3, 1))
++    env.at(date(2026, 3, 5))
++    env.service.change_plan(sub.id, "basic")
++    env.at(date(2026, 3, 11))
++
++    invoice = env.service.change_plan(sub.id, "premium")
++
++    assert amounts(invoice) == [D("-20.32"), D("50.81")]
++    assert invoice.total == D("30.49")
++
++
++# 20
++
++
++def test_20_zero_total_upgrade_returns_what_it_records(make_env):
++    env = make_env()
++    # Higher monthly price than Pro (an upgrade), same annual price.
++    env.add_plan("level", "40.00", "300.00")
++    sub = env.subscribe("pro", ANNUAL, on=date(2026, 1, 15))
++    env.at(date(2026, 7, 15))
++    invoices_before = env.invoices(sub.id)
++
++    result = env.service.change_plan(sub.id, "level")
++
++    if result is None:
++        assert env.invoices(sub.id) == invoices_before
++    else:
++        assert env.invoices(sub.id) == invoices_before + [result]
++        assert result.total == D("0.00")
++    assert env.sub(sub.id).plan_code == "level"

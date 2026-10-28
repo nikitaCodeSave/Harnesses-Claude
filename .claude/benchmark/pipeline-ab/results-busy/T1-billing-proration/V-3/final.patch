@@ -1,0 +1,355 @@
+diff --git a/README.md b/README.md
+index 8ad6142..40ce2b0 100644
+--- a/README.md
++++ b/README.md
+@@ -15,7 +15,7 @@ src/billing/
+   subscriptions.py  Subscription, SubscriptionStatus
+   invoices.py       Invoice, LineItem
+   store.py          InMemoryStore (plans, subscriptions, invoices)
+-  service.py        BillingService: subscribe / renew_due / cancel
++  service.py        BillingService: subscribe / renew_due / change_plan / cancel
+ ```
+ 
+ ## Conventions
+diff --git a/src/billing/__init__.py b/src/billing/__init__.py
+index cfe5c0f..e87bb6c 100644
+--- a/src/billing/__init__.py
++++ b/src/billing/__init__.py
+@@ -4,6 +4,7 @@ from billing.clock import Clock, FixedClock
+ from billing.errors import (
+     BillingError,
+     InvalidPlan,
++    InvalidPlanChange,
+     InvoiceError,
+     PlanNotAvailable,
+     PlanNotFound,
+@@ -25,6 +26,7 @@ __all__ = [
+     "InMemoryStore",
+     "Interval",
+     "InvalidPlan",
++    "InvalidPlanChange",
+     "Invoice",
+     "InvoiceError",
+     "LineItem",
+diff --git a/src/billing/errors.py b/src/billing/errors.py
+index ef85b3e..213622b 100644
+--- a/src/billing/errors.py
++++ b/src/billing/errors.py
+@@ -27,3 +27,7 @@ class SubscriptionNotActive(BillingError):
+ 
+ class InvoiceError(BillingError):
+     """An invoice or line item is malformed."""
++
++
++class InvalidPlanChange(BillingError):
++    """A plan change was requested that cannot be honoured as asked."""
+diff --git a/src/billing/service.py b/src/billing/service.py
+index aa6734c..3af0b76 100644
+--- a/src/billing/service.py
++++ b/src/billing/service.py
+@@ -1,4 +1,4 @@
+-"""Billing operations: subscribe, renew, cancel."""
++"""Billing operations: subscribe, renew, change plan, cancel."""
+ 
+ from __future__ import annotations
+ 
+@@ -6,8 +6,9 @@ from dataclasses import replace
+ from datetime import date, timedelta
+ 
+ from billing.clock import Clock
+-from billing.errors import PlanNotAvailable, SubscriptionNotActive
++from billing.errors import InvalidPlanChange, PlanNotAvailable, SubscriptionNotActive
+ from billing.invoices import Invoice, LineItem
++from billing.money import ZERO, to_money
+ from billing.periods import period_end
+ from billing.plans import Interval, Plan
+ from billing.store import InMemoryStore
+@@ -79,6 +80,91 @@ class BillingService:
+                 issued.append(invoice)
+         return issued
+ 
++    def change_plan(
++        self,
++        subscription_id: str,
++        new_plan_code: str,
++        new_interval: Interval | None = None,
++    ) -> Invoice | None:
++        """Move a subscription to another plan and/or interval, effective today.
++
++        ``new_interval=None`` keeps the current interval.
++
++        While trialing nothing has been paid, so the plan is swapped without
++        billing and the first paid period (on the new plan and interval)
++        still starts when the trial ends; returns ``None``.
++
++        Otherwise the unused days of the current period are credited at the
++        current plan's price, and:
++
++        - same interval: the new plan is charged for those same days and the
++          period (and so the renewal date) is unchanged;
++        - interval switch: a new period of the new interval starts today and
++          is charged in full.
++
++        Both lines go on one invoice issued today. A downgrade can make its
++        total negative: that invoice is a credit owed to the customer.
++        Returns ``None`` if every line is zero (e.g. between free plans).
++        """
++        subscription = self._store.get_subscription(subscription_id)
++        if subscription.is_canceled:
++            raise SubscriptionNotActive(subscription_id)
++        new_plan = self._store.get_plan(new_plan_code)
++        interval = subscription.interval if new_interval is None else new_interval
++        if new_plan.code == subscription.plan_code and interval is subscription.interval:
++            raise InvalidPlanChange(f"{subscription_id} is already on {new_plan.code} ({interval.value})")
++        if not new_plan.active:
++            raise PlanNotAvailable(new_plan.code)
++
++        today = self._clock.today()
++        if subscription.period_end <= today:
++            # The current period is over but not yet renewed: there are no
++            # unused days to credit, and the renewal itself is still owed.
++            raise InvalidPlanChange(
++                f"{subscription_id} has a renewal due on {subscription.period_end.isoformat()}; "
++                "run renew_due before changing plan"
++            )
++
++        if subscription.status is SubscriptionStatus.TRIALING:
++            self._store.save_subscription(replace(subscription, plan_code=new_plan.code, interval=interval))
++            return None
++
++        old_plan = self._store.get_plan(subscription.plan_code)
++        remaining = (subscription.period_end - today).days
++        total = (subscription.period_end - subscription.period_start).days
++        credit = LineItem(
++            description=(
++                f"Unused time on {old_plan.name} ({subscription.interval.value}) "
++                f"{today.isoformat()} to {subscription.period_end.isoformat()}"
++            ),
++            amount=-to_money(old_plan.price_for(subscription.interval) * remaining / total),
++        )
++
++        if interval is subscription.interval:
++            changed = replace(subscription, plan_code=new_plan.code)
++            charge = LineItem(
++                description=(
++                    f"Remaining time on {new_plan.name} ({interval.value}) "
++                    f"{today.isoformat()} to {subscription.period_end.isoformat()}"
++                ),
++                amount=to_money(new_plan.price_for(interval) * remaining / total),
++            )
++        else:
++            changed = replace(
++                subscription,
++                plan_code=new_plan.code,
++                interval=interval,
++                period_start=today,
++                period_end=period_end(today, interval),
++            )
++            charge = self._period_line(new_plan, changed)
++
++        self._store.save_subscription(changed)
++        lines = [line for line in (credit, charge) if line.amount != ZERO]
++        if not lines:
++            return None
++        return self._issue_invoice(changed, lines, today)
++
+     def cancel(self, subscription_id: str) -> Subscription:
+         """Cancel immediately. No refund; the subscription is never renewed."""
+         subscription = self._store.get_subscription(subscription_id)
+diff --git a/tests/test_change_plan.py b/tests/test_change_plan.py
+new file mode 100644
+index 0000000..304370d
+--- /dev/null
++++ b/tests/test_change_plan.py
+@@ -0,0 +1,191 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++
++from billing.errors import (
++    InvalidPlanChange,
++    PlanNotAvailable,
++    PlanNotFound,
++    SubscriptionNotActive,
++    SubscriptionNotFound,
++)
++from billing.plans import Interval, Plan
++from billing.subscriptions import SubscriptionStatus
++
++# The conftest clock starts on 2026-01-15, so a monthly subscription runs
++# [2026-01-15, 2026-02-15): 31 days. Changing on 2026-01-25 leaves 21 days.
++
++
++def amounts(invoice):
++    return [line.amount for line in invoice.lines]
++
++
++def test_upgrade_charges_difference_for_remaining_days(service, store, clock):
++    sub = service.subscribe("cus_1", "basic")
++    clock.move_to(date(2026, 1, 25))
++    invoice = service.change_plan(sub.id, "pro")
++    # basic 10.00 * 21/31 = 6.77 credited, pro 30.00 * 21/31 = 20.32 charged
++    assert amounts(invoice) == [Decimal("-6.77"), Decimal("20.32")]
++    assert invoice.total == Decimal("13.55")
++    assert invoice.issued_on == date(2026, 1, 25)
++    assert store.invoices_for(sub.id)[-1] == invoice
++
++
++def test_same_interval_change_keeps_period_and_renews_on_new_plan(service, store, clock):
++    sub = service.subscribe("cus_1", "basic")
++    clock.move_to(date(2026, 1, 25))
++    service.change_plan(sub.id, "pro")
++    changed = store.get_subscription(sub.id)
++    assert (changed.plan_code, changed.period_start, changed.period_end) == (
++        "pro",
++        date(2026, 1, 15),
++        date(2026, 2, 15),
++    )
++    clock.move_to(date(2026, 2, 15))
++    [renewal] = service.renew_due()
++    assert renewal.total == Decimal("30.00")
++
++
++def test_downgrade_issues_credit(service, clock):
++    sub = service.subscribe("cus_1", "pro")
++    clock.move_to(date(2026, 1, 25))
++    invoice = service.change_plan(sub.id, "basic")
++    assert amounts(invoice) == [Decimal("-20.32"), Decimal("6.77")]
++    assert invoice.total == Decimal("-13.55")
++
++
++def test_change_on_first_day_swaps_full_prices(service):
++    sub = service.subscribe("cus_1", "basic")
++    invoice = service.change_plan(sub.id, "pro")
++    assert amounts(invoice) == [Decimal("-10.00"), Decimal("30.00")]
++
++
++def test_monthly_to_annual_starts_new_annual_period(service, store, clock):
++    sub = service.subscribe("cus_1", "basic")
++    clock.move_to(date(2026, 1, 25))
++    invoice = service.change_plan(sub.id, "pro", Interval.ANNUAL)
++    assert amounts(invoice) == [Decimal("-6.77"), Decimal("300.00")]
++    changed = store.get_subscription(sub.id)
++    assert (changed.interval, changed.period_start, changed.period_end) == (
++        Interval.ANNUAL,
++        date(2026, 1, 25),
++        date(2027, 1, 25),
++    )
++
++
++def test_annual_to_monthly_credits_unused_year(service, store, clock):
++    sub = service.subscribe("cus_1", "pro", Interval.ANNUAL)  # [2026-01-15, 2027-01-15): 365 days
++    clock.move_to(date(2026, 7, 15))  # 184 days left
++    invoice = service.change_plan(sub.id, "pro", Interval.MONTHLY)
++    # 300.00 * 184/365 = 151.23
++    assert amounts(invoice) == [Decimal("-151.23"), Decimal("30.00")]
++    changed = store.get_subscription(sub.id)
++    assert (changed.period_start, changed.period_end) == (date(2026, 7, 15), date(2026, 8, 15))
++
++
++def test_interval_defaults_to_current(service, store, clock):
++    sub = service.subscribe("cus_1", "basic", Interval.ANNUAL)
++    clock.move_to(date(2026, 1, 25))
++    service.change_plan(sub.id, "pro")
++    assert store.get_subscription(sub.id).interval is Interval.ANNUAL
++
++
++def test_consecutive_changes_do_not_double_charge(service, store, clock):
++    sub = service.subscribe("cus_1", "basic")
++    clock.move_to(date(2026, 1, 25))
++    service.change_plan(sub.id, "pro")
++    service.change_plan(sub.id, "basic")
++    # Back on basic on the same day: net effect of both changes is zero.
++    assert sum(inv.total for inv in store.invoices_for(sub.id)) == Decimal("10.00")
++
++
++def test_trial_change_bills_nothing_and_keeps_trial_end(service, store, clock):
++    sub = service.subscribe("cus_1", "basic", trial_days=14)
++    clock.move_to(date(2026, 1, 20))
++    assert service.change_plan(sub.id, "pro", Interval.ANNUAL) is None
++    assert store.invoices_for(sub.id) == []
++    changed = store.get_subscription(sub.id)
++    assert (changed.status, changed.plan_code, changed.period_end) == (
++        SubscriptionStatus.TRIALING,
++        "pro",
++        date(2026, 1, 29),
++    )
++    clock.move_to(date(2026, 1, 29))
++    [first] = service.renew_due()
++    assert first.total == Decimal("300.00")
++
++
++def test_change_between_free_plans_bills_nothing(service, store, clock):
++    store.add_plan(Plan("free", "Free", Decimal("0"), Decimal("0")))
++    store.add_plan(Plan("hobby", "Hobby", Decimal("0"), Decimal("0")))
++    sub = service.subscribe("cus_1", "free")
++    clock.move_to(date(2026, 1, 25))
++    before = len(store.invoices_for(sub.id))
++    assert service.change_plan(sub.id, "hobby") is None
++    assert len(store.invoices_for(sub.id)) == before
++    assert store.get_subscription(sub.id).plan_code == "hobby"
++
++
++def test_from_free_plan_omits_zero_credit_line(service, store, clock):
++    store.add_plan(Plan("free", "Free", Decimal("0"), Decimal("0")))
++    sub = service.subscribe("cus_1", "free")
++    clock.move_to(date(2026, 1, 25))
++    invoice = service.change_plan(sub.id, "pro")
++    assert amounts(invoice) == [Decimal("20.32")]
++
++
++def test_can_leave_a_retired_plan(service, store, clock):
++    sub = service.subscribe("cus_1", "basic")
++    store.retire_plan("basic")
++    clock.move_to(date(2026, 1, 25))
++    assert service.change_plan(sub.id, "pro").total == Decimal("13.55")
++
++
++def test_cannot_move_to_retired_plan(service, store):
++    sub = service.subscribe("cus_1", "basic")
++    store.retire_plan("pro")
++    with pytest.raises(PlanNotAvailable):
++        service.change_plan(sub.id, "pro")
++
++
++def test_cannot_switch_interval_on_retired_plan(service, store):
++    sub = service.subscribe("cus_1", "basic")
++    store.retire_plan("basic")
++    with pytest.raises(PlanNotAvailable):
++        service.change_plan(sub.id, "basic", Interval.ANNUAL)
++
++
++def test_no_op_change_is_rejected(service, store):
++    sub = service.subscribe("cus_1", "basic")
++    with pytest.raises(InvalidPlanChange):
++        service.change_plan(sub.id, "basic")
++    with pytest.raises(InvalidPlanChange):
++        service.change_plan(sub.id, "basic", Interval.MONTHLY)
++    assert len(store.invoices_for(sub.id)) == 1
++
++
++def test_change_with_renewal_due_is_rejected(service, store, clock):
++    sub = service.subscribe("cus_1", "basic")
++    clock.move_to(date(2026, 2, 15))
++    with pytest.raises(InvalidPlanChange):
++        service.change_plan(sub.id, "pro")
++    assert store.get_subscription(sub.id).plan_code == "basic"
++
++
++def test_change_canceled_subscription(service):
++    sub = service.subscribe("cus_1", "basic")
++    service.cancel(sub.id)
++    with pytest.raises(SubscriptionNotActive):
++        service.change_plan(sub.id, "pro")
++
++
++def test_change_unknown_subscription(service):
++    with pytest.raises(SubscriptionNotFound):
++        service.change_plan("sub_9999", "pro")
++
++
++def test_change_to_unknown_plan(service):
++    sub = service.subscribe("cus_1", "basic")
++    with pytest.raises(PlanNotFound):
++        service.change_plan(sub.id, "gold")

@@ -1,0 +1,316 @@
+diff -ruN f1/src/lending/errors.py af2/src/lending/errors.py
+--- f1/src/lending/errors.py	2026-10-28 11:19:26.003541229 +0300
++++ af2/src/lending/errors.py	2026-10-28 11:20:34.382149867 +0300
+@@ -86,3 +86,16 @@
+     def __init__(self, amount: object, why: str) -> None:
+         super().__init__(f"invalid amount {amount}: {why}")
+         self.amount = amount
++
++
++class HoldNotFound(LendingError):
++    def __init__(self, hold_id: str) -> None:
++        super().__init__(f"no hold {hold_id!r}")
++        self.hold_id = hold_id
++
++
++class HoldNotAllowed(LendingError):
++    """A hold request (or cancellation) that can't be honoured."""
++
++    def __init__(self, why: str) -> None:
++        super().__init__(why)
+diff -ruN f1/src/lending/models.py af2/src/lending/models.py
+--- f1/src/lending/models.py	2026-10-28 11:19:26.003609229 +0300
++++ af2/src/lending/models.py	2026-10-28 11:20:34.382157237 +0300
+@@ -21,9 +21,18 @@
+ class CopyStatus(Enum):
+     AVAILABLE = "available"
+     ON_LOAN = "on_loan"
++    ON_HOLD_SHELF = "on_hold_shelf"
+     WITHDRAWN = "withdrawn"
+ 
+ 
++class HoldStatus(Enum):
++    WAITING = "waiting"
++    READY = "ready"
++    FULFILLED = "fulfilled"
++    CANCELLED = "cancelled"
++    EXPIRED = "expired"
++
++
+ @dataclass
+ class Member:
+     member_id: str
+@@ -83,3 +92,20 @@
+     member_id: str
+     amount: Decimal
+     paid_on: date
++
++
++@dataclass
++class Hold:
++    """A member's place in the queue for a title."""
++
++    hold_id: str
++    member_id: str
++    isbn: str
++    placed_on: date
++    status: HoldStatus = HoldStatus.WAITING
++    copy_id: str | None = None  # set when a copy is put aside for this hold
++    pickup_by: date | None = None  # last day to collect it
++
++    @property
++    def is_active(self) -> bool:
++        return self.status in (HoldStatus.WAITING, HoldStatus.READY)
+diff -ruN f1/src/lending/policy.py af2/src/lending/policy.py
+--- f1/src/lending/policy.py	2026-10-28 11:19:26.040502406 +0300
++++ af2/src/lending/policy.py	2026-10-28 11:20:34.391924770 +0300
+@@ -29,6 +29,9 @@
+ # A member owing this much or more can't borrow.
+ BORROWING_BLOCK = Decimal("10.00")
+ 
++# Days a member has to collect a copy set aside for their hold.
++PICKUP_DAYS = 7
++
+ # date.weekday(): Monday is 0, Sunday is 6. The library is closed on Sundays.
+ CLOSED_WEEKDAYS: frozenset[int] = frozenset({6})
+ 
+@@ -51,3 +54,7 @@
+ 
+ def loan_limit(category: MemberCategory) -> int:
+     return LOAN_LIMITS[category]
++
++
++def pickup_deadline(set_aside_on: date) -> date:
++    return next_open_day(set_aside_on + timedelta(days=PICKUP_DAYS))
+diff -ruN f1/src/lending/repository.py af2/src/lending/repository.py
+--- f1/src/lending/repository.py	2026-10-28 11:19:26.026138553 +0300
++++ af2/src/lending/repository.py	2026-10-28 11:20:34.382172257 +0300
+@@ -2,8 +2,14 @@
+ 
+ from __future__ import annotations
+ 
+-from .errors import CopyNotFound, LoanNotFound, MemberNotFound, TitleNotFound
+-from .models import Charge, Copy, Loan, Member, Payment, Title
++from .errors import (
++    CopyNotFound,
++    HoldNotFound,
++    LoanNotFound,
++    MemberNotFound,
++    TitleNotFound,
++)
++from .models import Charge, Copy, Hold, Loan, Member, Payment, Title
+ 
+ 
+ class InMemoryRepository:
+@@ -12,6 +18,7 @@
+         self._titles: dict[str, Title] = {}
+         self._copies: dict[str, Copy] = {}
+         self._loans: dict[str, Loan] = {}
++        self._holds: dict[str, Hold] = {}  # insertion order is queue order
+         self._charges: list[Charge] = []
+         self._payments: list[Payment] = []
+         self._sequences: dict[str, int] = {}
+@@ -103,3 +110,21 @@
+ 
+     def payments_of(self, member_id: str) -> list[Payment]:
+         return [p for p in self._payments if p.member_id == member_id]
++
++    # holds -------------------------------------------------------------
++
++    def add_hold(self, hold: Hold) -> None:
++        self._holds[hold.hold_id] = hold
++
++    def get_hold(self, hold_id: str) -> Hold:
++        try:
++            return self._holds[hold_id]
++        except KeyError:
++            raise HoldNotFound(hold_id) from None
++
++    def holds_on(self, isbn: str) -> list[Hold]:
++        """Every hold ever placed on the title, in the order placed."""
++        return [h for h in self._holds.values() if h.isbn == isbn]
++
++    def all_holds(self) -> list[Hold]:
++        return list(self._holds.values())
+diff -ruN f1/src/lending/service.py af2/src/lending/service.py
+--- f1/src/lending/service.py	2026-10-28 11:19:26.040730254 +0300
++++ af2/src/lending/service.py	2026-10-28 12:55:27.928033222 +0300
+@@ -14,6 +14,7 @@
+     DuplicateCopy,
+     DuplicateMember,
+     DuplicateTitle,
++    HoldNotAllowed,
+     InvalidAmount,
+     LoanLimitReached,
+     NoOpenLoan,
+@@ -22,6 +23,8 @@
+     Charge,
+     Copy,
+     CopyStatus,
++    Hold,
++    HoldStatus,
+     Loan,
+     Material,
+     Member,
+@@ -95,7 +98,10 @@
+     def checkout(self, member_id: str, copy_id: str) -> Loan:
+         member = self._repo.get_member(member_id)
+         copy = self._repo.get_copy(copy_id)
+-        if copy.status is not CopyStatus.AVAILABLE:
++        # A copy on the hold shelf may only go to the member it was set aside for.
++        hold = self._ready_hold_for(copy)
++        collecting = hold is not None and hold.member_id == member_id
++        if copy.status is not CopyStatus.AVAILABLE and not collecting:
+             raise CopyNotAvailable(copy_id, copy.status.value)
+         owed = self.balance(member_id)
+         if owed >= policy.BORROWING_BLOCK:
+@@ -114,6 +120,8 @@
+             due_on=policy.due_date(title.material, today),
+         )
+         copy.status = CopyStatus.ON_LOAN
++        if collecting:
++            hold.status = HoldStatus.FULFILLED
+         self._repo.add_loan(loan)
+         return loan
+ 
+@@ -123,7 +131,6 @@
+         if loan is None:
+             raise NoOpenLoan(copy_id)
+         loan.returned_on = self._clock.today()
+-        copy.status = CopyStatus.AVAILABLE
+         fine = overdue_fine(
+             self._repo.get_title(copy.isbn),
+             self._repo.get_member(loan.member_id),
+@@ -132,6 +139,7 @@
+         )
+         if fine > ZERO:
+             self._charge(loan.member_id, fine, "overdue fine", loan.loan_id)
++        self._shelve_or_set_aside(copy)
+         return loan
+ 
+     def get_loan(self, loan_id: str) -> Loan:
+@@ -151,6 +159,72 @@
+         day = as_of or self._clock.today()
+         return [l for l in self._repo.all_loans() if l.is_overdue(day)]
+ 
++    # holds -------------------------------------------------------------
++
++    def place_hold(self, member_id: str, isbn: str) -> Hold:
++        self._repo.get_member(member_id)
++        self._repo.get_title(isbn)
++        copies = self._repo.copies_of(isbn)
++        if any(c.status is CopyStatus.AVAILABLE for c in copies):
++            raise HoldNotAllowed(f"a copy of {isbn} is on the shelf")
++        if all(c.status is CopyStatus.WITHDRAWN for c in copies):
++            raise HoldNotAllowed(f"{isbn} has no copies in circulation")
++        if any(h.member_id == member_id and h.is_active for h in self._repo.holds_on(isbn)):
++            raise HoldNotAllowed(f"{member_id} already holds {isbn}")
++        if any(self._repo.get_copy(l.copy_id).isbn == isbn for l in self.open_loans(member_id)):
++            raise HoldNotAllowed(f"{member_id} has {isbn} on loan")
++        hold = Hold(self._repo.next_id("H"), member_id, isbn, self._clock.today())
++        self._repo.add_hold(hold)
++        return hold
++
++    def cancel_hold(self, hold_id: str) -> Hold:
++        hold = self._repo.get_hold(hold_id)
++        if not hold.is_active:
++            raise HoldNotAllowed(f"hold {hold_id} is {hold.status.value}")
++        was_ready = hold.status is HoldStatus.READY
++        hold.status = HoldStatus.CANCELLED
++        if was_ready:
++            self._shelve_or_set_aside(self._repo.get_copy(hold.copy_id))
++        return hold
++
++    def expire_holds(self) -> list[Hold]:
++        """Daily job: expire ready holds not collected by their pickup day."""
++        today = self._clock.today()
++        expired = [
++            h
++            for h in self._repo.all_holds()
++            if h.status is HoldStatus.READY and h.pickup_by < today
++        ]
++        for hold in expired:
++            hold.status = HoldStatus.EXPIRED
++            self._shelve_or_set_aside(self._repo.get_copy(hold.copy_id))
++        return expired
++
++    def holds_for(self, isbn: str) -> list[Hold]:
++        """Active holds on the title, first in line first."""
++        self._repo.get_title(isbn)
++        return [h for h in self._repo.holds_on(isbn) if h.is_active]
++
++    def _ready_hold_for(self, copy: Copy) -> Hold | None:
++        if copy.status is not CopyStatus.ON_HOLD_SHELF:
++            return None
++        for hold in self._repo.holds_on(copy.isbn):
++            if hold.status is HoldStatus.READY and hold.copy_id == copy.copy_id:
++                return hold
++        return None
++
++    def _shelve_or_set_aside(self, copy: Copy) -> None:
++        """A copy is free again: give it to the first waiting hold, else shelve it."""
++        waiting = [h for h in self._repo.holds_on(copy.isbn) if h.status is HoldStatus.WAITING]
++        if not waiting:
++            copy.status = CopyStatus.AVAILABLE
++            return
++        hold = waiting[0]
++        hold.status = HoldStatus.READY
++        hold.copy_id = copy.copy_id
++        hold.pickup_by = policy.pickup_deadline(self._clock.today())
++        copy.status = CopyStatus.ON_HOLD_SHELF
++
+     # accounts ----------------------------------------------------------
+ 
+     def balance(self, member_id: str) -> Decimal:
+diff -ruN f1/tests/test_holds.py af2/tests/test_holds.py
+--- f1/tests/test_holds.py	1970-01-01 03:00:00.000000000 +0300
++++ af2/tests/test_holds.py	2026-10-28 11:20:34.382249796 +0300
+@@ -0,0 +1,48 @@
++from datetime import date
++
++import pytest
++
++from lending import CopyStatus
++from lending.errors import CopyNotAvailable, HoldNotAllowed
++from lending.models import HoldStatus
++
++
++@pytest.fixture
++def all_out(service):
++    service.checkout("ann", "B1")
++    service.register_member("bob", "Bob")
++    service.checkout("bob", "B2")
++    return service
++
++
++def test_hold_needs_every_copy_out(service):
++    with pytest.raises(HoldNotAllowed):
++        service.place_hold("kid", "978-1")
++
++
++def test_returned_copy_is_set_aside_for_first_in_line(all_out, clock):
++    hold = all_out.place_hold("kid", "978-1")
++    clock.set(date(2026, 3, 10))
++    all_out.return_copy("B1")
++    assert hold.status is HoldStatus.READY
++    assert hold.copy_id == "B1"
++    assert hold.pickup_by == date(2026, 3, 17)
++    assert all_out.get_copy("B1").status is CopyStatus.ON_HOLD_SHELF
++
++
++def test_set_aside_copy_is_only_for_the_holder(all_out):
++    all_out.place_hold("kid", "978-1")
++    all_out.return_copy("B1")
++    with pytest.raises(CopyNotAvailable):
++        all_out.checkout("ann", "B1")
++    all_out.checkout("kid", "B1")
++    assert all_out.holds_for("978-1") == []
++
++
++def test_uncollected_hold_expires_and_copy_is_shelved(all_out, clock):
++    hold = all_out.place_hold("kid", "978-1")
++    all_out.return_copy("B1")
++    clock.set(date(2026, 3, 10))
++    assert all_out.expire_holds() == [hold]
++    assert hold.status is HoldStatus.EXPIRED
++    assert all_out.get_copy("B1").status is CopyStatus.AVAILABLE

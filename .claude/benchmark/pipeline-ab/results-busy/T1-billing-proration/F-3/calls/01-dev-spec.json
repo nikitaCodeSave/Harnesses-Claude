@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "spec",
+ "role": "dev",
+ "session": "bbbd3a9b-a834-4e3b-8c6a-26801ee06f06",
+ "resume": false,
+ "prompt": "Customers can't change plan right now: support has to cancel and resubscribe them by hand.\nAdd mid-cycle plan changes to the billing package: upgrades and downgrades, optionally\nswitching between monthly and annual billing, prorated so nobody pays twice for the same days.\n\nInterface (other code will call exactly this):\n- `BillingService.change_plan(subscription_id: str, new_plan_code: str, new_interval: Interval | None = None) -> Invoice | None`\n  in `src/billing/service.py`. `new_interval=None` keeps the subscription's current interval.\n- Return the invoice issued for the change (recorded in the store like every other invoice),\n  or `None` when nothing is billed at the moment of the request.\n- Add `InvalidPlanChange(BillingError)` to `src/billing/errors.py` for change requests that\n  can't be honoured; keep using the existing error classes where they already fit.\n\nInterview me until you could write the spec, then write it to SPEC.md. The spec says what and why (acceptance criteria as checkable statements, non-goals), not how. Copy any interface my request fixes (module paths, signatures, error classes) into it verbatim.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:37:27 socat[743030] W exiting on signal 15\n",
+ "wall_s": 74.2,
+ "result": "I've read the whole package and its tests. Some facts that shape the questions:\n\n- Nothing here holds a credit balance and nothing issues refunds. `cancel` says \"No refund\".\n- A period is half-open `[start, end)` and is billed on `start`. Period lengths vary (28–31 days, 365/366).\n- Retired plans can't be sold, but existing customers on them keep renewing.\n- `Subscription` only describes the current period. It has no way to hold a \"scheduled\" change yet.\n\nEach question below has my recommended answer. Reply \"all defaults\" or just list the numbers you'd change.\n\n**Core proration**\n\n1. **Unit of proration.** I'd prorate by calendar day over the actual length of the current period. Example: `unused = days in [today, period_end) ÷ days in [period_start, period_end)`. The day of the change counts as a day on the new plan. *Recommend: yes.*\n2. **Rounding.** Each prorated line is rounded once to cents, half-up, from the exact fraction. The invoice total is the sum of its lines. The invoice shows the credit for the old plan and the charge for the new plan as separate lines, not one net amount. *Recommend: yes.* Example: basic→pro on Jan 25 in the period Jan 15–Feb 15 has 21 of 31 days left. That gives a credit of −6.77, a charge of +20.32 and a total of 13.55.\n\n**Upgrade vs downgrade** (the core decision)\n\n3. With no credit balance, a downgrade can't be \"paid back\" right away. I'd decide by the net amount:\n   - **The change costs money today:** it takes effect today. We invoice the difference and return that invoice.\n   - **The change would produce a credit:** it is scheduled for the end of the current period. Nothing is billed now and we return `None`. The next renewal bills the new plan and interval at full price.\n\n   This keeps the no-refund policy and still means nobody pays twice. *Recommend: yes.* Alternatives: issue a negative invoice (a credit note), or carry the credit forward into future renewals. Both need a credit concept that doesn't exist today.\n4. **Net amount exactly zero** (for example, two plans with the same price): apply it immediately with no invoice and return `None`. *Recommend: yes.*\n\n**Interval switches**\n\n5. If the interval stays the same, the billing anchor stays the same: `period_start`/`period_end` don't move. If the interval changes and the change happens immediately, a new full period of the new interval starts today. It is charged at the full new price minus the credit for unused days of the old period. Example: monthly→annual on day 10 gives a new year starting today, at the annual price minus the unused monthly days. *Recommend: yes.*\n6. Under rule 3, annual→monthly will almost always be scheduled for the end of the annual period. *OK?*\n\n**Scheduled (deferred) changes**\n\n7. A subscription has at most one scheduled change, and a new `change_plan` call replaces it. Asking to go back to the current plan and interval while a change is scheduled cancels the scheduled change and returns `None`. Canceling the subscription drops any scheduled change. *Recommend: yes.*\n8. **Should other code be able to see a scheduled change** on the `Subscription`, for example to show \"switches to Basic on Mar 15\"? *Recommend: yes, readable as the target plan, the target interval and the effective date.*\n\n**Edge cases and errors**\n\n9. **During a trial:** switch the plan and/or interval immediately, bill nothing, return `None`, and leave the trial end date unchanged. The first paid period is billed on the new plan. *Recommend: yes.*\n10. **A renewal is outstanding** (`period_end <= today` but `renew_due` hasn't run yet): raise `InvalidPlanChange`. The current period is over, so there's nothing to prorate against. *Recommend: yes.* The alternative is for `change_plan` to run the renewal first, but then one call would produce two invoices.\n11. **Errors:**\n    - Unknown subscription → `SubscriptionNotFound`.\n    - Canceled subscription → `SubscriptionNotActive`.\n    - Unknown plan → `PlanNotFound`.\n    - Retired target plan → `PlanNotAvailable`.\n    - Same plan and same interval with nothing scheduled → `InvalidPlanChange`.\n\n    *Recommend: yes.*\n12. **Retired current plan, interval-only switch** (for example, a customer on retired \"basic\" asks to go monthly→annual): I'd treat it as a new sale and raise `PlanNotAvailable`. Customers can stay where they are or move to an active plan. *Recommend: reject.* Do you agree?\n\n**Proposed non-goals:** credit balances, refunds and credit notes; seats/quantities; coupons and taxes; changes scheduled for an arbitrary future date; changing trial length; changing plan prices; customer notifications; concurrency and locking.\n\n13. Is anything missing from that list, or anything on it that should be in scope?",
+ "is_error": false,
+ "num_turns": 5,
+ "total_cost_usd": 0.276848,
+ "usage": {
+  "input_tokens": 8,
+  "cache_creation_input_tokens": 17528,
+  "cache_read_input_tokens": 73960,
+  "output_tokens": 6090,
+  "output_tokens_details": {
+   "thinking_tokens": 3895
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 17528,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 6090,
+   "cacheReadInputTokens": 73960,
+   "cacheCreationInputTokens": 17528,
+   "webSearchRequests": 0,
+   "costUSD": 0.276848,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 3895,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 17528,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 73665,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "bbbd3a9b-a834-4e3b-8c6a-26801ee06f06"
+}

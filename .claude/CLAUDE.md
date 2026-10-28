@@ -10,16 +10,16 @@
 
 **Этот репозиторий — лаборатория harness'а, не шаблон.** `.claude/` здесь
 содержит R&D-машинерию (`benchmark/`, архив `docs/archive/`), которую НЕЛЬЗЯ
-копировать целиком в целевой проект. Каноничное, отгружаемое знание о дизайне
-harness'а живёт в глобальном скилле `~/.claude/skills/claude-code-harness/`;
-минимальный стартовый harness для нового проекта — его **Bootstrap-режим**, а
-не копия этого репо.
+копировать целиком в целевой проект. Исследование и замеры живут здесь
+(`.claude/docs/`, `benchmark/`); в проекты едет только измеренный минимум —
+плагин `harness` из `~/PROJECTS/claude-code-harness` (один скилл и три шаблона,
+фраза «set up Claude Code harness in this project»), а не копия этого репо.
 
 ## Foundational principle
 
 **Под способной моделью минимум обвязки даёт максимум продуктивности**
 (model-agnostic; провенанс последнего re-grounding — refresh-ledger в
-`harness-evolution.md` кита). Компонент не добавляется, если кодирует
+`harness-evolution.md`). Компонент не добавляется, если кодирует
 assumption «модель не умеет X», а модель уже умеет X нативно. Порог появления
 — повторяющаяся эмпирика или multi-source: **single-incident в invariant не
 превращается**.
@@ -38,11 +38,13 @@ executor напишет код. Skill / agent / hook как environment configur
   [rules/api-constraint.md](rules/api-constraint.md) (загружен всегда, здесь не
   пересказывается).
 - **Built-ins first.** Перед созданием custom subagent'а — сверься с инвентарём
-  в `native-capabilities.md` кита (`claude agents` — менеджер фоновых сессий, типы
+  в `native-capabilities.md` (`claude agents` — менеджер фоновых сессий, типы
   он не перечисляет). Built-ins не дублируются; orchestrator-роль — сам main thread.
-- **Spawn subagent'а оправдан только** при (а) изоляции контекста, (б)
-  параллельности независимых проверок, (в) auto-compact rescue. В остальном —
-  main thread сам, даже если описание агента подходит «по ассоциации».
+- **Spawn subagent'а оправдан только** при (а) изоляции шумного вывода
+  (широкий скан, логи), (б) параллельности независимых задач, (в) независимом
+  ревью свежим контекстом. Защита контекстного окна сама по себе — не основание
+  (best-practices, «What you can stop doing»). В остальном — main thread сам,
+  даже если описание агента подходит «по ассоциации».
   Scope больше одного контекста → built-in dynamic workflow (`ultracode`), НЕ
   кастомный pipeline. Дисциплина и цифры: [multi-agent.md](docs/multi-agent.md).
 - **Независимый judge для silent-wrong класса** (парсеры, guards, инвариантные
@@ -77,11 +79,12 @@ paths для DENY. Сохранить в проектном CLAUDE.md (в кор
 - Расширение harness'а (agents/hooks/commands) main thread делает нативно;
   skills — через плагин skill-creator из marketplace, не форком.
 - Проектных skills нет — каталога `.claude/skills/` в репо не существует.
-  Devlog едет плагином `devlog@skills-dir`; в репо ничего devlog'ового не
+  Devlog едет плагином `devlog@claude-code-harness` (project scope, только в лабе); в репо ничего devlog'ового не
   дублируется. Self-описывающие skills не создаются; action-skill появляется
   только под повторяющуюся операцию, которой нет built-in'а.
-- Каноничное знание о дизайне harness'а — глобальный скилл
-  `claude-code-harness` (он же плагин `~/PROJECTS/claude-code-harness`).
+- Знание о дизайне harness'а — здесь, в `.claude/docs/`; вывод из замера
+  попадает в проекты только через плагин `harness` (`~/PROJECTS/claude-code-harness`),
+  и только когда строка шаблона опирается на измерение или first-party источник.
 
 ## Reference materials
 
@@ -90,7 +93,7 @@ paths для DENY. Сохранить в проектном CLAUDE.md (в кор
   ([async](docs/workflow-async.md) · [orchestration](docs/workflow-orchestration.md)
   · [cloud-offload](docs/workflow-cloud-offload.md) · [evolution](docs/workflow-evolution.md)).
 - Built-ins current-срез — **единственный** canonical источник:
-  `~/.claude/skills/claude-code-harness/references/native-capabilities.md`. Это
+  `.claude/docs/native-capabilities.md`. Это
   единственный файл харнеса, пиннящийся к версии CC и поколению моделей; все
   остальные доки version-free и ссылаются сюда.
 

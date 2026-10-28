@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "spec",
+ "role": "dev",
+ "session": "b8767255-6f36-42e9-a6ea-1a2ac350a590",
+ "resume": false,
+ "prompt": "Add stock reservations to the `inventory` package. Checkout must be able to hold stock for a cart before payment, then either confirm the hold into an order or release it. Holds nobody confirms must lapse on their own after a while, and retries from the cart service must be safe (idempotency key).\n\nInterface — hidden tests call exactly this; `InventoryService(repository, ledger, clock)` keeps working as is:\n- `InventoryService.reserve(warehouse: str, items: dict[str, int], idempotency_key: str) -> Reservation`\n- `InventoryService.confirm_reservation(reservation_id: str) -> Order`\n- `InventoryService.release_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.get_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.available(sku, warehouse)` must take holds into account.\n- `inventory.models`: dataclass `Reservation` with `reservation_id: str`, `warehouse: str`, `items: dict[str, int]` (units held per SKU), `status: ReservationStatus`, `expires_at: datetime`, `order_id: str | None`; enum `ReservationStatus` with members `ACTIVE`, `CONFIRMED`, `RELEASED`, `EXPIRED`.\n- `inventory.errors`: new `ReservationNotFound`, `ReservationExpired`, `InvalidReservationState`, `IdempotencyConflict` (all subclass `InventoryError`); reuse the existing errors where they fit.\n- Time comes only from the injected clock. There is no background job: expiry must take effect without anyone calling a sweep.\n\nI own the business rules — ask me if something is unclear.\n\nInterview me until you could write the spec, then write it to SPEC.md. The spec says what and why (acceptance criteria as checkable statements, non-goals), not how. Copy any interface my request fixes (module paths, signatures, error classes) into it verbatim.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:01:16 socat[601640] W exiting on signal 15\n",
+ "wall_s": 33.6,
+ "result": "I've read the package. It has a ledger, allocations from `PLACED` orders, `available = on_hand - allocated` floored at 0, and all-or-nothing `place_order`. Below are the business rules I can't infer from the code. Each one has my suggested default, so you can answer with \"defaults OK except N\".\n\n**Hold lifetime**\n1. **How long does a hold last?** Your interface has no TTL parameter. Default: a fixed 15 minutes, set by an optional keyword argument on the constructor (`InventoryService(repo, ledger, clock, reservation_ttl=...)`), so existing callers still work. Is 15 minutes right, and should the duration be configurable at all?\n2. **What happens at the exact expiry moment?** Default: a hold is expired when `now >= expires_at`, so it's already dead at that instant.\n3. **Can a hold be extended?** Default: no. Extending or refreshing a hold is a non-goal.\n\n**Reserve**\n4. **All or nothing?** Default: yes, like `place_order`. If any SKU is short, the call raises `InsufficientStock` and nothing is held.\n5. **Validation:** Default: reuse the existing errors. Empty `items` raises `InvalidOrder`, a bad quantity raises `InvalidQuantity`, and unknown SKUs or warehouses raise `UnknownSku`/`UnknownWarehouse`. Is an empty-string `idempotency_key` allowed, or should it be rejected (and with which error)?\n\n**Idempotency**\n6. **What scope does a key have, and how long does it live?** Default: keys are global (not per warehouse) and remembered forever.\n7. **Same key, same request (same warehouse and same items):** Default: return the original reservation as it is now, whatever its status. If it has expired, released or confirmed, the caller gets that back. No new hold is created and the clock isn't reset.\n8. **Same key, different warehouse or items:** raise `IdempotencyConflict`. Default: item order doesn't matter, so `{\"A\":1,\"B\":2}` counts as the same request as `{\"B\":2,\"A\":1}`.\n9. **Does a failed reserve use up its key?** For example, it fails with `InsufficientStock` and the cart retries later with the same key once stock exists. Default: no, failed attempts leave no trace.\n\n**Confirm / release**\n10. **Confirming a held reservation:** Default: it creates a normal `PLACED` order with the same lines, `placed_at` set to the confirm time and a normal `ORD-` id. The reservation becomes `CONFIRMED` with `order_id` set, and the stock moves from \"held\" to \"allocated\" with no gap. Is that right?\n11. **Can a confirm fail because on-hand stock dropped?** On-hand can fall below the held quantity through `adjust()`, for example a write-off. Default: the hold is a guarantee against other orders but not against physical loss. Confirm raises `InsufficientStock` and the reservation stays `ACTIVE`. The alternative is to confirm anyway and over-allocate.\n12. **Repeated calls:** These are what you'd see from cart retries.\n    - Confirming an already-`CONFIRMED` reservation: default is to return the same order without creating a new one. Or would you rather it raise `InvalidReservationState`?\n    - Releasing an already-`RELEASED` reservation: default is to return it unchanged without an error.\n13. **Invalid transitions:** Default:\n    - Confirming an expired hold raises `ReservationExpired`.\n    - Releasing an expired hold returns it with status `EXPIRED`, no error.\n    - Releasing a confirmed hold raises `InvalidReservationState`.\n    - Confirming a released hold raises `InvalidReservationState`.\n14. **Order cancelled after confirm:** If the order created by a confirm is later cancelled, the reservation stays `CONFIRMED`. It isn't revived.\n\n**Visibility**\n15. **Does `allocated()` include holds?** Default: no. `allocated()` still means orders only, and holds are subtracted separately in `available = on_hand - allocated - held` (floored at 0). Do you want a public `held(sku, warehouse)` query and a \"held\" column in `stock_report`, or is that out of scope?\n16. **Status of a lapsed hold that nobody has touched:** Default: `get_reservation` reports `EXPIRED`, and the units count as free in `available()` from that moment.\n17. **Reservation ids:** Default: `RES-0001`, `RES-0002`, … numbered in sequence the same way order ids are. Do you want that format fixed in the spec?\n\nConcurrency and multi-process safety would be a non-goal, since this is an in-memory, single-threaded package. Tell me if you see it differently.",
+ "is_error": false,
+ "num_turns": 3,
+ "total_cost_usd": 0.201016,
+ "usage": {
+  "input_tokens": 6,
+  "cache_creation_input_tokens": 16174,
+  "cache_read_input_tokens": 48400,
+  "output_tokens": 3096,
+  "output_tokens_details": {
+   "thinking_tokens": 1207
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 16174,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 6,
+   "outputTokens": 3096,
+   "cacheReadInputTokens": 48400,
+   "cacheCreationInputTokens": 16174,
+   "webSearchRequests": 0,
+   "costUSD": 0.201016,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1207,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 16174,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 33083,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "b8767255-6f36-42e9-a6ea-1a2ac350a590"
+}

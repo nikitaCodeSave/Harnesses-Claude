@@ -1,13 +1,13 @@
 # Harnesses-Claude
 
-**Лаборатория R&D дизайна harness'а для Claude Code.** Выводы model-agnostic; актуальный срез версий и built-in'ов — единственный version-pinned файл кита, `references/native-capabilities.md`.
+**Лаборатория R&D дизайна harness'а для Claude Code.** Выводы model-agnostic; актуальный срез версий и built-in'ов — единственный version-pinned файл лабы, `.claude/docs/native-capabilities.md`.
 
 > ⚠️ **Это лаборатория, а не шаблон.** `.claude/` здесь содержит исследовательскую
 > машинерию (`benchmark/`, discovery-критиков, event-логи, архивный `docs/archive/loop-2026-05/`),
-> которую **нельзя копировать целиком** в рабочий проект. Отгружаемое каноничное знание о дизайне
-> harness'а живёт в отдельном **глобальном скилле** `~/.claude/skills/claude-code-harness/`
-> (плагин `claude-code-harness` v1.10.0); минимальный стартовый harness для нового проекта —
-> его **Bootstrap-режим**, а не клон этого репозитория.
+> которую **нельзя копировать целиком** в рабочий проект. В проекты едет только измеренный
+> минимум — плагин `harness` из `~/PROJECTS/claude-code-harness` (один скилл и три шаблона;
+> фраза «set up Claude Code harness in this project» — для нового проекта, существующего и
+> большого многосоставного), а не клон этого репозитория.
 
 ## Что это
 
@@ -36,14 +36,14 @@ thread'а — anti-pattern.
 
 | | Где | Что |
 |---|---|---|
-| **Канон** (отгружается) | `~/.claude/skills/claude-code-harness/` | bootstrap / audit / extend / explain режимы; `references/` (native-capabilities, harness-discipline, harness-evolution, evidence-base, operator-playbook); shipped project-docs. Ни агентов, ни команд, ни хуков — только скилл и справочники |
+| **Кит** (отгружается) | плагин `harness`, репо `~/PROJECTS/claude-code-harness` | один скилл: читает репо и выбирает путь (новый / существующий / с harness'ом), ставит корневой `CLAUDE.md` с блоками *How we work* и *Project knowledge*, `settings.json`, `CLAUDE.md` компонентов, подключает `mattpocock-skills`. Ни агентов, ни команд, ни хуков; каждая строка шаблона опирается на замер `benchmark/pipeline-ab/` |
 | **Practice baseline §1–8** | operator-global `~/.claude/CLAUDE.md` | think-first · simplicity · surgical · goal-driven · testing · continuity · guardrails · independent-verification. Применяется во всех проектах, **не дублируется** в каждый репо |
 | **Лаборатория** (этот репо) | `.claude/` | R&D-машинерия: эволюция канона, бенчмарки, devlog, архив ретайренных экспериментов — **не копируется** |
 
 ## Структура репозитория
 
 ```
-WORKFLOW.md              — портативный human-facing гайд: старт → требования → дизайн → Plan→Work→Review → continuity
+WORKFLOW.md              — портативный human-facing гайд: старт → требования → дизайн → Spec→Build→Review → continuity
 .claude/
 ├── CLAUDE.md            — мета-оркестраторские инструкции (принцип, anti-patterns, API/built-ins/spawn-policy)
 ├── settings.json        — permissions (read-only Bash/Read) + hook-конфигурация
@@ -62,17 +62,25 @@ WORKFLOW.md              — портативный human-facing гайд: ст�
 
 ## Как это работает
 
-**Spine — Plan → Work → Review** (дефолт для нетривиальной задачи; typo/one-liner пропускает Plan):
+**Spine — Spec → Build → Review** (дефолт для нетривиальной задачи, помещающейся в одну сессию;
+typo/one-liner — сразу Build → Review). Выбран замером `.claude/benchmark/pipeline-ab/` против ванили,
+четырёхстадийного потока и пайплайна Pocock:
 
-- **Plan** — read-only разведка до первой записи (plan mode / built-in `Plan`-агент). Выход:
-  явные acceptance criteria (= оракул, против которого крутится Review), critical files, ADR
-  если объяснение решения заняло бы >5 мин.
-- **Work** — один main thread на весь lifecycle (1M контекст). Test-driven как runnable-оракул
-  (RED → GREEN → refactor, не догма очерёдности; тест обязан быть способен упасть). Subagent —
-  только при изоляции контекста / параллельности / compact-rescue.
-- **Review** — self-review + tests/lint/type-check всегда; `/code-review` на substantive change;
-  **fresh-context критик** (отдельная сессия/subagent, которому велено опровергать) для
-  high-stakes. «Looks done ≠ is done».
+- **Spec** — интервью, пока модель не сможет написать спеку, затем `SPEC.md`: acceptance
+  criteria (= оракул, против которого крутится Review), интерфейс из запроса дословно, ограничения
+  scope, non-goals, ADR если объяснение решения заняло бы >5 мин. Человек читает короткую спеку,
+  а не длинный план.
+- **Build** — в той же сессии, что писала спеку, один main thread (1M контекст). Порядок тестов и
+  кода не предписывается (TDD снят), тест обязан быть способен упасть, «готово» — с командой и
+  выводом. Subagent — только при изоляции шумного вывода / параллельности / независимом ревью.
+- **Review** — `/code-review` на substantive change; по уровню риска — одно ревью ветки свежим
+  контекстом против `SPEC.md`, только корректность, ≤3 раундов. «Looks done ≠ is done».
+- **Эскалация Check** — работа не помещается в одну сессию или silent-wrong класс: критерии из
+  спеки превращаются в приёмочные тесты отдельным контекстом до свежей сборки, read-only
+  для исполнителя deny-правилом.
+- **Долгий проект** (месяцы, много сессий) — та же спина плюс лёгкие правила знаний в `CLAUDE.md`
+  (`GLOSSARY.md`, ADR включая решения «на будущее», читать перед работой); инструменты Pocock — по
+  триггеру: фича больше сессии, туман, `/retro`. `.claude/docs/workflow.md` § Долгий проект.
 
 **Лестница верификации** (cheapest → strongest): in-prompt check → `/goal` → Stop-hook →
 `/code-review` → fresh-context критик / dynamic workflow.
@@ -90,7 +98,7 @@ continuity (devlog/progress/memory) · mechanical-guardrails · independent-veri
 
 - **Refresh-ledger** — штамп последней точки заземления (`last-grounded: CC <версия> ·
   <модели поколения> · дата · проверенные источники`; сам штамп живёт в
-  `harness-evolution.md` кита). Дельта `claude --version` против ledger — самостоятельный
+  `harness-evolution.md`). Дельта `claude --version` против ledger — самостоятельный
   триггер ревизии.
 - **D-цикл** (≈1 сессия, на milestone-close) — fold доказанных находок внутрь канона:
   собрать → классифицировать (`kit-gap` / `project-specific` / `single-incident` / `noise`) →
@@ -100,14 +108,14 @@ continuity (devlog/progress/memory) · mechanical-guardrails · independent-veri
   от ledger) → **re-test** (что из канона устарело: `claude --safe-mode` как быстрый тест
   «модель или обвязка»; устаревшее удаляется, не архивируется).
 
-Дисциплина — `~/.claude/skills/claude-code-harness/references/harness-evolution.md`.
+Дисциплина — `.claude/docs/harness-evolution.md`.
 
 ## Constraints
 
 - **API:** строго CLI-подписка Claude Code. Anthropic API, managed-agents, beta headers,
   `--bare`, `--max-budget-usd` — **out of scope** (`.claude/rules/api-constraint.md`).
 - **Built-ins first:** перед любым custom-субагентом — сверка с инвентарём в
-  `native-capabilities.md` кита. Пять специалистов (Explore, Plan, general-purpose,
+  `native-capabilities.md`. Пять специалистов (Explore, Plan, general-purpose,
   statusline-setup, claude-code-guide) дублировать нельзя; шестой, catch-all `claude`, —
   дефолт фонового dispatch.
 - **Single-agent default:** один main thread — дефолт для most coding. Bounded fan-out —
@@ -122,4 +130,4 @@ continuity (devlog/progress/memory) · mechanical-guardrails · independent-veri
 | Принцип, anti-patterns, spawn-policy | [`.claude/CLAUDE.md`](.claude/CLAUDE.md) |
 | Машинный routing-spine | `.claude/docs/workflow.md` |
 | Хронология решений | `.claude/devlog/` (`tldr.md` для холодного входа) |
-| Поставить harness в новый проект | глобальный скилл `claude-code-harness` (Bootstrap-режим) |
+| Поставить harness в проект (новый, существующий, большой) | плагин `harness`: «set up Claude Code harness in this project» |

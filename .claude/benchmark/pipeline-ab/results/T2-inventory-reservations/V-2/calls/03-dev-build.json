@@ -1,0 +1,84 @@
+{
+ "n": 3,
+ "label": "build",
+ "role": "dev",
+ "session": "854224fe-d7ef-4d98-85ee-c06f365302bf",
+ "resume": true,
+ "prompt": "1. Hold duration: 20 minutes, not 15. Hold lasts 20 minutes from creation, so expires_at = creation time + 20 min. A configurable keyword is fine as long as the default is 20 minutes.\n\n2. Expiry boundary: yes, expired from expires_at on, that instant included. Units become available again with no sweep.\n\n3. Idempotency keys: all your bullets are right, including the third. Same key and same request returns the existing reservation in its current state, whatever that is. One clarification: 'same request' means the same warehouse and the same requested items, meaning what was asked for, not what ended up held. A failed reserve leaves no trace.\n\n4. Table: correct as written, and keep both 'safe to retry' cells as no-ops, not errors. A repeated confirm on a CONFIRMED reservation returns the same order and creates nothing, even after the 20 minutes have passed.\n\n5. Confirm: the held units become the order's allocation, so available doesn't change at confirm. Whether confirm checks stock after a write-off is up to you.\n\nYour other defaults:\n- All-or-nothing reserve: no, that's wrong. Reserve is partial. Each line holds as many units as are available right now, up to what was asked. A line with nothing available is left out of `items` entirely, not even shown with 0. Only if no line can hold anything does reserve fail with InsufficientStock, and then nothing is created. Confirm creates an order for exactly the units held. `place_order` stays all-or-nothing and can only take available stock.\n- Validation: same as `place_order`, so UnknownWarehouse, UnknownSku and InvalidQuantity for zero or negative quantities. A rejected request holds nothing, not even for its valid lines.\n- Stock numbers: available = on-hand − PLACED-order allocations − ACTIVE holds, per SKU per warehouse, never below 0. A hold in one warehouse doesn't affect others. Reserve, release, expire and confirm never write to the ledger or change on-hand. I don't mind about the stock report or a `held()` query.\n- Expiry computed on read: fine.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 01:47:05 socat[3235932] W exiting on signal 15\n",
+ "wall_s": 114.4,
+ "result": "Stock reservations are in, following the rules you set. The full suite passes (62 tests, including 36 new ones in `tests/test_reservations.py`). I haven't committed anything.\n\n**What changed**\n- **`models.py`:** added `ReservationStatus` and the `Reservation` dataclass with exactly the fields you specified. Both are also exported from `inventory`.\n- **`errors.py`:** added the four new errors, all subclassing `InventoryError`.\n- **`repository.py`:** reservations are stored with IDs `RES-0001`, `RES-0002`, … Each idempotency key is stored with the warehouse and items that were asked for, not what ended up held. That stored request is what a retry is compared against.\n- **`service.py`:**\n  - The constructor takes an optional `reservation_ttl`, defaulting to 20 minutes, so `InventoryService(repo, ledger, clock)` works unchanged.\n  - New `reserve`, `confirm_reservation`, `release_reservation` and `get_reservation`.\n  - New `held(sku, warehouse)` query.\n  - `available` is now on-hand − PLACED allocations − active holds, never below 0.\n- **README:** documents the reservation lifecycle.\n\n**How some of it works**\n- **Expiry:** whenever a reservation is looked up, or holds are counted for `available`/`held`, the clock is checked. From `expires_at` on, that instant included, the hold is marked EXPIRED and stops counting. Nothing needs to run a sweep.\n- **Request checks:** `reserve` checks the request first (same errors as `place_order`), then the idempotency key, then stock. So a retry with the same key gets the original reservation back even if stock has since run out.\n- **Confirm:** the order gets exactly the held units, and `allocated` takes over from `held`, so `available` doesn't move. Order IDs come from the same sequence as `place_order`.\n\n**Decisions I made where you left it open**\n- **No stock check on confirm.** Confirm doesn't check stock again after a write-off. This matches how `place_order` and `adjust` already treat allocations, and `ship_order` still refuses to ship more than is physically there.\n- **Error when nothing can be held.** The `InsufficientStock` names the first requested line and reports 0 available.\n- **Stock report unchanged.** I left it as is. Its `available` column now counts holds, so on a SKU with active holds, `on_hand − allocated` will no longer equal `available`. The difference is the held units. Adding a `held` column would change `StockRow` and break the existing report test, so I didn't. Say if you want it.\n- **Shared items dict.** `Reservation.items` is the stored dict itself, the same way `Order` objects are shared today. A caller that changes it would change the hold.",
+ "is_error": false,
+ "num_turns": 10,
+ "total_cost_usd": 0.7420549999999999,
+ "usage": {
+  "input_tokens": 14,
+  "cache_creation_input_tokens": 20569,
+  "cache_read_input_tokens": 288137,
+  "output_tokens": 14453,
+  "output_tokens_details": {
+   "thinking_tokens": 2396
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 20569,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 20,
+   "outputTokens": 17571,
+   "thinkingTokens": 4165,
+   "cacheReadInputTokens": 336575,
+   "cacheCreationInputTokens": 40405,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 40405,
+   "webSearchRequests": 0,
+   "costUSD": 0.7420549999999999,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 113914,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "854224fe-d7ef-4d98-85ee-c06f365302bf"
+}

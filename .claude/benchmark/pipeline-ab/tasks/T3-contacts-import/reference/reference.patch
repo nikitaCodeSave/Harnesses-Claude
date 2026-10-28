@@ -1,0 +1,278 @@
+diff -ruN a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -14,6 +14,7 @@
+   repository.py  InMemoryContactRepository, keyed by case-insensitive email
+   service.py     ContactBook, use cases on top of a repository
+   export.py      CSV export
++  importer.py    CSV import (import_contacts), the counterpart of export.py
+ ```
+ 
+ Store only normalised values: go through `validation.py` (or `Contact.create`) rather
+diff -ruN a/src/contactbook/errors.py b/src/contactbook/errors.py
+--- a/src/contactbook/errors.py
++++ b/src/contactbook/errors.py
+@@ -38,3 +38,10 @@
+     def __init__(self, email: str) -> None:
+         super().__init__(f"no contact with email {email}")
+         self.email = email
++
++
++class ImportFileError(ContactError):
++    """A file cannot be imported at all: unreadable, wrong header, or too large.
++
++    Raised before anything is written, so the repository is left untouched.
++    """
+diff -ruN a/src/contactbook/importer.py b/src/contactbook/importer.py
+--- a/src/contactbook/importer.py
++++ b/src/contactbook/importer.py
+@@ -0,0 +1,191 @@
++"""Bulk import of contacts from CSV.
++
++Accepts the format ``export_csv`` writes (``name,email,phone,tags``) and the
++``first_name``/``last_name`` variant produced by address-book exports.
++
++Rows are independent: a bad row is reported and skipped, the rest is imported.
++Problems that make the whole file unusable (encoding, header, size) raise
++ImportFileError before anything is written. Row numbers are spreadsheet rows:
++the header is row 1 and blank lines count, so they match what the user sees
++when opening the file in Excel.
++"""
++
++from __future__ import annotations
++
++import csv
++import io
++from dataclasses import dataclass, field
++
++from .errors import ImportFileError, ValidationError
++from .export import TAG_SEPARATOR
++from .models import Contact
++from .repository import InMemoryContactRepository
++from .validation import normalize_email, normalize_phone, normalize_tag, validate_name
++
++MAX_ROWS = 1000
++_BOM = "\ufeff"
++
++
++@dataclass(frozen=True)
++class RowIssue:
++    """A problem on one row. ``column`` is the lower-case column name, if any."""
++
++    row: int
++    column: str | None
++    message: str
++
++
++@dataclass
++class ImportReport:
++    created: list[str] = field(default_factory=list)
++    updated: list[str] = field(default_factory=list)
++    errors: list[RowIssue] = field(default_factory=list)
++    warnings: list[RowIssue] = field(default_factory=list)
++
++
++class _RowRejected(Exception):
++    def __init__(self, column: str, message: str) -> None:
++        super().__init__(message)
++        self.column = column
++        self.message = message
++
++
++def import_contacts(repo: InMemoryContactRepository, data: str | bytes) -> ImportReport:
++    """Import CSV content into ``repo`` and report what happened.
++
++    New emails are created; emails already in ``repo`` are merged (the file's
++    name wins, a phone is only replaced by a non-empty valid value, tags are
++    added). The first row with a given email wins; later ones are errors.
++    """
++    header, rows = _read(_decode(data))
++    columns = _columns(header)
++    if len(rows) > MAX_ROWS:
++        raise ImportFileError(
++            f"the file has {len(rows)} contacts; at most {MAX_ROWS} can be imported at once"
++        )
++
++    report = ImportReport()
++    first_row_of: dict[str, int] = {}
++    for row_number, record in rows:
++        cell = _cell_reader(columns, record)
++        try:
++            email = _email(cell, first_row_of, row_number)
++            name = _name(cell)
++            tags = _tags(cell("tags"))
++        except _RowRejected as rejected:
++            report.errors.append(RowIssue(row_number, rejected.column, rejected.message))
++            continue
++        phone = _phone(cell("phone"), row_number, report)
++        _save(repo, report, email, name, phone, tags)
++    return report
++
++
++def _decode(data: str | bytes) -> str:
++    if isinstance(data, bytes):
++        try:
++            data = data.decode("utf-8")
++        except UnicodeDecodeError:
++            raise ImportFileError(
++                "the file is not UTF-8; re-save it from Excel as 'CSV UTF-8'"
++            ) from None
++    return data.removeprefix(_BOM)
++
++
++def _read(text: str) -> tuple[list[str], list[tuple[int, list[str]]]]:
++    """Return the header and the non-blank records with their line numbers."""
++    reader = csv.reader(io.StringIO(text, newline=""))
++    try:
++        header = next(reader, None)
++        if header is None:
++            raise ImportFileError("the file is empty")
++        rows = [
++            (reader.line_num, record)
++            for record in reader
++            if any(cell.strip() for cell in record)
++        ]
++    except csv.Error as exc:
++        raise ImportFileError(f"the file is not valid CSV: {exc}") from None
++    return header, rows
++
++
++def _columns(header: list[str]) -> dict[str, int]:
++    columns: dict[str, int] = {}
++    for position, title in enumerate(header):
++        columns.setdefault(title.strip().lower(), position)
++    missing = [] if "email" in columns else ["email"]
++    if "name" not in columns and not {"first_name", "last_name"} <= columns.keys():
++        missing.append("name")
++    if missing:
++        raise ImportFileError(f"missing required column(s): {', '.join(missing)}")
++    return columns
++
++
++def _cell_reader(columns: dict[str, int], record: list[str]):
++    def cell(column: str) -> str:
++        position = columns.get(column)
++        if position is None or position >= len(record):
++            return ""
++        return record[position].strip()
++
++    return cell
++
++
++def _email(cell, first_row_of: dict[str, int], row_number: int) -> str:
++    try:
++        email = normalize_email(cell("email"))
++    except ValidationError as exc:
++        raise _RowRejected("email", exc.message) from None
++    if email in first_row_of:
++        raise _RowRejected("email", f"{email} already appears on row {first_row_of[email]}")
++    first_row_of[email] = row_number
++    return email
++
++
++def _name(cell) -> str:
++    raw = cell("name") if cell("name") else f"{cell('first_name')} {cell('last_name')}"
++    try:
++        return validate_name(raw)
++    except ValidationError as exc:
++        raise _RowRejected("name", exc.message) from None
++
++
++def _tags(raw: str) -> frozenset[str]:
++    try:
++        return frozenset(
++            normalize_tag(piece) for piece in raw.split(TAG_SEPARATOR) if piece.strip()
++        )
++    except ValidationError as exc:
++        raise _RowRejected("tags", exc.message) from None
++
++
++def _phone(raw: str, row_number: int, report: ImportReport) -> str | None:
++    """Normalised phone, or None if the cell is empty or invalid (invalid -> warning)."""
++    if not raw:
++        return None
++    try:
++        return normalize_phone(raw)
++    except ValidationError as exc:
++        report.warnings.append(
++            RowIssue(row_number, "phone", f"{exc.message}; contact imported without it")
++        )
++        return None
++
++
++def _save(
++    repo: InMemoryContactRepository,
++    report: ImportReport,
++    email: str,
++    name: str,
++    phone: str | None,
++    tags: frozenset[str],
++) -> None:
++    existing = repo.find(email)
++    if existing is None:
++        repo.add(Contact(name=name, email=email, phone=phone, tags=tags))
++        report.created.append(email)
++        return
++    merged = existing.rename(name).with_tags(*tags)
++    if phone is not None:
++        merged = merged.with_phone(phone)
++    repo.update(merged)
++    report.updated.append(email)
+diff -ruN a/tests/test_importer.py b/tests/test_importer.py
+--- a/tests/test_importer.py
++++ b/tests/test_importer.py
+@@ -0,0 +1,54 @@
++import pytest
++
++from contactbook.errors import ImportFileError
++from contactbook.importer import import_contacts
++from contactbook.models import Contact
++from contactbook.repository import InMemoryContactRepository
++
++
++def test_new_rows_are_created():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, "name,email,tags\nAnn Lee,Ann@Example.com,VIP;lead\n")
++    assert (report.created, repo.get("ann@example.com").tags) == (
++        ["ann@example.com"],
++        {"vip", "lead"},
++    )
++
++
++def test_existing_contact_is_merged():
++    repo = InMemoryContactRepository(
++        [Contact.create("Ann Lee", "ann@example.com", "+15551234567", ["vip"])]
++    )
++    import_contacts(repo, "name,email,phone,tags\nAnn Smith,ann@example.com,,partner\n")
++    assert repo.get("ann@example.com") == Contact(
++        "Ann Smith", "ann@example.com", "+15551234567", frozenset({"vip", "partner"})
++    )
++
++
++def test_error_rows_use_spreadsheet_numbering():
++    report = import_contacts(
++        InMemoryContactRepository(), "name,email\n\nAnn Lee,ann@example.com\nAnn,ann@example.com\n"
++    )
++    assert [(e.row, e.column) for e in report.errors] == [(4, "email")]
++
++
++def test_invalid_phone_is_a_warning():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, "name,email,phone\nAnn Lee,ann@example.com,ask me\n")
++    assert ([(w.row, w.column) for w in report.warnings], repo.get("ann@example.com").phone) == (
++        [(2, "phone")],
++        None,
++    )
++
++
++def test_bom_is_ignored():
++    report = import_contacts(InMemoryContactRepository(), "\ufeffname,email\nAnn,ann@example.com\n".encode())
++    assert report.created == ["ann@example.com"]
++
++
++def test_too_many_rows_rejects_file():
++    rows = "".join(f"P{i},p{i}@example.com\n" for i in range(1001))
++    repo = InMemoryContactRepository()
++    with pytest.raises(ImportFileError):
++        import_contacts(repo, "name,email\n" + rows)
++    assert len(repo) == 0

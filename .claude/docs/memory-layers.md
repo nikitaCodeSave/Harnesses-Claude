@@ -15,7 +15,7 @@ last-updated: 2026-08-29
 
 | Layer | Что | Где у нас | Persistence | Owner |
 |---|---|---|---|---|
-| L0 in-session scratchpad | runtime task list | **на текущем поколении моделей пуст**: task-list тулы и `TodoWrite` не выдаются без явного opt-in (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`) — модель ведёт многошаговую работу без письменного чеклиста; версии и точные условия — `native-capabilities.md` кита | session | session |
+| L0 in-session scratchpad | runtime task list | **на текущем поколении моделей пуст**: task-list тулы и `TodoWrite` не выдаются без явного opt-in (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`) — модель ведёт многошаговую работу без письменного чеклиста; версии и точные условия — `native-capabilities.md` | session | session |
 | L1 procedural | как работать, инварианты, action-skills | `.claude/CLAUDE.md`, `.claude/rules/`, плагин `devlog` (проектных skills нет) | cross-session, в git | repo |
 | L2 episodic | session summaries, recurring patterns | `~/.claude/projects/<hash>/memory/MEMORY.md` + per-topic `.md` | cross-session, user-scoped | user |
 | L3 durable artifacts | what happened, why | `.claude/devlog/entries/*.md` + `index.json` | cross-session, в git | repo |

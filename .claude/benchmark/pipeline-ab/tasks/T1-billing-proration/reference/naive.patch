@@ -1,0 +1,81 @@
+diff -ruN a/src/billing/errors.py b/src/billing/errors.py
+--- a/src/billing/errors.py
++++ b/src/billing/errors.py
+@@ -27,3 +27,7 @@
+ 
+ class InvoiceError(BillingError):
+     """An invoice or line item is malformed."""
++
++
++class InvalidPlanChange(BillingError):
++    """The requested plan change is not valid."""
+diff -ruN a/src/billing/service.py b/src/billing/service.py
+--- a/src/billing/service.py
++++ b/src/billing/service.py
+@@ -6,8 +6,9 @@
+ from datetime import date, timedelta
+ 
+ from billing.clock import Clock
+-from billing.errors import PlanNotAvailable, SubscriptionNotActive
++from billing.errors import InvalidPlanChange, PlanNotAvailable, SubscriptionNotActive
+ from billing.invoices import Invoice, LineItem
++from billing.money import to_money
+ from billing.periods import period_end
+ from billing.plans import Interval, Plan
+ from billing.store import InMemoryStore
+@@ -79,6 +80,55 @@
+                 issued.append(invoice)
+         return issued
+ 
++    def change_plan(
++        self,
++        subscription_id: str,
++        new_plan_code: str,
++        new_interval: Interval | None = None,
++    ) -> Invoice | None:
++        """Switch plan (and optionally interval) today, prorating by days left in the period.
++
++        The customer is credited for the unused part of the current period and
++        charged for the new plan. Switching interval starts a fresh period today.
++        """
++        subscription = self._store.get_subscription(subscription_id)
++        if subscription.is_canceled:
++            raise SubscriptionNotActive(subscription_id)
++        new_plan = self._store.get_plan(new_plan_code)
++        interval = new_interval or subscription.interval
++        if new_plan.code == subscription.plan_code and interval is subscription.interval:
++            raise InvalidPlanChange(f"{subscription_id} is already on {new_plan.code} ({interval.value})")
++        if not new_plan.active:
++            raise PlanNotAvailable(new_plan.code)
++
++        current_plan = self._store.get_plan(subscription.plan_code)
++        today = self._clock.today()
++        remaining = (subscription.period_end - today).days
++        length = (subscription.period_end - subscription.period_start).days
++        credit = to_money(current_plan.price_for(subscription.interval) * remaining / length)
++
++        if interval is subscription.interval:
++            charge = to_money(new_plan.price_for(interval) * remaining / length)
++            updated = replace(subscription, plan_code=new_plan.code)
++        else:
++            charge = new_plan.price_for(interval)
++            updated = replace(
++                subscription,
++                plan_code=new_plan.code,
++                interval=interval,
++                period_start=today,
++                period_end=period_end(today, interval),
++            )
++        self._store.save_subscription(updated)
++        lines = [
++            LineItem(f"Unused time on {current_plan.name} ({subscription.interval.value})", -credit),
++            LineItem(
++                f"{new_plan.name} ({interval.value}) {today.isoformat()} to {updated.period_end.isoformat()}",
++                charge,
++            ),
++        ]
++        return self._issue_invoice(updated, lines, today)
++
+     def cancel(self, subscription_id: str) -> Subscription:
+         """Cancel immediately. No refund; the subscription is never renewed."""
+         subscription = self._store.get_subscription(subscription_id)

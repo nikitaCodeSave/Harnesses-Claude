@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "spec",
+ "role": "dev",
+ "session": "e58c7d8a-1732-4685-803d-5746939c56e9",
+ "resume": false,
+ "prompt": "Add stock reservations to the `inventory` package. Checkout must be able to hold stock for a cart before payment, then either confirm the hold into an order or release it. Holds nobody confirms must lapse on their own after a while, and retries from the cart service must be safe (idempotency key).\n\nInterface — hidden tests call exactly this; `InventoryService(repository, ledger, clock)` keeps working as is:\n- `InventoryService.reserve(warehouse: str, items: dict[str, int], idempotency_key: str) -> Reservation`\n- `InventoryService.confirm_reservation(reservation_id: str) -> Order`\n- `InventoryService.release_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.get_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.available(sku, warehouse)` must take holds into account.\n- `inventory.models`: dataclass `Reservation` with `reservation_id: str`, `warehouse: str`, `items: dict[str, int]` (units held per SKU), `status: ReservationStatus`, `expires_at: datetime`, `order_id: str | None`; enum `ReservationStatus` with members `ACTIVE`, `CONFIRMED`, `RELEASED`, `EXPIRED`.\n- `inventory.errors`: new `ReservationNotFound`, `ReservationExpired`, `InvalidReservationState`, `IdempotencyConflict` (all subclass `InventoryError`); reuse the existing errors where they fit.\n- Time comes only from the injected clock. There is no background job: expiry must take effect without anyone calling a sweep.\n\nI own the business rules — ask me if something is unclear.\n\nInterview me until you could write the spec, then write it to SPEC.md. The spec says what and why (acceptance criteria as checkable statements, non-goals), not how. Copy any interface my request fixes (module paths, signatures, error classes) into it verbatim.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:48:29 socat[788785] W exiting on signal 15\n",
+ "wall_s": 38.1,
+ "result": "I've read the package (`service.py`, `models.py`, `errors.py`, `reports.py`, tests). Some things are already settled by the code, so I'll treat them as given unless you object: reserve is all-or-nothing like `place_order`, the same validation errors get reused (`UnknownWarehouse`, `UnknownSku`, `InvalidQuantity`, `InsufficientStock`, `InvalidOrder` for empty items), and confirming produces a normal `PLACED` order with the usual `ORD-` id.\n\nThese are the business rules I need from you. Each has my recommendation, so \"agree\" is a fine answer.\n\n**Expiry**\n1. **How long does a hold last?** `reserve` has no TTL parameter, so it has to be a service-wide setting. My suggestion is 15 minutes by default, with an optional constructor keyword so the existing three-argument constructor still works. Is that right, and what value do you want?\n2. **What happens exactly at `expires_at`?** I suggest the hold counts as expired at that instant (`now >= expires_at`), not one tick later.\n\n**Idempotency**\n3. **Retry with the same key and the same request** (same warehouse and items): return the original reservation unchanged, even if it has since been confirmed, released or expired. It would not create a new hold. Agree? The alternative is \"if the original is dead, make a new one\".\n4. **Same key with a different warehouse or different items:** raise `IdempotencyConflict`. Item order doesn't matter (`{\"A\":1,\"B\":2}` matches `{\"B\":2,\"A\":1}`).\n5. **A reserve that fails** (for example `InsufficientStock`): it doesn't use up the key, so a later retry with that key can succeed. Agree?\n6. **Key scope and lifetime:** keys are global across warehouses and are remembered forever (no key expiry). Should an empty-string key be rejected? I suggest yes, but tell me which error you want.\n\n**Confirm / release transitions**\n7. **Confirming an expired hold:** raise `ReservationExpired`. Confirming a released hold: raise `InvalidReservationState`.\n8. **Confirming twice:** should the second call return the same order (idempotent) or raise `InvalidReservationState`? I lean toward returning the same order, because the cart service retries.\n9. **Release:**\n   - Releasing a confirmed hold raises `InvalidReservationState`.\n   - Releasing an already-released hold returns it unchanged (idempotent).\n   - Releasing an expired hold: return it as `EXPIRED`, raise `ReservationExpired`, or something else?\n10. **Unknown id:** `confirm`, `release` and `get_reservation` all raise `ReservationNotFound`.\n\n**Stock interaction**\n11. **Do holds block other orders?** I suggest held units come out of `available`, so plain `place_order` calls and other reservations can't take them. The rule becomes `available = on_hand − allocated − held by active holds`, floored at 0. Expired holds stop counting the moment they expire.\n12. **`allocated()` and the stock report:** I suggest `allocated()` keeps meaning \"promised to `PLACED` orders\" and doesn't include holds. The report's `available` column reflects holds automatically, and I'd add no \"held\" column. Adding one would change `StockRow`, and today's tests build it positionally. OK?\n13. **Stock written off while a hold is active:** `adjust` lets on-hand drop below what's promised. Say a hold covers 5 MUG and a write-off leaves 3 on hand. When the cart confirms, should it:\n    - (a) succeed anyway, because the hold was a promise, or\n    - (b) fail with `InsufficientStock` and leave the hold active?\n\n    Separately, should `adjust` itself be blocked from eating into held stock? I suggest (a) and no new block on `adjust`, since that matches how orders behave today.\n\n**Scope**\n14. These would be non-goals unless you say otherwise:\n    - extending or renewing a hold\n    - confirming or releasing only part of a hold\n    - changing the items on a hold\n    - listing reservations\n    - showing holds in the report\n    - persistence beyond the in-memory repository\n    - concurrency or locking\n\n    Anything here you actually need?\n15. **Reservation id format:** I suggest `RES-0001`, sequential like orders. Do you care?",
+ "is_error": false,
+ "num_turns": 3,
+ "total_cost_usd": 0.2289796,
+ "usage": {
+  "input_tokens": 6,
+  "cache_creation_input_tokens": 20053,
+  "cache_read_input_tokens": 48158,
+  "output_tokens": 2945,
+  "output_tokens_details": {
+   "thinking_tokens": 1217
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 20053,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 6,
+   "outputTokens": 2945,
+   "cacheReadInputTokens": 48158,
+   "cacheCreationInputTokens": 20053,
+   "webSearchRequests": 0,
+   "costUSD": 0.2289796,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1217,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 20053,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 37604,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "e58c7d8a-1732-4685-803d-5746939c56e9"
+}

@@ -1,0 +1,84 @@
+{
+ "n": 3,
+ "label": "spec",
+ "role": "dev",
+ "session": "9c177a8a-d286-404f-bc4b-b3834d8a3108",
+ "resume": true,
+ "prompt": "1. Agree on by-day proration, but days are real calendar days in the current period (28-31 for a month, 365/366 for a year). Remaining days count from the change date inclusive up to period end exclusive. Round half-up to cents on each line separately.\n\n2. Same period dates, no change to start or end. Invoice dated on the change date with exactly two lines: a negative credit for the unused part of the old plan and a positive charge for the same days on the new plan, both at the prices of the interval the customer is currently on. Compute each line exactly (price x remaining days / period days, no rounded daily rate) and round each line on its own. The total is the sum of the two rounded lines, not a rounded net difference. The next renewal on the usual date bills the new plan at full price.\n\n3. (b). Downgrades wait for the end of the period. Nothing is billed, refunded or credited at the request, and change_plan returns None. The renewal moves them to the cheaper plan and bills its full price. A pending change stored on the subscription is fine.\n\n4. No negative invoices, no credit balance, nothing owed back. Anything that would give money back is scheduled for the period end instead.\n\n5. Interval switches both ways wait for the end of the period, returning None. We never refund unused annual time. The renewal starts a period of the new interval and bills that interval's full price. So monthly -> annual is not immediate either. If an upgrade comes together with an interval switch, split it: the upgrade happens now, prorated at the current interval's prices, and the interval switch happens at the period end.\n\n6. Not by price per month or by who owes money. Upgrade vs downgrade is decided by comparing the plans' monthly list prices only (monthly_price), regardless of the interval. A more expensive plan is an upgrade, a cheaper one a downgrade. Switching interval on the same plan is neither.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:15:12 socat[657356] W exiting on signal 15\n",
+ "wall_s": 23.3,
+ "result": "Clear. Second round covers the edge cases. Again, each has a suggested default.\n\n**7. Trials.** Nothing has been paid during a trial, so there's nothing to prorate. I'd apply any plan or interval change immediately, upgrade or downgrade, and return `None`. The trial end date stays the same, and the first paid period bills the new plan and interval at full price. Agree?\n\n**8. Several requests in one period.**\n   - (a) A new request replaces any pending change. The latest request wins.\n   - (b) Upgrading while a downgrade is pending: the upgrade is prorated against the *current* plan, and the pending downgrade is dropped.\n   - (c) `new_interval=None` means \"keep the current interval\". If an interval switch is pending and the customer then upgrades with `None`, I'd treat `None` as \"no opinion\" and keep the pending switch. An explicit interval equal to the current one would cancel it. Or should `None` always mean \"stay on the current interval\" and drop the pending switch?\n   - (d) Asking for the current plan and interval while a change is pending cancels the pending change and returns `None`. With nothing pending, the same request raises `InvalidPlanChange`.\n   - (e) Several upgrades in one period: each is prorated from the plan the customer is on at that moment, over the days left. That follows from your rules; I'll just state it.\n\n**9. Same monthly price, different plan.** It's neither an upgrade nor a downgrade. I'd schedule it for the end of the period, return `None`, and bill nothing now. Agree?\n\n**10. Retired plans.**\n   - Target plan retired: `PlanNotAvailable`.\n   - Customer on a retired plan switching interval on that same plan: I'd allow it, since it's the plan they already have and not a new sale. Allow or reject?\n   - A scheduled downgrade whose target is retired before the renewal: I'd still apply it, because it was valid when requested.\n\n**11. Renewal due but not run** (`today >= period_end`, `renew_due` not called yet). I'd raise `InvalidPlanChange` and leave it to the caller to run renewals first, rather than having `change_plan` renew implicitly.\n\n**12. Other errors.** I'd reuse what exists: unknown subscription → `SubscriptionNotFound`, canceled → `SubscriptionNotActive`, unknown plan → `PlanNotFound`. A failed request changes nothing (no invoice, no state change). Cancelling a subscription drops any pending change. Agree?\n\n**13. Upgrading from a free plan** (monthly price 0). The credit line would be 0.00. Keep exactly two lines, including the 0.00 credit? I'd say yes, for consistency.\n\n**14. Pending change visibility.** Should callers be able to see the pending change on `Subscription`, so support can show \"switches to Basic on Nov 30\"? If so, should the spec fix the field names, or leave them to the implementer?",
+ "is_error": false,
+ "num_turns": 1,
+ "total_cost_usd": 0.2469994,
+ "usage": {
+  "input_tokens": 2,
+  "cache_creation_input_tokens": 3373,
+  "cache_read_input_tokens": 25766,
+  "output_tokens": 2085,
+  "output_tokens_details": {
+   "thinking_tokens": 1115
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 3373,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 4409,
+   "thinkingTokens": 2223,
+   "cacheReadInputTokens": 73697,
+   "cacheCreationInputTokens": 18006,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 18006,
+   "webSearchRequests": 0,
+   "costUSD": 0.2469994,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 22791,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "9c177a8a-d286-404f-bc4b-b3834d8a3108"
+}

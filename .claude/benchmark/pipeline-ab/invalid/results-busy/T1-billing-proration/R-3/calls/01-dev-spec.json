@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "spec",
+ "role": "dev",
+ "session": "9e1e639f-c110-41ae-a9a5-785f8e199e4f",
+ "resume": false,
+ "prompt": "Customers can't change plan right now: support has to cancel and resubscribe them by hand.\nAdd mid-cycle plan changes to the billing package: upgrades and downgrades, optionally\nswitching between monthly and annual billing, prorated so nobody pays twice for the same days.\n\nInterface (other code will call exactly this):\n- `BillingService.change_plan(subscription_id: str, new_plan_code: str, new_interval: Interval | None = None) -> Invoice | None`\n  in `src/billing/service.py`. `new_interval=None` keeps the subscription's current interval.\n- Return the invoice issued for the change (recorded in the store like every other invoice),\n  or `None` when nothing is billed at the moment of the request.\n- Add `InvalidPlanChange(BillingError)` to `src/billing/errors.py` for change requests that\n  can't be honoured; keep using the existing error classes where they already fit.\n\nInterview me until you could write the spec, then write it to SPEC.md. The spec says what and why (acceptance criteria as checkable statements, non-goals), not how. Copy any interface my request fixes (module paths, signatures, error classes) into it verbatim.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:39:07 socat[752532] W exiting on signal 15\n",
+ "wall_s": 30.2,
+ "result": "I've read the whole package: `subscribe` / `renew_due` / `cancel`, frozen dataclasses, half-open periods, no credit-balance concept, and invoice lines can already be negative. Here's the first round. Each question has my recommendation, so \"agree\" is a complete answer.\n\n**1. When does each kind of change take effect?**\n- (a) Everything takes effect immediately and is prorated today.\n- (b) Upgrades take effect immediately. Downgrades are scheduled for the end of the current period, so `change_plan` returns `None` and the next renewal bills the new plan.\n- *Recommendation: (b).* It's the common SaaS pattern, it's the most natural reading of \"return `None` when nothing is billed at the moment\", and it avoids issuing refunds. You decide whether that's actually what you want.\n\n**2. If anything can produce a credit (an immediate downgrade, or a switch from annual to monthly), what happens to the money?**\n- (a) Issue an invoice with a negative total, i.e. a credit note (refunding it is someone else's job).\n- (b) Carry the credit forward against future invoices. That needs a credit balance, which doesn't exist today.\n- (c) Forfeit it.\n- *Recommendation:* if you pick 1(b), mostly avoid the question by deferring anything that would create a credit. Otherwise (a).\n\n**3. How do we define \"upgrade\" vs \"downgrade\", especially across intervals?** Example: pro monthly ($30) to basic annual ($100).\n- *Recommendation:* compare the cost per day of the new plan+interval against the current one. Higher means upgrade (immediate), lower or equal means downgrade (deferred).\n\n**4. What happens to the billing period on an immediate change?**\n- (a) Same interval: keep the current `period_end` and charge only the difference for the days left.\n- (b) Interval switch, e.g. monthly to annual: start a fresh period today, charge the full new-interval price, and subtract the unused days of the old period as a credit line on the same invoice.\n- *Recommendation:* both of the above.\n\n**5. Proration arithmetic.**\n- *Recommendation:* by calendar day. Today counts as a day on the new plan. Unused fraction = `(period_end − today) / (period_end − period_start)`. Each line is rounded to cents half-up. The invoice has two lines (a credit for the unused old plan and a charge for the new plan) rather than a single net line. OK?\n\n**6. Edge cases. My proposed answers:**\n- Subscription is canceled: `SubscriptionNotActive`.\n- Unknown plan: `PlanNotFound`.\n- Retired target plan: `PlanNotAvailable`. Leaving a retired plan is allowed.\n- Same plan and same interval: `InvalidPlanChange`.\n- Subscription is in its trial: switch plan/interval right away, bill nothing, keep the trial end date, return `None`.\n- A renewal is overdue (`period_end <= today`, `renew_due` not yet run): `InvalidPlanChange`, rather than silently renewing first. Or would you rather the change run the overdue renewal itself?\n\n**7. Pending (scheduled) changes, if you choose 1(b):**\n- *Recommendation:* at most one pending change per subscription. A new `change_plan` call replaces it. Requesting the current plan+interval clears it instead of raising an error. An upgrade clears any pending downgrade. Canceling drops it. Do we also need a way to inspect the pending change (a field on `Subscription`)?",
+ "is_error": false,
+ "num_turns": 3,
+ "total_cost_usd": 0.1952856,
+ "usage": {
+  "input_tokens": 6,
+  "cache_creation_input_tokens": 16977,
+  "cache_read_input_tokens": 47928,
+  "output_tokens": 2493,
+  "output_tokens_details": {
+   "thinking_tokens": 1021
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 16977,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 6,
+   "outputTokens": 2493,
+   "cacheReadInputTokens": 47928,
+   "cacheCreationInputTokens": 16977,
+   "webSearchRequests": 0,
+   "costUSD": 0.1952856,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1021,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 16977,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 29729,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "9e1e639f-c110-41ae-a9a5-785f8e199e4f"
+}

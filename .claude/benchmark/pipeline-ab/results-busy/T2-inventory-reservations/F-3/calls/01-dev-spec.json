@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "spec",
+ "role": "dev",
+ "session": "ade50cf5-fe8e-4e4e-b5c3-047e1f6e83b3",
+ "resume": false,
+ "prompt": "Add stock reservations to the `inventory` package. Checkout must be able to hold stock for a cart before payment, then either confirm the hold into an order or release it. Holds nobody confirms must lapse on their own after a while, and retries from the cart service must be safe (idempotency key).\n\nInterface — hidden tests call exactly this; `InventoryService(repository, ledger, clock)` keeps working as is:\n- `InventoryService.reserve(warehouse: str, items: dict[str, int], idempotency_key: str) -> Reservation`\n- `InventoryService.confirm_reservation(reservation_id: str) -> Order`\n- `InventoryService.release_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.get_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.available(sku, warehouse)` must take holds into account.\n- `inventory.models`: dataclass `Reservation` with `reservation_id: str`, `warehouse: str`, `items: dict[str, int]` (units held per SKU), `status: ReservationStatus`, `expires_at: datetime`, `order_id: str | None`; enum `ReservationStatus` with members `ACTIVE`, `CONFIRMED`, `RELEASED`, `EXPIRED`.\n- `inventory.errors`: new `ReservationNotFound`, `ReservationExpired`, `InvalidReservationState`, `IdempotencyConflict` (all subclass `InventoryError`); reuse the existing errors where they fit.\n- Time comes only from the injected clock. There is no background job: expiry must take effect without anyone calling a sweep.\n\nI own the business rules — ask me if something is unclear.\n\nInterview me until you could write the spec, then write it to SPEC.md. The spec says what and why (acceptance criteria as checkable statements, non-goals), not how. Copy any interface my request fixes (module paths, signatures, error classes) into it verbatim.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:45:51 socat[778471] W exiting on signal 15\n",
+ "wall_s": 35.3,
+ "result": "I've read the package (service, models, errors, repository, reports, tests). The existing behaviour I'll build on:\n\n- `available = on_hand − allocated`, floored at 0.\n- `place_order` is all-or-nothing.\n- Order IDs come from `ORD-0001`, `ORD-0002`, ….\n- `adjust()` can push on-hand below what's already allocated; `available` then just shows 0.\n\nBelow are the business rules I need you to decide. Each one has my suggested answer, so you can reply \"agree\" or just give the number and your change.\n\n**Hold duration and expiry**\n1. **How long a hold lasts.** I suggest 15 minutes, counted from the `reserve` call. It would be a constructor option that defaults to 15 minutes, so `InventoryService(repository, ledger, clock)` still works. Do you want a different default, or a value that can't be changed?\n2. **The exact cutoff.** I suggest a hold is expired once `now >= expires_at`, so at exactly `expires_at` it has already lapsed.\n3. **What expiry looks like.** I suggest it shows up everywhere straight away: `available` stops counting the hold, and `get_reservation` reports `EXPIRED`. No sweep is needed.\n4. **Extending a hold.** I suggest holds can't be extended or renewed, and a retried `reserve` doesn't push `expires_at` back. I'll list extension as out of scope.\n\n**Reserve**\n5. **Partial holds.** I suggest all-or-nothing, like `place_order`: if any SKU is short, it raises `InsufficientStock` and nothing is held.\n6. **Holds vs. direct orders.** I suggest held units are unavailable to anyone else, including direct `place_order` calls.\n7. **Input checks.** I suggest the same ones `place_order` uses: empty items → `InvalidOrder`, bad quantity → `InvalidQuantity`, unknown SKU or warehouse → `UnknownSku` / `UnknownWarehouse`.\n\n**Idempotency key**\n8. **Scope.** I suggest one key space for the whole service. Reusing a key with a different warehouse or different items raises `IdempotencyConflict`. Item order doesn't matter: `{\"A\": 1, \"B\": 2}` and `{\"B\": 2, \"A\": 1}` count as the same request.\n9. **Repeat calls with the same key and payload.** I suggest returning the original reservation in its current state, even if it has since been confirmed, released or expired. It never creates a second hold. The other option is to let a key be reused once its hold has ended. Which do you want?\n10. **Failed calls.** I suggest a `reserve` that fails (for example with `InsufficientStock`) does not use up the key, so a retry gets a fresh check against stock.\n\n**Confirm**\n11. **Confirming an expired hold.** I suggest it raises `ReservationExpired`, even if the stock is still free.\n12. **Retried confirms.** I suggest confirming an already-confirmed reservation returns the same `Order` again, with no second order, so cart retries are safe here too. The stricter alternative is to raise `InvalidReservationState`.\n13. **Confirming a released hold.** I suggest it raises `InvalidReservationState`.\n14. **Stock written off while held.** Suppose a write-off happens during a hold and on-hand drops below what's held plus allocated. I suggest confirm still succeeds, because the hold was the promise. That matches how `adjust` already treats allocations. The alternative is to re-check stock and raise `InsufficientStock`.\n15. **The order created on confirm.** I suggest a normal `PLACED` order from the usual `ORD-` sequence, with `placed_at` set to the confirm time. The reservation's `order_id` gets set to it. From then on, ship and cancel work as for any order. If that order is later cancelled, the reservation stays `CONFIRMED`.\n\n**Release**\n16. **Releasing an active hold.** I suggest it frees the stock at once and the status becomes `RELEASED`.\n17. **Releasing a hold that has already ended.** I suggest that if it's already released, it returns the reservation unchanged (safe to retry). If it's expired, it also returns it unchanged with status `EXPIRED`, because the cart just wants the stock freed. If it's confirmed, it raises `InvalidReservationState`. Or would you rather expired holds raise `ReservationExpired`?\n\n**Reporting and IDs**\n18. **Where held units appear.** I suggest only `available` goes down. `allocated()` and the stock report's `allocated` column keep meaning \"promised to orders\", and a separate \"held\" column in the report is out of scope. Is that OK, or should holds count as allocated?\n19. **Reservation IDs.** I suggest sequential IDs of the form `RSV-0001`, matching the order IDs. An unknown ID raises `ReservationNotFound` from `get_reservation`, `confirm_reservation` and `release_reservation`.\n\nIs there any rule you have in mind that isn't covered here, such as a maximum number of active holds per cart or warehouse?",
+ "is_error": false,
+ "num_turns": 2,
+ "total_cost_usd": 0.20668999999999998,
+ "usage": {
+  "input_tokens": 4,
+  "cache_creation_input_tokens": 17258,
+  "cache_read_input_tokens": 28350,
+  "output_tokens": 3147,
+  "output_tokens_details": {
+   "thinking_tokens": 1275
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 17258,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 4,
+   "outputTokens": 3147,
+   "cacheReadInputTokens": 28350,
+   "cacheCreationInputTokens": 17258,
+   "webSearchRequests": 0,
+   "costUSD": 0.20668999999999998,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1275,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 17258,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 34796,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "ade50cf5-fe8e-4e4e-b5c3-047e1f6e83b3"
+}

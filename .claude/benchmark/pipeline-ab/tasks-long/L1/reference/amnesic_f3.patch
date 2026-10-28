@@ -1,0 +1,123 @@
+diff -ruN af2/src/lending/errors.py af3/src/lending/errors.py
+--- af2/src/lending/errors.py	2026-10-28 11:20:34.382149867 +0300
++++ af3/src/lending/errors.py	2026-10-28 11:20:34.559173550 +0300
+@@ -99,3 +99,9 @@
+ 
+     def __init__(self, why: str) -> None:
+         super().__init__(why)
++
++
++class RenewalRefused(LendingError):
++    def __init__(self, loan_id: str, why: str) -> None:
++        super().__init__(f"loan {loan_id!r} can't be renewed: {why}")
++        self.loan_id = loan_id
+diff -ruN af2/src/lending/models.py af3/src/lending/models.py
+--- af2/src/lending/models.py	2026-10-28 11:20:34.382157237 +0300
++++ af3/src/lending/models.py	2026-10-28 11:20:34.559228199 +0300
+@@ -65,6 +65,7 @@
+     borrowed_on: date
+     due_on: date
+     returned_on: date | None = None
++    renewals: int = 0
+ 
+     @property
+     def is_open(self) -> bool:
+diff -ruN af2/src/lending/policy.py af3/src/lending/policy.py
+--- af2/src/lending/policy.py	2026-10-28 11:20:34.391924770 +0300
++++ af3/src/lending/policy.py	2026-10-28 11:20:34.559253029 +0300
+@@ -32,6 +32,11 @@
+ # Days a member has to collect a copy set aside for their hold.
+ PICKUP_DAYS = 7
+ 
++# Renewals: books only, at most twice, from a few days before the due date.
++RENEWABLE: frozenset[Material] = frozenset({Material.BOOK})
++MAX_RENEWALS = 2
++RENEWAL_OPENS_DAYS_BEFORE_DUE = 5
++
+ # date.weekday(): Monday is 0, Sunday is 6. The library is closed on Sundays.
+ CLOSED_WEEKDAYS: frozenset[int] = frozenset({6})
+ 
+diff -ruN af2/src/lending/service.py af3/src/lending/service.py
+--- af2/src/lending/service.py	2026-10-28 12:55:27.928033222 +0300
++++ af3/src/lending/service.py	2026-10-28 12:55:27.928077792 +0300
+@@ -2,7 +2,7 @@
+ 
+ from __future__ import annotations
+ 
+-from datetime import date
++from datetime import date, timedelta
+ from decimal import Decimal
+ 
+ from . import policy
+@@ -18,6 +18,7 @@
+     InvalidAmount,
+     LoanLimitReached,
+     NoOpenLoan,
++    RenewalRefused,
+ )
+ from .models import (
+     Charge,
+@@ -142,6 +143,32 @@
+         self._shelve_or_set_aside(copy)
+         return loan
+ 
++    def renew(self, loan_id: str) -> Loan:
++        """Extend an open loan in place: a fresh loan period from today."""
++        loan = self._repo.get_loan(loan_id)
++        if not loan.is_open:
++            raise RenewalRefused(loan_id, "the copy has been returned")
++        copy = self._repo.get_copy(loan.copy_id)
++        title = self._repo.get_title(copy.isbn)
++        today = self._clock.today()
++        if title.material not in policy.RENEWABLE:
++            raise RenewalRefused(loan_id, f"{title.material.value}s can't be renewed")
++        if loan.renewals >= policy.MAX_RENEWALS:
++            raise RenewalRefused(loan_id, "already renewed the maximum number of times")
++        opens = loan.due_on - timedelta(days=policy.RENEWAL_OPENS_DAYS_BEFORE_DUE)
++        if today < opens:
++            raise RenewalRefused(loan_id, f"renewal opens on {opens}")
++        # Someone else has a hold on this title: they get it back on time.
++        if any(h.is_active for h in self._repo.holds_on(title.isbn)):
++            raise RenewalRefused(loan_id, "the title has holds")
++        # Same money bar as borrowing: a renewal is a loan extension.
++        owed = self.balance(loan.member_id)
++        if owed >= policy.BORROWING_BLOCK:
++            raise AccountBlocked(loan.member_id, owed)
++        loan.due_on = policy.due_date(title.material, today)
++        loan.renewals += 1
++        return loan
++
+     def get_loan(self, loan_id: str) -> Loan:
+         return self._repo.get_loan(loan_id)
+ 
+diff -ruN af2/tests/test_renewals.py af3/tests/test_renewals.py
+--- af2/tests/test_renewals.py	1970-01-01 03:00:00.000000000 +0300
++++ af3/tests/test_renewals.py	2026-10-28 11:22:38.023829987 +0300
+@@ -0,0 +1,27 @@
++from datetime import date
++
++import pytest
++
++from lending.errors import RenewalRefused
++
++
++def test_renewal_gives_a_fresh_period_from_today(service, clock):
++    loan = service.checkout("ann", "B1")  # due Mon 23 March
++    clock.set(date(2026, 3, 19))
++    renewed = service.renew(loan.loan_id)
++    assert renewed.due_on == date(2026, 4, 9)
++    assert renewed.renewals == 1
++
++
++def test_renewal_opens_five_days_before_due(service, clock):
++    loan = service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 17))
++    with pytest.raises(RenewalRefused):
++        service.renew(loan.loan_id)
++
++
++def test_dvds_are_not_renewable(service, clock):
++    loan = service.checkout("ann", "D1")
++    clock.set(date(2026, 3, 8))
++    with pytest.raises(RenewalRefused):
++        service.renew(loan.loan_id)

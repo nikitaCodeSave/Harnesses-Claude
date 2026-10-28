@@ -1,0 +1,118 @@
+diff -ruN a/src/contactbook/errors.py b/src/contactbook/errors.py
+--- a/src/contactbook/errors.py
++++ b/src/contactbook/errors.py
+@@ -38,3 +38,7 @@
+     def __init__(self, email: str) -> None:
+         super().__init__(f"no contact with email {email}")
+         self.email = email
++
++
++class ImportFileError(ContactError):
++    """The file as a whole cannot be imported (unreadable, missing columns)."""
+diff -ruN a/src/contactbook/importer.py b/src/contactbook/importer.py
+--- a/src/contactbook/importer.py
++++ b/src/contactbook/importer.py
+@@ -0,0 +1,69 @@
++"""Bulk import of contacts from CSV in the export format (name,email,phone,tags)."""
++
++from __future__ import annotations
++
++import csv
++import io
++from dataclasses import dataclass, field
++
++from .errors import ImportFileError, ValidationError
++from .export import TAG_SEPARATOR
++from .models import Contact
++from .repository import InMemoryContactRepository
++
++REQUIRED_COLUMNS = ("name", "email")
++
++
++@dataclass(frozen=True)
++class RowIssue:
++    row: int
++    column: str | None
++    message: str
++
++
++@dataclass
++class ImportReport:
++    created: list[str] = field(default_factory=list)
++    updated: list[str] = field(default_factory=list)
++    errors: list[RowIssue] = field(default_factory=list)
++    warnings: list[RowIssue] = field(default_factory=list)
++
++
++def import_contacts(repo: InMemoryContactRepository, data: str | bytes) -> ImportReport:
++    """Create new contacts and update existing ones (matched by email) from CSV."""
++    text = _decode(data)
++    reader = csv.DictReader(io.StringIO(text))
++    fieldnames = reader.fieldnames or []
++    missing = [column for column in REQUIRED_COLUMNS if column not in fieldnames]
++    if missing:
++        raise ImportFileError(f"missing required column(s): {', '.join(missing)}")
++
++    report = ImportReport()
++    for row_number, row in enumerate(reader, start=2):  # row 1 is the header
++        tags = [tag for tag in (row.get("tags") or "").split(TAG_SEPARATOR) if tag.strip()]
++        try:
++            contact = Contact.create(
++                name=row.get("name") or "",
++                email=row.get("email") or "",
++                phone=row.get("phone") or None,
++                tags=tags,
++            )
++        except ValidationError as exc:
++            report.errors.append(RowIssue(row_number, exc.field, exc.message))
++            continue
++        if contact.email in repo:
++            repo.update(contact)
++            report.updated.append(contact.email)
++        else:
++            repo.add(contact)
++            report.created.append(contact.email)
++    return report
++
++
++def _decode(data: str | bytes) -> str:
++    if isinstance(data, str):
++        return data
++    try:
++        return data.decode("utf-8")
++    except UnicodeDecodeError as exc:
++        raise ImportFileError(f"file is not valid UTF-8: {exc}") from exc
+diff -ruN a/tests/test_importer.py b/tests/test_importer.py
+--- a/tests/test_importer.py
++++ b/tests/test_importer.py
+@@ -0,0 +1,30 @@
++import pytest
++
++from contactbook.errors import ImportFileError
++from contactbook.importer import import_contacts
++from contactbook.models import Contact
++from contactbook.repository import InMemoryContactRepository
++
++
++def test_import_creates_contacts():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, "name,email,phone,tags\nAnn Lee,ann@example.com,,vip;lead\n")
++    assert report.created == ["ann@example.com"]
++    assert repo.get("ann@example.com").tags == {"vip", "lead"}
++
++
++def test_import_updates_existing_contact():
++    repo = InMemoryContactRepository([Contact.create("Ann", "ann@example.com")])
++    report = import_contacts(repo, "name,email\nAnn Lee,ann@example.com\n")
++    assert report.updated == ["ann@example.com"]
++    assert repo.get("ann@example.com").name == "Ann Lee"
++
++
++def test_invalid_row_is_reported():
++    report = import_contacts(InMemoryContactRepository(), "name,email\nAnn,nope\n")
++    assert [(e.row, e.column) for e in report.errors] == [(2, "email")]
++
++
++def test_missing_column_rejects_file():
++    with pytest.raises(ImportFileError):
++        import_contacts(InMemoryContactRepository(), "name\nAnn\n")

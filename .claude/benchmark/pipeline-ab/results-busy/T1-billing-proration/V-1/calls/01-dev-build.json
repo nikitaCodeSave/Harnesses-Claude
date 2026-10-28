@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "build",
+ "role": "dev",
+ "session": "245a6e96-bbad-4639-9327-2ab771066ed0",
+ "resume": false,
+ "prompt": "Customers can't change plan right now: support has to cancel and resubscribe them by hand.\nAdd mid-cycle plan changes to the billing package: upgrades and downgrades, optionally\nswitching between monthly and annual billing, prorated so nobody pays twice for the same days.\n\nInterface (other code will call exactly this):\n- `BillingService.change_plan(subscription_id: str, new_plan_code: str, new_interval: Interval | None = None) -> Invoice | None`\n  in `src/billing/service.py`. `new_interval=None` keeps the subscription's current interval.\n- Return the invoice issued for the change (recorded in the store like every other invoice),\n  or `None` when nothing is billed at the moment of the request.\n- Add `InvalidPlanChange(BillingError)` to `src/billing/errors.py` for change requests that\n  can't be honoured; keep using the existing error classes where they already fit.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 08:56:22 socat[571399] W exiting on signal 15\n",
+ "wall_s": 194.5,
+ "result": "I've added `BillingService.change_plan(subscription_id, new_plan_code, new_interval=None) -> Invoice | None` with the interface you specified, plus `InvalidPlanChange(BillingError)`. The full suite passes: 38 tests, including 18 new ones in `tests/test_change_plan.py`. I haven't committed anything.\n\n**How a change is priced:** the days left in the current period are credited at the current plan's price. That credit is set against the new charge:\n- **Same interval:** the new plan is charged for the same remaining days, and the period dates stay the same. For example, moving Basic $10 → Pro $30 with 21 of 31 days left gives an invoice of −$6.77 / +$20.32 = **$13.55**.\n- **Interval switch:** a full new period starts today and is charged in full. Monthly → annual is a $100 charge minus the unused monthly days.\n\n**Decision for you: downgrades never refund.** The store has no refund or credit-balance concept, and a negative invoice could be mistaken for a charge by whatever collects payment. So:\n- **Upgrades:** if the new charge is more than the credit, the change happens now and the invoice for the difference is returned.\n- **Downgrades:** if the new charge is less than the credit, nothing is billed and `None` is returned. The change is saved on the subscription (a new optional `scheduled_change` field) and applied at the next renewal. The customer keeps what they paid for until the period ends. Annual → monthly therefore takes effect when the paid year ends.\n- **Undoing:** asking for the current plan and interval again cancels a scheduled downgrade.\n\nIf you'd rather downgrades apply immediately with a credit carried to the next renewal, that's a contained change, but it needs a stored credit balance.\n\n**Other behaviour:**\n- **Trials:** the plan or interval switches straight away, nothing is billed, and the trial continues. The first paid period bills the new terms.\n- **Equal net cost** (e.g. two plans with the same price): the change applies now, with no invoice, and `None` is returned.\n- **Overdue renewal:** if the period has already ended but `renew_due` hasn't run yet, that renewal is billed first, as `renew_due` would bill it, and then the change is worked out. The result is the same whether or not the daily job ran first. Those renewal invoices go into the store, but only the change invoice is returned.\n- **Errors:**\n  - `InvalidPlanChange` when nothing would change.\n  - `SubscriptionNotActive` for canceled subscriptions.\n  - `PlanNotFound` / `SubscriptionNotFound` for unknown ids.\n  - `PlanNotAvailable` for moving to a retired plan. This includes switching interval on a retired plan you're already on, because I treated that as a new sale. Customers can still move off a retired plan.\n\n**Other files touched:**\n- `_renew` in `src/billing/service.py` now applies scheduled changes.\n- `renew_due` now shares the catch-up loop with `change_plan`.\n- `README.md` explains how plan changes are priced.\n- `InvalidPlanChange` and `ScheduledChange` are exported from the package.\n\nThe new `scheduled_change` field on `Subscription` will need a column in the production database-backed store.",
+ "is_error": false,
+ "num_turns": 13,
+ "total_cost_usd": 0.8044942,
+ "usage": {
+  "input_tokens": 20,
+  "cache_creation_input_tokens": 39768,
+  "cache_read_input_tokens": 324151,
+  "output_tokens": 21072,
+  "output_tokens_details": {
+   "thinking_tokens": 11663
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 39768,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 20,
+   "outputTokens": 21072,
+   "cacheReadInputTokens": 324151,
+   "cacheCreationInputTokens": 39768,
+   "webSearchRequests": 0,
+   "costUSD": 0.8044942,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 11663,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 39768,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 194000,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "245a6e96-bbad-4639-9327-2ab771066ed0"
+}

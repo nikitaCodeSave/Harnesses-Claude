@@ -1,0 +1,3593 @@
+diff --git a/.scratch/holds/issues/01-place-a-hold-and-see-the-queue.md b/.scratch/holds/issues/01-place-a-hold-and-see-the-queue.md
+new file mode 100644
+index 0000000..0bfe918
+--- /dev/null
++++ b/.scratch/holds/issues/01-place-a-hold-and-see-the-queue.md
+@@ -0,0 +1,41 @@
++# 01: Place a Hold and see the queue
++
++**Spec:** `.scratch/holds/spec.md`
++
++**What to build:** When every copy of a Title is out, a member can place a Hold on it, and staff can see the Hold queue. `LendingService.place_hold(member_id, isbn) -> Hold` creates a Waiting Hold. `LendingService.holds_for(isbn) -> list[Hold]` lists the Title's active (Waiting and Ready) Holds, first in line first.
++
++The models gain a dataclass `Hold(hold_id, member_id, isbn, placed_on, status, copy_id, pickup_by)` and an enum `HoldStatus` with `WAITING`, `READY`, `FULFILLED`, `CANCELLED` and `EXPIRED`. Values are lowercase strings, like the other enums. A new Hold is `WAITING`, dated today from the Clock, with `copy_id` and `pickup_by` both `None`. Hold ids come from the repository's sequence with prefix `H` (`H0001`, …). The repository gains storage for Holds in its existing style. `Hold` and `HoldStatus` are exported from the package.
++
++`place_hold` runs its checks in this order, so the money conversation comes first as it does at checkout:
++
++1. Member lookup (`MemberNotFound`).
++2. The hold block: `AccountBlocked(member_id, balance, 5.00)` when the Balance is ≥ 5.00. The 5.00 hold threshold lives in the circulation policy next to the borrowing threshold, and it is the same for every member category.
++3. Title lookup (`TitleNotFound`).
++4. A new `HoldNotAllowed(LendingError)`, with a readable message saying why, when any of these is true:
++   - the Title has no copy that isn't withdrawn;
++   - any copy of the Title is `AVAILABLE`;
++   - the member already has a Waiting or Ready Hold on the Title;
++   - the member has an open Loan on a copy of the Title.
++
++There is no limit on how many Holds a member can have. A member who becomes Blocked after placing a Hold keeps their place.
++
++`holds_for` raises `TitleNotFound` for an unknown ISBN. Otherwise it returns the Holds in placement order: the order they were created, not `placed_on`. Holds placed on the same day therefore keep their order.
++
++**Blocked by:** None (can start immediately)
++
++**Status:** ready-for-agent
++
++- [ ] With `D1` checked out, `place_hold` returns a `WAITING` Hold for that member and `dvd-1`, dated today, with no `copy_id` and no `pickup_by`.
++- [ ] Two members placing Holds on `dvd-1` on the same day appear in `holds_for` in the order they were placed. A third placed the next day comes last.
++- [ ] `holds_for` on a Title nobody is waiting for returns `[]`. An unknown ISBN raises `TitleNotFound`.
++- [ ] `HoldNotAllowed` when a copy of the Title is `AVAILABLE`. For example, `978-1` with only `B1` checked out still has `B2` on the shelf.
++- [ ] `HoldNotAllowed` for a Title with no copies, and for a Title whose only copies are all withdrawn.
++- [ ] `HoldNotAllowed` when the member already has a Waiting Hold on the Title.
++- [ ] `HoldNotAllowed` when the member has the Title on loan.
++- [ ] `AccountBlocked` from `place_hold` at a Balance of exactly 5.00 and above, carrying the member, the Balance and a threshold of 5.00. A Balance of 4.99 can place a Hold.
++- [ ] A child is Blocked from Holds at the same 5.00, through Manual charges.
++- [ ] An unknown member gets `MemberNotFound`. A Blocked member asking for an unknown ISBN gets `AccountBlocked`. An unknown ISBN otherwise gets `TitleNotFound`.
++- [ ] A member whose Balance rises to 5.00 or more after placing a Hold keeps it in `holds_for`, in the same position.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`. Extra members are registered in the tests themselves.
++- [ ] The README's Concepts section gains Hold and Hold queue, and its Blocked entry mentions the 5.00 hold threshold, consistent with `GLOSSARY.md`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/holds/issues/02-returned-copy-goes-to-the-hold-shelf.md b/.scratch/holds/issues/02-returned-copy-goes-to-the-hold-shelf.md
+new file mode 100644
+index 0000000..c40dfda
+--- /dev/null
++++ b/.scratch/holds/issues/02-returned-copy-goes-to-the-hold-shelf.md
+@@ -0,0 +1,30 @@
++# 02: A returned copy goes to the Hold shelf
++
++**Spec:** `.scratch/holds/spec.md`
++
++**What to build:** A copy that comes back while someone is waiting for its Title is set aside for the first person in the queue, instead of going back on the shelf. `return_copy(copy_id)` keeps its signature and still returns the closed Loan. The Fine is posted exactly as today (ADR-0001), and only then is the copy placed.
++
++`CopyStatus` gains `ON_HOLD_SHELF` (value `"on_hold_shelf"`). Setting a copy aside is one rule, which later tickets reuse when a copy is freed by a cancellation or an expiry, or added to the catalogue:
++
++- If the Title has a Waiting Hold, the copy goes to `ON_HOLD_SHELF`. The first Waiting Hold in placement order then becomes `READY`, with that `copy_id` and a Pickup deadline counted from today.
++- Otherwise the copy goes to `AVAILABLE`, as today.
++
++The Pickup deadline is the day the Hold becomes Ready plus 7 calendar days. If that falls on a closed day, it moves to the next open day, using the existing open-day rule the same way due dates do. The 7-day pickup period lives in the circulation policy.
++
++A copy on the Hold shelf counts as out. It isn't in `available_copies`. `withdraw_copy` still accepts only `AVAILABLE` copies, so it raises `CopyNotAvailable` for a copy on the Hold shelf. Another member can still place a Hold on a Title whose only copies are on the Hold shelf.
++
++**Blocked by:** 01 (Place a Hold and see the queue).
++
++**Status:** ready-for-agent
++
++- [ ] `D1` checked out on Monday 2 March 2026, a Hold placed, and `D1` returned on Wednesday 4 March. `D1` is `ON_HOLD_SHELF`, and the Hold is `READY` with `copy_id` `D1` and `pickup_by` Wednesday 11 March.
++- [ ] A copy returned on Sunday 8 March makes a Hold Ready with `pickup_by` Monday 16 March, because Sunday 15 March is closed.
++- [ ] With two Holds waiting, only the first becomes Ready. The second stays `WAITING`, and `holds_for` lists the Ready Hold first.
++- [ ] With `B1` and `B2` both out and two Holds on `978-1`, each returned copy goes to the next Hold in placement order. This includes two Holds placed on the same day.
++- [ ] `return_copy` still returns the same closed Loan, and a late return still posts its Fine.
++- [ ] A return with nobody waiting shelves the copy as `AVAILABLE`, as before.
++- [ ] A copy on the Hold shelf isn't in `available_copies`. `withdraw_copy` on it raises `CopyNotAvailable`.
++- [ ] A member can place a Hold on a Title whose only copy is on the Hold shelf for someone else.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`. They don't call policy functions directly.
++- [ ] The README's Concepts section gains Hold shelf and Pickup deadline, and its Copy entry mentions `ON_HOLD_SHELF`, consistent with `GLOSSARY.md`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/holds/issues/03-collect-a-ready-hold-at-checkout.md b/.scratch/holds/issues/03-collect-a-ready-hold-at-checkout.md
+new file mode 100644
+index 0000000..2859950
+--- /dev/null
++++ b/.scratch/holds/issues/03-collect-a-ready-hold-at-checkout.md
+@@ -0,0 +1,29 @@
++# 03: Collect a Ready Hold at checkout
++
++**Spec:** `.scratch/holds/spec.md`
++
++**What to build:** The member a copy is set aside for collects it with an ordinary checkout. `checkout(member_id, copy_id)` keeps its signature and its check order: member, borrowing block (10.00), copy lookup, availability, loan limit. Only the meaning of "available" changes. A copy can be lent if either:
++
++- it is `AVAILABLE`; or
++- it is `ON_HOLD_SHELF`, it is set aside for a Ready Hold belonging to this member, and that Hold's Pickup deadline is today or later.
++
++Anything else raises `CopyNotAvailable(copy_id, status)`, as today. On success the Loan is created as today, the copy goes `ON_LOAN`, and the Hold becomes `FULFILLED`. It keeps its `copy_id` and `pickup_by` and leaves `holds_for`.
++
++After the Pickup deadline, collecting is refused even if the daily job hasn't run yet. The Hold stays Ready until the job expires it (ticket 05). If the borrowing block or the loan limit refuses the checkout, the Hold stays Ready and the copy stays on the Hold shelf, so the member can pay or return something and still collect before the deadline.
++
++**Blocked by:** 02 (A returned copy goes to the Hold shelf).
++
++**Status:** ready-for-agent
++
++- [ ] The Hold's member checks out the set-aside copy. They get a normal Loan, the copy is `ON_LOAN`, the Hold is `FULFILLED`, and it no longer appears in `holds_for`.
++- [ ] Collecting works on the deadline day itself. For example, Ready on Wednesday 4 March 2026 and collected on Wednesday 11 March.
++- [ ] Collecting the day after the deadline, with the daily job not yet run, raises `CopyNotAvailable`. The Hold is still `READY` and the copy still `ON_HOLD_SHELF`.
++- [ ] Any other member checking out the set-aside copy gets `CopyNotAvailable`, and the Hold stays Ready.
++- [ ] A Hold member whose Balance is 10.00 gets `AccountBlocked` when collecting. The Hold stays `READY`, and after a Payment brings the Balance below 10.00 they can collect before the deadline.
++- [ ] A Hold member at their loan limit gets `LoanLimitReached` when collecting. The Hold stays `READY`, and after returning a copy they can collect before the deadline.
++- [ ] A fulfilled Hold keeps its `copy_id` and `pickup_by`.
++- [ ] If `cancel_hold` already exists (ticket 04), cancelling a Fulfilled Hold raises `HoldNotAllowed`. Otherwise ticket 04 adds this test.
++- [ ] Checking out an `AVAILABLE` copy works exactly as before.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`.
++- [ ] The README's Concepts section gains Collect, consistent with `GLOSSARY.md`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/holds/issues/04-cancel-a-hold.md b/.scratch/holds/issues/04-cancel-a-hold.md
+new file mode 100644
+index 0000000..590de50
+--- /dev/null
++++ b/.scratch/holds/issues/04-cancel-a-hold.md
+@@ -0,0 +1,26 @@
++# 04: Cancel a Hold
++
++**Spec:** `.scratch/holds/spec.md`
++
++**What to build:** A member can cancel a Hold they no longer need. `LendingService.cancel_hold(hold_id) -> Hold` returns the cancelled Hold.
++
++- An unknown id raises a new `HoldNotFound(LendingError)`, which carries the `hold_id` like `LoanNotFound` does.
++- Only Waiting and Ready Holds can be cancelled. A Hold in any other state (`FULFILLED`, `CANCELLED` or `EXPIRED`) raises `HoldNotAllowed`. The check is on the status, so it covers every finished state the same way.
++- A `WAITING` Hold becomes `CANCELLED` and leaves the queue.
++- A `READY` Hold becomes `CANCELLED`, and its copy passes on through the set-aside rule from ticket 02. The next Waiting Hold becomes Ready with a Pickup deadline counted from today. If nobody is waiting, the copy goes back to `AVAILABLE`.
++- A cancelled Hold keeps its `copy_id` and `pickup_by`, if it had them.
++- Cancelling has no money check and posts no Charge.
++
++**Blocked by:** 02 (A returned copy goes to the Hold shelf).
++
++**Status:** ready-for-agent
++
++- [ ] Cancelling a Waiting Hold returns it as `CANCELLED`, and it leaves `holds_for`. The Holds behind it move up.
++- [ ] Cancelling a Ready Hold with someone waiting behind it: the copy stays `ON_HOLD_SHELF`, and the next Hold becomes `READY` with that copy and a `pickup_by` 7 days from today (moved past a closed day).
++- [ ] Cancelling a Ready Hold with nobody waiting puts the copy back to `AVAILABLE`.
++- [ ] A cancelled Ready Hold still shows its `copy_id` and `pickup_by`.
++- [ ] Cancelling a Cancelled Hold raises `HoldNotAllowed`. If ticket 03 or 05 has already landed, cancelling a Fulfilled or an Expired Hold raises `HoldNotAllowed` too.
++- [ ] An unknown hold id raises `HoldNotFound`, carrying the id.
++- [ ] Cancelling a Hold leaves the member's Balance unchanged, and works for a member who is Blocked.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/holds/issues/05-daily-job-expires-uncollected-holds.md b/.scratch/holds/issues/05-daily-job-expires-uncollected-holds.md
+new file mode 100644
+index 0000000..a9433b5
+--- /dev/null
++++ b/.scratch/holds/issues/05-daily-job-expires-uncollected-holds.md
+@@ -0,0 +1,28 @@
++# 05: Daily job expires uncollected Holds
++
++**Spec:** `.scratch/holds/spec.md`
++
++**What to build:** A daily job clears Holds that nobody collected, so set-aside copies don't sit on the Hold shelf forever. `LendingService.expire_holds() -> list[Hold]` works from today's date on the Clock:
++
++- Every `READY` Hold whose Pickup deadline is before today becomes `EXPIRED`. It keeps its `copy_id` and `pickup_by`.
++- Each expired Hold's copy then passes on through the set-aside rule from ticket 02. The next Waiting Hold on that Title becomes Ready with a Pickup deadline counted from today. If nobody is waiting, the copy goes back to `AVAILABLE`.
++- A Hold made Ready during the run has a deadline at least 7 days away, so it never expires in the same run.
++- The job returns the Holds it expired, in placement order, across all Titles. A second run on the same day returns `[]` and changes nothing.
++- After days when it didn't run, the job expires everything now past its deadline. Copies passed on get deadlines counted from the day it actually runs.
++- Waiting Holds never expire. Expiry posts no Charge, because no-show fees are out of scope.
++
++**Blocked by:** 02 (A returned copy goes to the Hold shelf).
++
++**Status:** ready-for-agent
++
++- [ ] A Hold Ready on Wednesday 4 March 2026 (deadline Wednesday 11 March) is not expired by a run on 11 March, which returns `[]`.
++- [ ] A run on Thursday 12 March returns that Hold as `EXPIRED`, still showing its `copy_id` and `pickup_by`. It leaves `holds_for`.
++- [ ] With another Hold waiting, the copy stays `ON_HOLD_SHELF`, and that Hold becomes `READY` with `pickup_by` Thursday 19 March.
++- [ ] With nobody waiting, the copy goes back to `AVAILABLE`.
++- [ ] A second run on the same day returns `[]` and changes no Hold or copy.
++- [ ] A run after several missed days expires every Ready Hold now past its deadline, on every Title. It returns them in placement order and passes each copy on with a deadline counted from the day of the run.
++- [ ] A Waiting Hold is never expired, however long it has waited.
++- [ ] Expiry leaves the member's Balance unchanged.
++- [ ] If `cancel_hold` already exists (ticket 04), cancelling an Expired Hold raises `HoldNotAllowed`. Otherwise ticket 04 adds this test.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/holds/issues/06-new-copies-go-to-the-queue.md b/.scratch/holds/issues/06-new-copies-go-to-the-queue.md
+new file mode 100644
+index 0000000..bb0c27a
+--- /dev/null
++++ b/.scratch/holds/issues/06-new-copies-go-to-the-queue.md
+@@ -0,0 +1,21 @@
++# 06: New copies go to the queue
++
++**Spec:** `.scratch/holds/spec.md`
++
++**What to build:** A new copy added to a Title that people are waiting for goes straight to the first person in the queue, so nobody can take it from the shelf ahead of them. `add_copy(copy_id, isbn)` keeps its signature and its existing checks (`TitleNotFound`, `DuplicateCopy`). It then places the new copy through the set-aside rule from ticket 02:
++
++- If the Title has a Waiting Hold, the copy goes to `ON_HOLD_SHELF`. The first Waiting Hold becomes Ready with that copy and a Pickup deadline counted from today, and the returned Copy shows `ON_HOLD_SHELF`.
++- Otherwise the copy is `AVAILABLE`, as today.
++
++With this in place, an `AVAILABLE` copy and a Waiting Hold never exist together on the same Title.
++
++**Blocked by:** 02 (A returned copy goes to the Hold shelf).
++
++**Status:** ready-for-agent
++
++- [ ] With `D1` out and a Hold waiting on `dvd-1`, adding copy `D2` returns it as `ON_HOLD_SHELF`. The Hold is `READY` with `copy_id` `D2` and `pickup_by` 7 days from today (moved past a closed day).
++- [ ] With two Holds waiting, only the first becomes Ready when one copy is added.
++- [ ] Adding a copy to a Title with nobody waiting gives an `AVAILABLE` copy, as before. That includes a Title whose only Hold is already Ready.
++- [ ] `add_copy` still raises `TitleNotFound` and `DuplicateCopy` as before, and touches no Hold when it does.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/holds/spec.md b/.scratch/holds/spec.md
+new file mode 100644
+index 0000000..292e60e
+--- /dev/null
++++ b/.scratch/holds/spec.md
+@@ -0,0 +1,238 @@
++# Holds
++
++Status: ready-for-agent
++
++## Problem Statement
++
++When every copy of a Title is out, a member who wants it has nothing to do but keep asking at the desk. Nothing records who asked first. When a copy comes back it goes straight onto the shelf, and whoever happens to be standing there takes it. The members who have been waiting longest get no priority. Staff have no list of who is waiting for what.
++
++## Solution
++
++A member can place a **Hold** on a Title when no copy of it is on the shelf. Holds on a Title form a **Hold queue** in the order they were placed. When a copy comes back, or a new copy is added, it doesn't go to the shelf. It is set aside on the **Hold shelf** for the first Waiting Hold, which becomes Ready. That member has until the **Pickup deadline**, seven days later (moved to the next open day if the library is closed), to **Collect** it. A member can cancel a Hold at any time before it is fulfilled. A daily job expires Ready Holds that nobody collected and passes each copy on to the next person waiting.
++
++Members who owe 5.00 or more are Blocked from placing Holds, which is lower than the 10.00 that blocks borrowing. Expiry costs nothing for now.
++
++Vocabulary follows `GLOSSARY.md` (see its Holds section). ADR-0001 is not changed by this feature.
++
++## User Stories
++
++1. As a member, I want to place a Hold on a Title when every copy is out, so that I don't have to keep asking at the desk.
++2. As a member, I want my Hold to be on the Title, not on a particular Copy, so that whichever copy comes back first can be mine.
++3. As a member, I want Holds served in the order they were placed, so that the people who have waited longest get the next copy.
++4. As a member who placed a Hold on the same day as someone else, I want the one placed first to stay first, so that the order is fair within a day as well.
++5. As a front-desk staff member, I want a Hold to be refused when a copy of the Title is on the shelf, so that the member just takes that copy.
++6. As a front-desk staff member, I want copies set aside for other members to count as out, so that a member can still queue for a Title whose only copies are on the Hold shelf.
++7. As a library manager, I want a Hold to be refused for a Title with no copies in circulation (none at all, or all withdrawn), so that nobody waits for a copy that will never come back.
++8. As a front-desk staff member, I want a member to be refused a second active Hold on the same Title, so that one member can't take two places in the queue.
++9. As a front-desk staff member, I want a member to be refused a Hold on a Title they already have a copy of on loan, so that nobody queues for something they already have.
++10. As a library manager, I want a member who owes 5.00 or more to be unable to place a Hold, so that members settle what they owe before claiming copies ahead of others.
++11. As a member who owes 4.99, I want to still be able to place a Hold, so that the block applies only at the threshold.
++12. As a library manager, I want the same 5.00 hold threshold for adults and children, so that there is one rule for Holds.
++13. As a front-desk staff member, I want a member Blocked for Holds to be told about the block before anything about the Title, so that we talk about the money first, as we do at checkout.
++14. As a developer calling the service, I want the hold block to raise the same error as the borrowing block, carrying the member, their Balance and the 5.00 threshold, so that the desk shows the same kind of message for both.
++15. As a member whose Balance rises after I placed a Hold, I want my Hold to keep its place in the queue, so that owing money later doesn't lose me my turn.
++16. As a member, I want there to be no limit on how many Holds I can have, so that I can queue for everything I want.
++17. As a front-desk staff member, I want a returned copy to go to the Hold shelf when someone is waiting for its Title, so that it doesn't end up back on the shelf for anyone to take.
++18. As a front-desk staff member, I want returning a copy to work exactly as before (same call, same closed Loan handed back, same Fine), so that the desk workflow doesn't change.
++19. As a member at the front of the queue, I want my Hold to become Ready with the copy set aside for me, so that I know which copy is mine.
++20. As a member with a Ready Hold, I want seven days to collect it, so that I have time to get to the library.
++21. As a member, I want a Pickup deadline that would land on a Sunday to move to the Monday, so that my last day to collect is a day the library is open.
++22. As a member, I want to be able to collect on the deadline day itself, so that "by Wednesday" means Wednesday is still fine.
++23. As a front-desk staff member, I want a new copy added to a Title that people are waiting for to go straight to the first person in the queue, so that nobody can take a new copy ahead of the queue.
++24. As a member with a Ready Hold, I want to collect my copy with an ordinary checkout, so that collecting works like any other loan.
++25. As a member, I want collecting my copy to fulfil my Hold, so that it leaves the queue.
++26. As a front-desk staff member, I want a copy on the Hold shelf to be refused to anyone but the member it is set aside for, so that a set-aside copy is never lent to someone else.
++27. As a member with a Ready Hold who now owes 10.00 or more, I want to be told I'm Blocked when I try to collect, and to keep my Hold until the deadline, so that I can pay and still collect in time.
++28. As a member with a Ready Hold who is at my loan limit, I want to be told about the limit when I try to collect, and to keep my Hold until the deadline, so that I can return something and still collect in time.
++29. As a member, I want to cancel a Hold I no longer need, whether it is Waiting or Ready, so that I don't keep a place I won't use.
++30. As the next member in the queue, I want a copy freed by a cancelled Ready Hold to pass to me straight away, with my own full seven days, so that I don't wait for the daily job.
++31. As a front-desk staff member, I want a copy freed by a cancellation to go back to the shelf when nobody else is waiting, so that it can be borrowed.
++32. As a developer calling the service, I want cancelling a Hold that is already fulfilled, cancelled or expired to be refused, so that a finished Hold never changes again.
++33. As a developer calling the service, I want an unknown Hold id to raise a not-found error, so that error handling matches the rest of the service.
++34. As a library manager, I want a daily job that expires Ready Holds whose Pickup deadline has passed, so that uncollected copies don't sit on the Hold shelf forever.
++35. As the next member in the queue, I want a copy freed by an expired Hold to pass to me, with seven days counted from the day the job runs, so that I get my full time to collect.
++36. As a front-desk staff member, I want a copy freed by an expired Hold to go back on the shelf when nobody else is waiting, so that it can be borrowed.
++37. As a library manager, I want the daily job to return the Holds it expired, so that staff can see whose copies were not collected.
++38. As a library manager, I want running the job twice on the same day to change nothing the second time, so that an accidental re-run is harmless.
++39. As a library manager, I want the job to catch up after days it didn't run, so that a missed day doesn't leave stale Holds behind.
++40. As a member with a Waiting Hold, I want it never to expire just from waiting, so that I keep my place however long the queue takes.
++41. As a member who misses a pickup, I want expiry to cost nothing, so that I'm not charged for changing my mind.
++42. As a front-desk staff member, I want to see the active Holds on a Title, first in line first, so that I can tell a member where they stand.
++43. As a front-desk staff member, I want a copy on the Hold shelf to be refused for withdrawal, so that a set-aside copy isn't taken out of circulation while someone is due to collect it.
++44. As a front-desk staff member, I want the list of available copies to leave out copies on the Hold shelf, so that I don't send a member to a copy that is set aside.
++45. As a developer calling the service, I want unknown members and Titles to raise the same not-found errors from the hold operations as everywhere else, so that error handling stays the same across the service.
++46. As a library manager, I want the hold threshold and the pickup period kept with the other circulation numbers, so that changing them is a one-line policy change.
++47. As a library manager, I want the Pickup deadline to follow the library's own closed-day rule, so that if we ever close on another weekday, deadlines move with due dates.
++
++## Implementation Decisions
++
++**Interface contract.** Other code will call exactly this, on `LendingService`:
++
++- `place_hold(member_id: str, isbn: str) -> Hold`: places a Waiting Hold.
++- `cancel_hold(hold_id: str) -> Hold`: cancels a Waiting or Ready Hold and returns it.
++- `expire_holds() -> list[Hold]`: the daily job. It returns the Holds it expired.
++- `holds_for(isbn: str) -> list[Hold]`: the active (Waiting and Ready) Holds on the Title, first in line first.
++- `return_copy(copy_id)` and `checkout(member_id, copy_id)` keep their signatures and return values. `add_copy` keeps its signature.
++
++**Models:**
++
++- A dataclass `Hold(hold_id: str, member_id: str, isbn: str, placed_on: date, status: HoldStatus, copy_id: str | None, pickup_by: date | None)`. It is mutable like `Loan`, and only the service changes it.
++- An enum `HoldStatus` with `WAITING`, `READY`, `FULFILLED`, `CANCELLED` and `EXPIRED`. Values are lowercase strings, as in the other enums.
++- `CopyStatus` gains `ON_HOLD_SHELF` (value `"on_hold_shelf"`).
++- A new Hold is `WAITING`, dated today from the Clock, with `copy_id` and `pickup_by` both `None`. They are set when it becomes `READY`. After that they are never cleared, so a Fulfilled, Cancelled or Expired Hold still shows the copy it had and its deadline.
++- Hold ids come from the repository's sequence with prefix `H` (`H0001`, `H0002`, …).
++- `Hold` and `HoldStatus` are exported from the package next to `Loan` and `CopyStatus`.
++
++**New errors**, both subclasses of `LendingError`:
++
++- `HoldNotAllowed`: a Hold can't be placed, or a Hold can't be cancelled in its current state. It has a readable message saying why.
++- `HoldNotFound`: carries the unknown `hold_id`, like `LoanNotFound`.
++- Existing errors are reused where they fit. That means `MemberNotFound`, `TitleNotFound`, `AccountBlocked` (with the 5.00 threshold), and `CopyNotAvailable` for a copy on the Hold shelf.
++
++**Policy:**
++
++- Hold threshold: 5.00, the same for every member category, next to the borrowing threshold.
++- Pickup period: 7 days. The Pickup deadline is the day the Hold becomes Ready plus 7 calendar days. If that falls on a closed day, it moves to the next open day, using the existing open-day rule the same way due dates do.
++- Worked examples (must hold): Ready on Wednesday 4 March 2026 gives a deadline of Wednesday 11 March. Ready on Sunday 8 March gives Sunday 15 March, which moves to Monday 16 March.
++
++**Placing a Hold.** Checks run in this order:
++
++1. Member lookup (`MemberNotFound`).
++2. The hold block: `AccountBlocked(member_id, balance, 5.00)` when the Balance is ≥ 5.00.
++3. Title lookup (`TitleNotFound`).
++4. `HoldNotAllowed` if any of these is true:
++   - the Title has no copy that isn't withdrawn;
++   - any copy of the Title is `AVAILABLE`;
++   - the member already has a Waiting or Ready Hold on the Title;
++   - the member has an open Loan on a copy of the Title.
++
++Copies `ON_LOAN` or `ON_HOLD_SHELF` both count as out. A member who becomes Blocked after placing a Hold keeps it. There is no limit on how many Holds a member can have.
++
++**Setting a copy aside.** One rule is used by every path that frees or adds a copy. If the Title has a Waiting Hold, the copy goes to `ON_HOLD_SHELF`. The first Waiting Hold in placement order then becomes `READY`, with this `copy_id` and a Pickup deadline counted from today. If no Hold is waiting, the copy goes to `AVAILABLE`. The rule is used by:
++
++- `return_copy`: the Loan is closed and its Fine posted exactly as today (ADR-0001), then the copy is set aside or shelved.
++- `add_copy`: a new copy of a Title with a Waiting Hold goes straight to the Hold shelf. The returned Copy shows `ON_HOLD_SHELF`.
++- `cancel_hold` of a Ready Hold, and `expire_holds`: the freed copy passes on, as described below.
++
++So an `AVAILABLE` copy and a Waiting Hold on the same Title never exist together.
++
++**Collecting.** The check order in `checkout` is unchanged: member, borrowing block (10.00), copy lookup, availability, loan limit. Availability now means one of two things:
++
++- the copy is `AVAILABLE`; or
++- the copy is `ON_HOLD_SHELF`, it is set aside for a Ready Hold belonging to this member, and that Hold's Pickup deadline is today or later.
++
++Anything else raises `CopyNotAvailable(copy_id, status)`. On success the Loan is created as today, the copy goes `ON_LOAN` and the Hold becomes `FULFILLED`. If the block or the loan limit refuses the checkout, the Hold stays `READY` and the copy stays on the Hold shelf.
++
++**Cancelling:**
++
++- An unknown id raises `HoldNotFound`.
++- A `FULFILLED`, `CANCELLED` or `EXPIRED` Hold raises `HoldNotAllowed`.
++- A `WAITING` Hold becomes `CANCELLED`.
++- A `READY` Hold becomes `CANCELLED`, and its copy passes on through the set-aside rule. The next Waiting Hold gets a deadline counted from today. If nobody is waiting, the copy goes back to `AVAILABLE`.
++- Cancelling has no money check and no charge.
++
++**The daily job (`expire_holds`):**
++
++- Every `READY` Hold whose Pickup deadline is before today becomes `EXPIRED`. Each one's copy then passes on through the set-aside rule, with deadlines counted from today.
++- A Hold made Ready during the run has a deadline at least 7 days away, so it can't expire in the same run.
++- The job returns the Holds it expired, in placement order. A second run on the same day returns `[]` and changes nothing.
++- The job works from today's date only. After missed days it expires everything now past its deadline.
++- Waiting Holds never expire. Expiry posts no Charge.
++
++**`holds_for`:** `TitleNotFound` for an unknown ISBN. Otherwise it returns the Title's `WAITING` and `READY` Holds in placement order. Placement order is the order the Holds were created, not `placed_on`, so Holds placed on the same day keep their order.
++
++**Unchanged:**
++
++- `withdraw_copy` still accepts only `AVAILABLE` copies, so a copy on the Hold shelf gets `CopyNotAvailable`.
++- `available_copies` still lists only `AVAILABLE` copies.
++- The overdue report, loan periods, due dates, loan limits, Fines, the Balance and the borrowing threshold.
++
++**Repository:** gains storage for Holds behind its existing style of interface: add a Hold, get one by id (raising `HoldNotFound`), and list Holds by Title and across all Titles in placement order. The service remains the only thing that changes state.
++
++**Docs:**
++
++- The README's Concepts section gains short entries for Hold, Hold queue, Hold shelf, Pickup deadline and Collect, consistent with `GLOSSARY.md`.
++- The README's Copy entry mentions `ON_HOLD_SHELF`.
++- The README's Blocked entry mentions the 5.00 hold threshold.
++
++## Testing Decisions
++
++- **One seam: the public `LendingService` interface**, built from the shared `service` and `clock` fixtures (`InMemoryRepository`, `FixedClock` starting Monday 2 March 2026). `conftest.py` stays unchanged.
++  - Queue tests use `dvd-1`: its only copy is `D1`, so checking it out means every copy is out.
++  - `978-1` (copies `B1`, `B2`) covers "a copy is still on the shelf" and "two copies, two Holds."
++  - Tests that need more members than `ann` and `kid` register them themselves.
++- **A good test** drives the service the way the desk would: `checkout`, `place_hold`, move the clock, `return_copy`, `add_copy`, `cancel_hold`, `expire_holds`. It asserts only on what the service returns or raises: the returned `Hold`s, `holds_for`, `get_copy(...).status`, `balance()` and the errors. Tests don't reach into the repository or call policy functions directly, so the queue storage and the deadline calculation can be refactored freely.
++- **Prior art:** the checkout/return tests, which use `clock.set(...)` and `clock.advance(...)` with explicit dates and `pytest.raises` for domain errors. The blocked-member tests show how to assert on `AccountBlocked`'s member, Balance and threshold.
++- **Behaviours to cover:**
++  - Placing a Hold when every copy is out gives a `WAITING` Hold, dated today, with no copy or deadline.
++  - `HoldNotAllowed` when:
++    - a copy is `AVAILABLE`;
++    - the Title has no copies;
++    - all of the Title's copies are withdrawn;
++    - the member already has a Waiting or a Ready Hold on the Title;
++    - the member has the Title on loan.
++  - A Hold is allowed when the only copies are on the Hold shelf for someone else.
++  - `AccountBlocked` from `place_hold` at exactly 5.00 and above, not at 4.99, carrying the member, Balance and 5.00. The same applies to a child.
++  - Check order for `place_hold`:
++    - unknown member gives `MemberNotFound`;
++    - a Blocked member with an unknown ISBN gives `AccountBlocked`;
++    - an unknown ISBN gives `TitleNotFound`.
++  - A return with someone waiting:
++    - the copy is `ON_HOLD_SHELF`;
++    - the first Hold is `READY` with that `copy_id` and the right deadline;
++    - later Holds stay `WAITING`;
++    - `return_copy` still returns the closed Loan;
++    - a late return still posts its Fine.
++  - A return with nobody waiting shelves the copy as before.
++  - Both deadline examples: Wednesday 4 → Wednesday 11 March, and Sunday 8 → Monday 16 March.
++  - Two copies coming back serve the first two Holds in placement order. The order holds for Holds placed on the same day.
++  - `add_copy` to a Title with a Waiting Hold sets the copy aside. With no Waiting Hold, it shelves it.
++  - Collecting:
++    - the Hold's member can check out the set-aside copy on the deadline day;
++    - the Hold becomes `FULFILLED`, the copy `ON_LOAN`, and it leaves `holds_for`;
++    - anyone else gets `CopyNotAvailable`;
++    - collecting after the deadline (before the job has run) gets `CopyNotAvailable`.
++  - A Hold member who owes 10.00 gets `AccountBlocked` at collection, and one at their loan limit gets `LoanLimitReached`. In both cases the Hold stays `READY`, and after paying (or returning) they can collect before the deadline.
++  - A Hold keeps its place after its member's Balance passes 5.00.
++  - Cancelling:
++    - a Waiting Hold is `CANCELLED` and leaves `holds_for`;
++    - a Ready Hold is `CANCELLED`, and its copy passes to the next Waiting Hold with a deadline from today, or goes back to `AVAILABLE` if nobody is waiting;
++    - a cancelled Ready Hold keeps its `copy_id` and `pickup_by`.
++  - `HoldNotAllowed` when cancelling a Fulfilled, Cancelled or Expired Hold. `HoldNotFound` for an unknown id.
++  - The job:
++    - nothing expires on the deadline day;
++    - the Hold expires the day after and is returned;
++    - its copy passes on with a deadline from that day, or goes `AVAILABLE`;
++    - a second run the same day returns `[]`;
++    - a run after several missed days expires everything past its deadline and passes copies on with deadlines from that day;
++    - Waiting Holds never expire;
++    - expiry leaves the Balance unchanged.
++  - `holds_for` lists Ready then Waiting Holds in placement order and excludes finished ones. It raises `TitleNotFound` for an unknown ISBN.
++  - `withdraw_copy` on a copy on the Hold shelf raises `CopyNotAvailable`. `available_copies` leaves it out.
++  - The existing tests pass unchanged.
++
++## Out of Scope
++
++- **Renewals**, the next feature. Rules already given:
++  - A Loan can't be renewed while its Title has any **Waiting** Hold. Ready Holds don't count, because those members already have their copy.
++  - Only members with a Balance of 0.00 when they ask can renew. Anything owed blocks renewal until it is paid.
++
++  Open questions for that feature:
++  - ADR-0001 requires renewing an overdue Loan to post the Fine built up so far. Is the Balance checked before that Fine is posted? "When they ask" suggests yes.
++  - Should a refusal for money reuse `AccountBlocked` with threshold 0.01, as Holds reuse it at 5.00?
++- **No-show fees** for uncollected Holds (a future kind of Charge; children exempt). Expiry is free for now.
++- A limit on how many Holds a member can have.
++- Expiring Waiting Holds, or letting a member say when they no longer need a Title.
++- Holds on a particular Copy, and Holds on Titles with no copies in circulation (for example, on order).
++- Telling members their Hold is Ready (notifications). Staff use `holds_for`.
++- Reordering a queue, staff priority, or pausing a Hold.
++- Listing a member's Holds, and any holds report.
++- Blocking members because they are holding overdue copies, as opposed to because of their Balance.
++- Persistence other than the in-memory repository.
++
++## Further Notes
++
++- **Collecting after the deadline before the job runs.** The glossary defines the Pickup deadline as the last day a Ready Hold can be collected. So `checkout` refuses a set-aside copy once its deadline has passed, even if `expire_holds` hasn't run yet. The Hold stays `READY` until the job expires it and passes the copy on. Confirmed with the user.
++- Children follow every hold rule exactly as adults do, including the 5.00 threshold.
++- ADR-0001 is untouched: setting a copy aside happens after the return's Fine is posted, and Holds never change the Balance.
++- All dates come from the injected Clock. Package code never calls `date.today()`.
+diff --git a/.scratch/overdue-fines/issues/01-account-manual-charges-and-balance.md b/.scratch/overdue-fines/issues/01-account-manual-charges-and-balance.md
+new file mode 100644
+index 0000000..16cb3ad
+--- /dev/null
++++ b/.scratch/overdue-fines/issues/01-account-manual-charges-and-balance.md
+@@ -0,0 +1,21 @@
++# 01: Account with Manual charges and Balance
++
++**Spec:** `.scratch/overdue-fines/spec.md`
++
++**What to build:** Every Member has an Account from the day they register. Front-desk staff can raise a Manual charge with a reason and look up what the member owes. `LendingService.balance(member_id) -> Decimal` returns the current Balance. `LendingService.add_charge(member_id, amount, reason) -> Decimal` records a Manual charge and returns the new Balance. The Account is a record of entries (Charges, and Payments from ticket 02), each with a positive `Decimal` amount and the date it was recorded on, taken from the Clock. The Balance is worked out from those entries, never stored. Model the entries so that Fines (ticket 03) and Payments (ticket 02) fit in without reshaping anything: a Fine records its Loan, a Manual charge its reason, and entries keep the order they were recorded in. The rule for valid amounts introduced here is shared, and ticket 02 reuses it for Payments.
++
++**Blocked by:** None (can start immediately).
++
++**Status:** ready-for-agent
++
++- [ ] A newly registered member's `balance()` is `Decimal("0.00")`.
++- [ ] `add_charge` returns the new Balance, and `balance()` agrees. Two charges add up, for example 2.50 then 4.00 gives 6.50.
++- [ ] The Manual charge reason is stored as given, with no validation (a blank reason is accepted).
++- [ ] `InvalidAmount(LendingError)` is added to the domain errors. It carries the rejected amount and has a readable message.
++- [ ] `add_charge` raises `InvalidAmount` for zero, a negative amount, NaN, an infinite value, an amount that isn't a whole number of cents (`Decimal("0.001")`), a `float`, an `int` and a `str`.
++- [ ] Whole cents are judged by value: `Decimal("1.000")` is accepted as 1.00.
++- [ ] `balance` and `add_charge` raise `MemberNotFound` for an unknown member. With an unknown member and an invalid amount together, `MemberNotFound` wins.
++- [ ] A rejected charge leaves the Balance unchanged.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures. They don't inspect Account entries or the repository.
++- [ ] The README Concepts section gains Account, Charge, Manual charge and Balance, consistent with `GLOSSARY.md`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/overdue-fines/issues/02-payments.md b/.scratch/overdue-fines/issues/02-payments.md
+new file mode 100644
+index 0000000..ddea46b
+--- /dev/null
++++ b/.scratch/overdue-fines/issues/02-payments.md
+@@ -0,0 +1,19 @@
++# 02: Payments
++
++**Spec:** `.scratch/overdue-fines/spec.md`
++
++**What to build:** Members can pay all or part of their Balance at the desk. `LendingService.pay(member_id, amount) -> Decimal` records a Payment on the member's Account, dated by the Clock, and returns the new Balance. Payments reduce the Balance as a whole and are never assigned to particular Charges. The library never holds credit: a Payment larger than the Balance is refused, so the Balance never goes below zero. Amounts are validated by the same rule as Manual charges (ticket 01).
++
++**Blocked by:** 01 (Account with Manual charges and Balance).
++
++**Status:** ready-for-agent
++
++- [ ] After a 10.00 Manual charge, `pay` of 4.00 returns 6.00, and `balance()` agrees.
++- [ ] A Payment of exactly the Balance brings it to `Decimal("0.00")`.
++- [ ] A Payment larger than the Balance raises `InvalidAmount` and leaves the Balance unchanged.
++- [ ] Any Payment when the Balance is 0.00 raises `InvalidAmount`.
++- [ ] `pay` raises `InvalidAmount` for zero, a negative amount, NaN, an infinite value, a sub-cent amount, a `float`, an `int` and a `str`. It uses the same rule as `add_charge`, not a copy of it.
++- [ ] `pay` raises `MemberNotFound` for an unknown member, and that takes precedence over an invalid amount.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures.
++- [ ] The README Concepts section gains Payment, consistent with `GLOSSARY.md`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/overdue-fines/issues/03-fines-on-late-return.md b/.scratch/overdue-fines/issues/03-fines-on-late-return.md
+new file mode 100644
+index 0000000..960e259
+--- /dev/null
++++ b/.scratch/overdue-fines/issues/03-fines-on-late-return.md
+@@ -0,0 +1,29 @@
++# 03: Fines on late return
++
++**Spec:** `.scratch/overdue-fines/spec.md`
++
++**What to build:** Returning a copy late now costs the member money. `return_copy(copy_id)` keeps its signature and still returns the closed Loan. When the Loan was late, it also posts a Fine to the member's Account, dated on the return day and linked to the Loan.
++
++The Fine is the number of Late days times the material's daily rate: DVD 1.00, Book 0.25. Late days are the days after the due date, up to and including the return day, on which the library is open. The count uses the existing open-day rule in the circulation policy, not a hardcoded Sunday. The rates live in the circulation policy next to the loan periods.
++
++The Fines on one Loan together never exceed the Title's replacement cost. The Fine posted is therefore at most the replacement cost minus any Fines already on that Loan. Today a Loan has at most one Fine, but renewals will add more (see ADR-0001). Children are never fined. When the amount comes to zero, nothing is written.
++
++Fines are posted only when lateness ends (ADR-0001). An overdue copy still out on loan doesn't affect the Balance.
++
++**Blocked by:** 01 (Account with Manual charges and Balance).
++
++**Status:** ready-for-agent
++
++- [ ] Book due Monday 23 March 2026 and returned Monday 30 March 2026: 6 Late days (Sunday 29 March excluded), so the Balance is 1.50.
++- [ ] DVD borrowed Monday 2 March and due Monday 9 March, returned Monday 16 March: 6 Late days (Sunday 15 March excluded), so the Balance is 6.00.
++- [ ] A return on the due date, or before it, posts no Fine.
++- [ ] A book due on a Saturday and returned the next day (Sunday) posts no Fine.
++- [ ] A very late DVD (replacement cost 12.00) gives a Balance of exactly 12.00. A very late book (18.00) gives exactly 18.00.
++- [ ] A child member's late return posts no Fine. The Loan is still closed and the copy shelved.
++- [ ] `return_copy` returns the same closed Loan as before, with `returned_on` set to the return day.
++- [ ] A member holding an overdue copy that hasn't come back still has a Balance of 0.00.
++- [ ] A Fine adds to existing Manual charges on the same Account.
++- [ ] The overdue report and its calendar-day `days_overdue` are unchanged, and its existing tests pass untouched.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`. They don't call policy functions directly.
++- [ ] The README Concepts section gains Fine and Late day, consistent with `GLOSSARY.md`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/overdue-fines/issues/04-blocked-members-cant-borrow.md b/.scratch/overdue-fines/issues/04-blocked-members-cant-borrow.md
+new file mode 100644
+index 0000000..cb2a89d
+--- /dev/null
++++ b/.scratch/overdue-fines/issues/04-blocked-members-cant-borrow.md
+@@ -0,0 +1,23 @@
++# 04: Blocked members can't borrow
++
++**Spec:** `.scratch/overdue-fines/spec.md`
++
++**What to build:** A member who owes 10.00 or more can't take out another copy until they pay it down. `checkout` raises a new `AccountBlocked(LendingError)` when the member's Balance has reached the borrowing threshold of 10.00. The threshold is the same for every member category and lives in the circulation policy next to the loan limits. The error carries the member id, the Balance and the threshold it reached. It carries the threshold because a later hold feature will reuse it with its own lower threshold.
++
++The order of checks in `checkout` is: member lookup (`MemberNotFound`) first, then the block, then the existing copy lookup, availability and loan-limit checks in their current order. The money conversation therefore comes first. Paying the Balance below the threshold lets the member borrow again straight away.
++
++**Blocked by:** 01 (Account with Manual charges and Balance), 02 (Payments).
++
++**Status:** ready-for-agent
++
++- [ ] `AccountBlocked(LendingError)` is added to the domain errors. It carries the member id, the Balance and the threshold, and has a readable message (for example "owes 12.00, limit 10.00").
++- [ ] With a Balance of exactly 10.00, `checkout` raises `AccountBlocked` and the copy stays available. A higher Balance is blocked too.
++- [ ] With a Balance of 9.99, `checkout` succeeds.
++- [ ] A Blocked member gets `AccountBlocked` rather than `CopyNotAvailable` when asking for a copy already on loan.
++- [ ] A Blocked member gets `AccountBlocked` rather than `LoanLimitReached` when already at their loan limit.
++- [ ] An unknown member still gets `MemberNotFound`.
++- [ ] A child can be Blocked through Manual charges, at the same 10.00 threshold.
++- [ ] After a Payment brings the Balance below 10.00, the same member can borrow again.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures.
++- [ ] The README Concepts section gains Blocked, consistent with `GLOSSARY.md`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/overdue-fines/spec.md b/.scratch/overdue-fines/spec.md
+new file mode 100644
+index 0000000..69f8836
+--- /dev/null
++++ b/.scratch/overdue-fines/spec.md
+@@ -0,0 +1,155 @@
++# Overdue fines and member Accounts
++
++Status: ready-for-agent
++
++## Problem Statement
++
++Returning a copy late costs the member nothing, so copies come back weeks late. DVDs are the worst, with a 7-day loan period they routinely ignore. Front-desk staff have no way to record what a member owes: not for late returns, and not for anything else, such as a damaged case. So there is nothing to stop a member who owes the library money from borrowing more.
++
++## Solution
++
++Every member gets an **Account**. Returning a copy late automatically raises a **Fine** on it, based on the number of **Late days**. Staff can raise a **Manual charge** with a reason, and members can make **Payments**. The member's **Balance** is what they owe right now. A member whose Balance reaches 10.00 is **Blocked**: checkout is refused until they pay it down. Children are never fined, but they can receive Manual charges and be Blocked like anyone else.
++
++Vocabulary follows `GLOSSARY.md`. The timing of Fines follows ADR-0001 (Fines are posted when lateness ends, not while it builds up).
++
++## User Stories
++
++1. As a front-desk staff member, I want a late return to charge the member automatically, so that I don't have to work out and enter fines by hand.
++2. As a front-desk staff member, I want returning a copy to work exactly as before (same call, same Loan handed back), so that the desk workflow doesn't change.
++3. As a library manager, I want a late DVD to cost 1.00 per Late day, so that members have a real reason to bring DVDs back on time.
++4. As a library manager, I want a late book to cost 0.25 per Late day, so that book fines stay modest but still discourage lateness.
++5. As a member, I want Sundays not to count as Late days, so that I'm not fined for days when the library was closed and I couldn't have returned the copy.
++6. As a member, I want a copy returned on or before its due date to cost nothing, so that returning on time is never penalised.
++7. As a member, I want a copy handed back on a closed day just after its due date to cost nothing if no open day has passed, so that I'm not fined when the library gave me no chance to return it.
++8. As a library manager, I want lateness to count from the first day after the due date with no grace period, so that the rule is simple to explain at the desk.
++9. As a member, I want a Loan's Fines never to exceed the replacement cost of the Title, so that a very late return never costs more than the copy is worth.
++10. As a parent, I want my child never to be fined for a late return, so that children are still encouraged to use the library.
++11. As a front-desk staff member, I want a child's late return to be handled like any other return (Loan closed, copy shelved), so that the only difference is that nothing is charged.
++12. As a front-desk staff member, I want to look up a member's Balance, so that I can tell them what they owe.
++13. As a newly registered member, I want my Balance to start at 0.00, so that I owe nothing until something is charged.
++14. As a front-desk staff member, I want to raise a Manual charge with a reason, such as a damaged case, so that costs other than late returns are recorded too.
++15. As a front-desk staff member, I want raising a Manual charge to tell me the member's new Balance, so that I can tell them straight away.
++16. As a library manager, I want every Charge kept with its date and, for a Manual charge, its reason, so that staff can explain to a member why they owe what they owe.
++17. As a library manager, I want each Fine linked to the Loan it is for, so that a Fine can always be traced back to the copy that came back late.
++18. As a member, I want to pay all or part of my Balance, so that I can clear what I owe in one go or bit by bit.
++19. As a front-desk staff member, I want taking a Payment to tell me the new Balance, so that I can confirm it with the member at the desk.
++20. As a front-desk staff member, I want a Payment larger than the Balance to be refused, so that the library never holds money as credit for a member.
++21. As a front-desk staff member, I want zero, negative or sub-cent amounts to be refused for both Charges and Payments, so that typing mistakes don't end up on an Account.
++22. As a developer calling the service, I want float amounts to be refused, so that money is never handled as a float anywhere in the system.
++23. As a developer calling the service, I want NaN and infinite amounts to be refused, so that an Account can never end up with an amount that makes no sense.
++24. As a developer calling the service, I want unknown members to raise the same not-found error for Balance, Charges and Payments as they do everywhere else, so that error handling stays the same across the service.
++25. As a library manager, I want a member who owes 10.00 or more to be unable to borrow, so that members settle what they owe before taking out more copies.
++26. As a member who owes 9.99, I want to still be able to borrow, so that the block applies only at the threshold.
++27. As a member who was Blocked, I want to be able to borrow again as soon as a Payment brings my Balance below 10.00, so that paying is all it takes to unblock me.
++28. As a front-desk staff member, I want a Blocked member to be told about the block before anything about the copy (already on loan, or loan limit reached), so that we talk about the money first.
++29. As a developer calling the service, I want the block error to carry the member, their Balance and the threshold, so that the desk can show a clear message such as "owes 12.00, limit 10.00".
++30. As a library manager, I want the same 10.00 threshold for adults and children, so that there is one rule for borrowing.
++31. As a parent, I want my child to be Blocked only through Manual charges, so that the block reflects real costs like damage and never late returns.
++32. As a member with an overdue copy still at home, I want my Balance to show only what has actually been charged, so that the figure I'm quoted today doesn't change from one day to the next while nothing is recorded.
++33. As a library manager, I want the overdue report to stay exactly as it is (calendar days since the due date), so that the printout staff already use doesn't change.
++34. As a library manager, I want the fine rates and the borrowing threshold kept with the other circulation numbers, so that changing a rate is a one-line policy change.
++35. As a library manager, I want Late days to follow the library's own closed-day rule, so that if we ever close on another weekday, fines and due dates change together.
++36. As a developer extending the service later, I want the Account to allow more than one Fine on a Loan, with the replacement-cost cap applied to their total, so that renewals can charge lateness without the cap being broken.
++
++## Implementation Decisions
++
++**Interface contract.** Other code will call exactly this, all on `LendingService`:
++
++- `return_copy(copy_id)` keeps its signature and return value (the closed Loan). If the Loan was late, it now also posts a Fine to the member's Account.
++- `balance(member_id: str) -> Decimal`: the member's current Balance.
++- `add_charge(member_id: str, amount: Decimal, reason: str) -> Decimal`: posts a Manual charge and returns the new Balance.
++- `pay(member_id: str, amount: Decimal) -> Decimal`: records a Payment and returns the new Balance.
++- `checkout(member_id, copy_id)` is unchanged in signature, but now raises `AccountBlocked` for a Blocked member.
++
++**New errors**, both subclasses of `LendingError`, in the errors module:
++
++- `AccountBlocked`: carries the member id, the member's Balance and the threshold that was reached, and has a readable message. It carries the threshold because a later hold feature will reuse this error with its own, lower threshold.
++- `InvalidAmount`: carries the rejected amount and has a readable message.
++- Unknown members keep raising `MemberNotFound` from every new method.
++
++**Policy module** (where the circulation numbers live):
++
++- Fine rate per Late day, by material: DVD 1.00, Book 0.25, as `Decimal`, kept next to the loan periods.
++- Borrowing threshold: 10.00, the same for every member category.
++- A function that counts Late days: the days after the due date, up to and including the return day, on which the library is open. It uses the existing open-day rule, not a hardcoded Sunday. A return on or before the due date gives 0. A function that turns a material and a number of Late days into a fine amount is optional but fits here.
++- Children are never fined. This can be a policy rule or a service rule. Either way it is a single rule, not scattered checks.
++- Worked example (must hold): a book due Monday 23 March 2026 and returned Monday 30 March 2026 covers 24–30 March, which is 7 days. Taking off Sunday 29 March leaves 6 Late days, so the Fine is 6 × 0.25 = 1.50.
++
++**Fine on return:**
++
++- Amount = Late days × the material's rate, then capped. A Loan's Fines together must never exceed the Title's `replacement_cost`, so the Fine posted is at most the replacement cost minus any Fines already on that Loan. Today a Loan has at most one Fine. The cap is still computed against the Loan's total so that future renewals (ADR-0001) can't break it.
++- A Fine is posted only if the capped amount is greater than zero. A child member's return, a return with 0 Late days, or a Loan already at the cap writes nothing to the Account.
++- The Fine is dated on the return day (today from the injected Clock) and records the Loan it belongs to.
++
++**Account model:**
++
++- The Account is a record of entries, not a stored number. Each entry is either a Charge or a Payment, and the Balance is worked out from them: total Charges minus total Payments.
++- A Charge is either a Fine (linked to its Loan) or a Manual charge (with its reason). Every entry has a positive `Decimal` amount and the date it was recorded on, taken from the Clock. Entries keep the order they were recorded in.
++- Each Member has an Account from registration, so a registered member with no entries has a Balance of 0.00. The Balance is returned as a `Decimal` to two places.
++- The repository gains storage for Account entries behind its existing style of interface. The service stays the only thing that changes state. The new entry types don't need to be exported from the package or exposed as public read API. Listing a member's Account history is out of scope.
++
++**Balance semantics (ADR-0001):** the Balance includes only Charges that have been posted. Fines still building up on open overdue Loans are not in it and do not affect whether a member is Blocked.
++
++**Amount validation**, the same for `add_charge` and `pay`. Each of these raises `InvalidAmount`:
++
++- anything that isn't a `Decimal`, including `float`, `int` and `str`;
++- NaN or infinite values;
++- zero or negative values;
++- values that aren't a whole number of cents. This is judged by value, so `Decimal("1.000")` is accepted but `Decimal("0.001")` is not;
++- for `pay` only, an amount greater than the current Balance (no credit, and the Balance never goes below zero). A Payment of exactly the Balance brings it to 0.00.
++
++The member is looked up first. An unknown member with an invalid amount gets `MemberNotFound`.
++
++**Manual charge reason:** stored as given, with no validation.
++
++**Checkout check order:** member lookup (`MemberNotFound`), then the block check (`AccountBlocked` when the Balance is ≥ 10.00), then the existing copy lookup, availability and loan-limit checks in their current order. A Blocked member therefore gets `AccountBlocked` even for a copy that doesn't exist or is already on loan.
++
++**Unchanged:** the overdue report and its calendar-day `days_overdue`, the loan periods, due-date calculation, loan limits, and the Loan model's existing fields and behaviour.
++
++**Docs:** the README's Concepts section gains short entries for Account, Fine, Manual charge, Payment, Balance and Blocked, consistent with `GLOSSARY.md`.
++
++## Testing Decisions
++
++- **One seam: the public `LendingService` interface**, built the way the current suite builds it, with an `InMemoryRepository` and a `FixedClock` from the shared `service` and `clock` fixtures. Those fixtures already provide an adult (`ann`), a child (`kid`), a book title (replacement cost 18.00) with copies `B1` and `B2`, and a DVD title (replacement cost 12.00) with copy `D1`, starting on Monday 2 March 2026.
++- **A good test** drives the service the way the desk would (`checkout`, move the clock, `return_copy`, `add_charge`, `pay`) and asserts only on what the service returns or raises, mostly `balance()`. Tests don't reach into the repository, don't inspect Account entries, and don't call policy functions directly, so the Late-day calculation and the Account storage can be refactored freely.
++- **Prior art:** the tests for checkout and return, which use `clock.set(...)` and `clock.advance(...)` with explicit dates and `pytest.raises` for domain errors. The overdue-report tests show how dates relative to the start day are written.
++- **Behaviours to cover:**
++  - The book example: due 23 March, returned 30 March, Balance 1.50.
++  - A late DVD charged at 1.00 per Late day with Sundays excluded. For example, due Monday 9 March and returned Monday 16 March gives 6 Late days, so 6.00.
++  - Returns on the due date and before it cost nothing.
++  - A return on a Sunday immediately after a Saturday due date costs nothing.
++  - The cap: a very late DVD gives a Balance of exactly 12.00.
++  - A child's late return costs nothing, and the Loan is still closed and the copy shelved.
++  - `return_copy` still returns the same closed Loan.
++  - A new member's Balance is 0.00.
++  - `add_charge` and `pay` return the new Balance, and `balance()` agrees with them.
++  - A partial Payment, and a Payment of exactly the Balance.
++  - An overpayment, and any Payment when the Balance is 0.00, raise `InvalidAmount`.
++  - Each invalid-amount case (zero, negative, NaN, infinite, sub-cent, float, int) raises `InvalidAmount` for both methods.
++  - `MemberNotFound` from `balance`, `add_charge` and `pay`.
++  - `AccountBlocked` at exactly 10.00 and above, but not at 9.99, carrying the member, Balance and threshold.
++  - `AccountBlocked` takes precedence over `CopyNotAvailable` and `LoanLimitReached`.
++  - Borrowing works again after a Payment brings the Balance below 10.00.
++  - A child can be Blocked through Manual charges.
++  - An overdue copy still out on loan doesn't change the Balance.
++  - The existing tests still pass unchanged, including the overdue-report tests.
++
++## Out of Scope
++
++- **Holds**, and their lower 5.00 hold threshold (which will reuse `AccountBlocked`).
++- **No-show fees** for uncollected holds (a future kind of Charge; children exempt).
++- **Renewals**, including charging the Fine built up so far when an overdue Loan is renewed. ADR-0001 and the cap on a Loan's total Fines are already written with this in mind.
++- Waiving, reversing or refunding a Charge. For now only a Payment reduces a Balance.
++- Credit balances and overpayments.
++- Assigning Payments to particular Charges.
++- Blocking members because they are holding overdue copies, as opposed to because of their Balance.
++- Any API for listing a member's Account history or statement, and any Balance or fines report.
++- Validating the Manual charge reason.
++- Changing the overdue report or how it counts days.
++- Persistence other than the in-memory repository.
++
++## Further Notes
++
++- **ADR-0001** (Fines are posted when lateness ends) is binding here. Don't add Fines still building up to the Balance. Any future operation that moves a due date must post the Fine built up so far, counted as if the copy had been returned that day.
++- Late days and the overdue report's `days_overdue` measure different things on purpose. Don't make them the same.
++- All dates come from the injected Clock. Package code never calls `date.today()`.
+diff --git a/.scratch/renewals/issues/01-renew-an-open-loan-in-place.md b/.scratch/renewals/issues/01-renew-an-open-loan-in-place.md
+new file mode 100644
+index 0000000..6efa238
+--- /dev/null
++++ b/.scratch/renewals/issues/01-renew-an-open-loan-in-place.md
+@@ -0,0 +1,35 @@
++# 01: Renew an open Loan in place
++
++**Spec:** `.scratch/renewals/spec.md`
++
++**What to build:** Staff can renew a member's Loan instead of returning the copy and checking it out again. `LendingService.renew(loan_id) -> Loan` gives the same Loan a new due date and returns it.
++
++- The new due date is the due date of a checkout of this material today: a full loan period from the renewal day, moved to the next open day if it lands on a closed day.
++- The Loan keeps its `loan_id`, `copy_id`, member and `borrowed_on`, and stays open. The copy stays `ON_LOAN`.
++- `Loan` gains `renewals: int`, default `0`, which goes up by one on each renewal. It is the only new field.
++- A new error `RenewalRefused(LendingError)` carries the `loan_id` and a short, readable `reason`, and its message includes both.
++- An unknown id raises `LoanNotFound`. A returned Loan raises `RenewalRefused`, not `NoOpenLoan`, because its copy may since have gone out to someone else.
++- Renewing an overdue Loan first posts the Fine for the Late days up to and including today, dated today and linked to the Loan (ADR-0001). It uses the existing fine logic, so the replacement-cost cap applies to all the Loan's Fines together and children are never fined. Late days then count against the new due date. On or before the due date nothing is written.
++- The loan limit and the borrowing threshold are not checked.
++- The README's Concepts section gains a Renewal entry, consistent with `GLOSSARY.md`, and its Loan entry mentions the renewals count.
++
++The other refusals come in tickets 02–04. Tests here should renew within five days of the due date (for example on Thursday 19 March for a Loan due Monday 23 March), so they still pass once ticket 02 adds the window.
++
++**Blocked by:** None (can start immediately).
++
++**Status:** ready-for-agent
++
++- [x] A new checkout has `renewals` 0.
++- [x] A book borrowed Monday 2 March 2026 (due Monday 23 March) and renewed Thursday 19 March is returned as the same Loan with due Thursday 9 April, renewals 1, the same `loan_id`, `copy_id`, member and `borrowed_on`, and still open. `get_loan` shows the same.
++- [x] After a renewal, `loan_history` still holds one Loan, `open_loans` is unchanged and the copy is still `ON_LOAN`.
++- [x] Renewed on Sunday 22 March, the Loan is due Monday 13 April (21 days later is a Sunday).
++- [x] Renewing an overdue book on Saturday 28 March for an adult posts a Fine of 1.25 (Late days 24–28 March), dated 28 March and linked to the Loan. The Loan is due Saturday 18 April, and it no longer appears in `overdue_loans`.
++- [x] That book then returned on Tuesday 21 April posts a second Fine of 0.50 (20 and 21 April; the 19th is a Sunday), giving a Balance of 1.75.
++- [x] With a book whose replacement cost is 1.00, the renewal Fine is cut to 1.00, and a later late return posts no further Fine.
++- [x] A child renewing an overdue book is not fined, and their Balance stays 0.00.
++- [x] Renewing on or before the due date posts nothing and leaves the Balance unchanged.
++- [x] A member at their loan limit can renew.
++- [x] A returned Loan raises `RenewalRefused` carrying its `loan_id`, including after its copy has gone out again on someone else's Loan. That other Loan is untouched.
++- [x] An unknown loan id raises `LoanNotFound`.
++- [x] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`.
++- [x] All existing tests still pass.
+diff --git a/.scratch/renewals/issues/02-only-books-at-most-twice-from-five-days-before.md b/.scratch/renewals/issues/02-only-books-at-most-twice-from-five-days-before.md
+new file mode 100644
+index 0000000..d56e317
+--- /dev/null
++++ b/.scratch/renewals/issues/02-only-books-at-most-twice-from-five-days-before.md
+@@ -0,0 +1,27 @@
++# 02: Only books, at most twice, from five days before the due date
++
++**Spec:** `.scratch/renewals/spec.md`
++
++**What to build:** The renewal rules that depend only on the Loan itself. `renew` raises `RenewalRefused`, with a `reason` that names the rule, when:
++
++- the Loan's Title is a DVD (only books are renewable);
++- the Loan has already been renewed twice;
++- today is earlier than the Loan's current due date minus 5 calendar days. Closed days are not skipped, and after a renewal the window counts from the new due date.
++
++The checks run in this order, after the Loan lookup: returned (ticket 01), DVD, renewal limit, too early. So a Loan that is both at its limit and too early names the limit. A refused renewal changes nothing.
++
++The renewal limit, the window and the renewable materials are policy numbers kept with the other circulation numbers, the same for every member category.
++
++**Blocked by:** 01 (Renew an open Loan in place).
++
++**Status:** ready-for-agent
++
++- [x] A DVD Loan raises `RenewalRefused` on any day, including its due date and when overdue, with a Balance of 0.00.
++- [x] A returned DVD Loan names the return, not the DVD rule.
++- [x] For a book due Monday 23 March: asking on Tuesday 17 March is refused as too early. Renewing on Wednesday 18 March is allowed, giving due Wednesday 8 April. Renewing on the due date, or when overdue, is allowed.
++- [x] After renewing on Thursday 19 March (due Thursday 9 April), asking on Friday 3 April is refused as too early. Renewing on Saturday 4 April is allowed, giving due Saturday 25 April and renewals 2.
++- [x] A third renewal is refused for the limit, whether asked inside the window or too early.
++- [x] Every refusal leaves the Loan's due date and `renewals` as they were, posts no Fine, and leaves the Balance unchanged, including a refused overdue DVD.
++- [x] The rules are the same for a child.
++- [x] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`.
++- [x] All existing tests still pass.
+diff --git a/.scratch/renewals/issues/03-members-who-owe-anything-cant-renew.md b/.scratch/renewals/issues/03-members-who-owe-anything-cant-renew.md
+new file mode 100644
+index 0000000..834c307
+--- /dev/null
++++ b/.scratch/renewals/issues/03-members-who-owe-anything-cant-renew.md
+@@ -0,0 +1,26 @@
++# 03: Members who owe anything can't renew
++
++**Spec:** `.scratch/renewals/spec.md`
++
++**What to build:** Only a member whose Balance is 0.00 when they ask can renew. `renew` raises `AccountBlocked(member_id, balance, 0.01)` when the Balance is 0.01 or more. The renewal threshold is 0.01, the same for adults and children, and sits in policy next to the borrowing and hold thresholds.
++
++- The Balance is checked before any Fine for this renewal is posted. A member who owes 0.00 can renew an overdue book, even though the renewal then posts a Fine.
++- The check order becomes: returned, DVD, **owes money**, renewal limit, too early. A returned or DVD Loan is refused as such even when the member owes money. A member who owes money is told so even when the Loan is also at its limit or too early.
++- A refused renewal changes nothing, and posts no Fine.
++- The README's Blocked entry mentions the 0.01 renewal threshold.
++
++**Blocked by:** 02 (Only books, at most twice, from five days before the due date).
++
++**Status:** ready-for-agent
++
++- [ ] With a Balance of 0.01, `renew` raises `AccountBlocked` carrying the member, a Balance of 0.01 and a threshold of 0.01. The same happens with a larger Balance.
++- [ ] After paying back to 0.00, the same renewal goes through straight away.
++- [ ] A child who owes 0.01 is Blocked from renewing in the same way.
++- [ ] An adult who owes 0.00 renews an overdue book on Saturday 28 March: the renewal is granted and a Fine of 1.25 is posted. Their next renewal (inside the new window, from 13 April) raises `AccountBlocked` until they pay.
++- [ ] An overdue renewal refused because the member owes money posts no Fine, and the Balance is unchanged.
++- [ ] Check order:
++  - a returned Loan of a member who owes money raises `RenewalRefused`;
++  - a DVD Loan of a member who owes money raises `RenewalRefused`;
++  - a member who owes money gets `AccountBlocked` for a Loan already renewed twice, and for a request that is too early.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`.
++- [ ] All existing tests still pass.
+diff --git a/.scratch/renewals/issues/04-no-renewal-while-someone-is-waiting.md b/.scratch/renewals/issues/04-no-renewal-while-someone-is-waiting.md
+new file mode 100644
+index 0000000..ec65e88
+--- /dev/null
++++ b/.scratch/renewals/issues/04-no-renewal-while-someone-is-waiting.md
+@@ -0,0 +1,24 @@
++# 04: No renewal while someone is waiting for the Title
++
++**Spec:** `.scratch/renewals/spec.md`
++
++**What to build:** A Loan can't be renewed while its Title has a Waiting Hold, so members who are queueing get the next copy. `renew` raises `RenewalRefused`, with a `reason` naming the Hold, when any Hold on the Loan's Title is Waiting. Ready Holds don't count, because those members already have their copy on the Hold shelf.
++
++- This is the last check: returned, DVD, owes money, renewal limit, too early, **Waiting Hold**.
++- A refused renewal changes nothing. An overdue Loan refused this way posts no Fine.
++- Holds themselves are unchanged. A Hold placed after a renewal only stops the next renewal.
++
++**Blocked by:** 03 (Members who owe anything can't renew).
++
++**Status:** ready-for-agent
++
++- [ ] With both copies of `978-1` out (B1 and B2) and another member's Waiting Hold on the Title, renewing the Loan on B1 on Thursday 19 March raises `RenewalRefused`. The due date and `renewals` are unchanged.
++- [ ] Once B2 comes back and that Hold becomes Ready (with nobody else waiting), the same renewal goes through.
++- [ ] Once the Waiting Hold is cancelled, the renewal goes through.
++- [ ] An overdue Loan refused because of a Waiting Hold posts no Fine, and the Balance is unchanged.
++- [ ] Check order with a Waiting Hold on the Title:
++  - a member who owes money gets `AccountBlocked`;
++  - a Loan already renewed twice is refused for the limit;
++  - a request that is too early is refused as too early.
++- [ ] Tests drive only the public `LendingService` interface with the shared fixtures and the `FixedClock`. Tests that need a third member register one.
++- [ ] All existing tests, and those from tickets 01–03, still pass unchanged.
+diff --git a/.scratch/renewals/spec.md b/.scratch/renewals/spec.md
+new file mode 100644
+index 0000000..0571e15
+--- /dev/null
++++ b/.scratch/renewals/spec.md
+@@ -0,0 +1,199 @@
++# Renewals
++
++Status: ready-for-agent
++
++## Problem Statement
++
++Members often ask to keep a book longer than its loan period. There is no way to do that today. Staff work around it by returning the copy and checking it straight out again. That closes the Loan and opens a new one with a new id. The member's loan history then shows two Loans for what was one borrowing, the original checkout day is lost from the open Loan, and any lateness is settled as if the copy had really come back. Nothing stops a member from keeping a book this way while other members are waiting for it, or while they owe the library money.
++
++## Solution
++
++A member can **renew** a Loan on a book. Renewing gives the same Loan a new due date: a full loan period counted from the day they renew, worked out exactly like a checkout that day. The Loan keeps its id, its copy, its member and its original borrowing day, and it records how many times it has been renewed.
++
++A Renewal is refused when:
++
++- the Loan is already returned;
++- the copy is a DVD (DVDs are never renewed);
++- the member owes anything at all;
++- the Loan has already been renewed twice;
++- it is more than five days before the due date;
++- someone is waiting for the Title (a Waiting Hold).
++
++An overdue Loan can still be renewed. Renewing it first posts the Fine for the Late days built up so far, as if the copy had come back that day (ADR-0001). Late days then count against the new due date.
++
++Vocabulary follows `GLOSSARY.md`, which already defines **Renewal** in its Loans section. ADR-0001 is not changed by this feature; it already planned for it.
++
++## User Stories
++
++1. As a member, I want to renew a book I have on loan, so that I can keep reading it without bringing it back to the desk.
++2. As a front-desk staff member, I want a renewal to keep the same Loan, so that the member's loan history shows one Loan per borrowing.
++3. As a front-desk staff member, I want a renewed Loan to keep its original borrowing day, so that the history shows when the member really took the copy out.
++4. As a front-desk staff member, I want the copy to stay on loan through a renewal, so that its status never flickers to the shelf and back.
++5. As a member, I want a renewal to give me a full loan period from the day I renew, so that I get the same time as if I had borrowed the book that day.
++6. As a member, I want a renewed due date that would fall on a Sunday to move to the Monday, so that I'm never due on a day the library is closed.
++7. As a front-desk staff member, I want to see how many times a Loan has been renewed, so that I can tell a member how many renewals they have left.
++8. As a developer calling the service, I want a newly checked-out Loan to show zero renewals, so that the count always starts from the checkout.
++9. As a library manager, I want a Loan to be renewable at most twice, so that one member can't keep a book indefinitely.
++10. As a member who has renewed twice, I want a third renewal to be refused with a clear reason, so that I know I have to bring the book back.
++11. As a library manager, I want DVDs never to be renewable, so that our short-loan stock keeps moving.
++12. As a member asking to renew a DVD, I want to be told that DVDs can't be renewed, even if I also owe money, so that I'm not asked to pay only to be refused again.
++13. As a library manager, I want a renewal to be refused while anyone has a Waiting Hold on the Title, so that members who are queueing get the next copy.
++14. As a member whose Title has only Ready Holds, I want my renewal to go through, so that people who already have their copy on the Hold shelf don't stop me.
++15. As a library manager, I want only members who owe nothing to be able to renew, so that anything owed is paid before a member gets more time.
++16. As a member who owes 0.01, I want to be told I'm Blocked from renewing, with what I owe and the threshold, so that I know exactly what to pay.
++17. As a member who has just paid off their Balance, I want to be able to renew straight away, so that paying unblocks me at once.
++18. As a library manager, I want the same renewal rules for children as for adults, so that there is one rule for renewals.
++19. As a library manager, I want a renewal to be allowed only from five days before the due date, so that members can't renew on the day they borrow and double their loan period.
++20. As a member asking to renew too early, I want a clear refusal, so that I know to come back nearer the due date.
++21. As a member who has renewed once, I want the five-day window to count from my new due date, so that the rule is the same for every renewal.
++22. As a member whose book is overdue, I want to be able to renew it, so that I can keep it legitimately instead of keeping it late.
++23. As a library manager, I want renewing an overdue Loan to post the Fine for the Late days so far, so that lateness never disappears when a due date moves.
++24. As a member who renews an overdue book, I want later Late days to count only from my new due date, so that I'm never fined twice for the same day.
++25. As a library manager, I want the replacement-cost cap to apply to all the Fines on one Loan together, including a Fine posted at renewal, so that a renewed Loan never costs more than the book.
++26. As a member who owes nothing and renews an overdue book, I want the renewal to go through even though it posts a Fine, so that the rule is about what I owe when I ask.
++27. As a library manager, I want a member who has just been fined at renewal to be unable to renew again until they pay, so that the 0.00 rule holds for the next renewal.
++28. As a child member renewing an overdue book, I want no Fine to be posted, so that children are never fined, as everywhere else.
++29. As a member at my loan limit, I want to still be able to renew, so that renewing something I already have isn't treated as borrowing more.
++30. As a front-desk staff member, I want a refused renewal to change nothing, so that a failed request never moves a due date, the count or the Balance.
++31. As a front-desk staff member, I want renewing a returned Loan to be refused as a renewal, so that I'm not told the copy isn't on loan when it may have gone out again to someone else.
++32. As a developer calling the service, I want an unknown loan id to raise `LoanNotFound`, so that error handling is the same as for every other loan lookup.
++33. As a developer calling the service, I want refusals to come in a fixed order, so that the reason a member hears is predictable.
++34. As a front-desk staff member, I want a renewed overdue Loan to drop off the overdue list, so that the overdue report only shows copies that are actually late.
++35. As a front-desk staff member, I want the overdue report to use the renewed due date, so that its days overdue are counted from the date the member was actually given.
++36. As a library manager, I want the renewal limit, the five-day window, the money threshold and the renewable materials kept with the other circulation numbers, so that changing one is a one-line policy change.
++
++## Implementation Decisions
++
++**Interface contract.** Other code will call exactly this:
++
++- `LendingService.renew(loan_id: str) -> Loan`: renews the open Loan in place, with the same `loan_id`, and returns that Loan.
++- `Loan` gains a field `renewals: int`, default `0`: how many times the Loan has been renewed. A new checkout gives `0`. It is the only new field on `Loan`; there is no log of past due dates or renewal days.
++- A new error `RenewalRefused(LendingError)` in the errors module for renewals that can't be granted. It carries the `loan_id` and a short, readable `reason`, and its message includes both, in the style of `HoldNotAllowed`.
++- Existing errors are reused where they fit: `LoanNotFound` for an unknown loan id, and `AccountBlocked` for money owed.
++- `checkout`, `return_copy` and every other existing operation keep their signatures and behaviour.
++
++**Policy**, kept with the other circulation numbers:
++
++- Renewal threshold: 0.01, the same for every member category, next to the borrowing and hold thresholds. Because the Balance is always whole cents, this means "owes anything at all".
++- At most 2 renewals per Loan, the same for every member category.
++- Renewal window: 5 calendar days. A Loan can be renewed on or after its current due date minus 5 days. Closed days are not skipped.
++- Only books are renewable. DVDs never are.
++- The new due date uses the existing due-date rule: the material's loan period from the renewal day, moved to the next open day if it lands on a closed day.
++
++**Renewing.** Checks run in this order. The first one that fails decides the outcome:
++
++1. Loan lookup: `LoanNotFound(loan_id)`.
++2. The Loan is already returned: `RenewalRefused`.
++3. The Loan's Title is not a renewable material (a DVD): `RenewalRefused`.
++4. The renewal block: `AccountBlocked(member_id, balance, 0.01)` when the member's Balance is 0.01 or more. This is checked before any Fine for this renewal is posted.
++5. The Loan has already been renewed twice: `RenewalRefused`.
++6. Today is earlier than the current due date minus 5 days: `RenewalRefused`.
++7. The Title has a Waiting Hold: `RenewalRefused`. Ready Holds don't count.
++
++The DVD check comes before the money check because it is permanent. The limit check comes before the too-early check, so a Loan that has used both renewals says so instead of naming a date.
++
++When every check passes, in this order:
++
++1. The Fine for the Late days up to and including today is posted, dated today and linked to the Loan. The existing fine logic does this, including the cap on the Loan's Fines together and the no-fines rule for children. On or before the due date there are no Late days and nothing is written.
++2. The due date becomes the due date of a checkout of this material today.
++3. `renewals` goes up by one.
++
++The Loan keeps its `loan_id`, `copy_id`, member and `borrowed_on`, and stays open. The copy stays `ON_LOAN`. The loan limit and the borrowing threshold are not checked. Nothing about Holds changes.
++
++A refused renewal changes nothing: no Fine is posted, and the due date, `renewals` and the copy all stay as they were.
++
++**Worked examples** (must hold). The book is borrowed on Monday 2 March 2026 and due Monday 23 March:
++
++- Renewed Thursday 19 March: due Thursday 9 April, renewals 1, no Fine.
++- Renewed Wednesday 18 March: allowed, due Wednesday 8 April.
++- Asked on Tuesday 17 March: `RenewalRefused` (too early).
++- Renewed on Sunday 22 March: 21 days later is Sunday 12 April, so it is due Monday 13 April.
++- After the 19 March renewal (due 9 April), asking on Friday 3 April is too early. Asking on Saturday 4 April is allowed, giving due Saturday 25 April and renewals 2. Any third request is `RenewalRefused` for the limit.
++- An overdue renewal for an adult who owes 0.00, on Saturday 28 March: the Late days are 24–28 March (5 days), so a Fine of 1.25 is posted, dated 28 March. The renewal is granted, due Saturday 18 April. If the book then comes back on Tuesday 21 April, the Late days are 20 and 21 April (19 April is a Sunday), so a second Fine of 0.50 is posted. The Balance is 1.75 if nothing was paid.
++
++**Unchanged:**
++
++- ADR-0001, Fines on return, the Balance, Payments, Manual charges.
++- Checkout, loan periods, loan limits and the borrowing and hold thresholds.
++- Everything about Holds.
++- `loan_history`, `open_loans` and `overdue_loans`, which read the Loan as it now stands. A renewed Loan appears once, with its new due date and count.
++- The overdue report, which keeps counting calendar days since the Loan's current due date.
++
++**Repository:** no change. `renew` reads the Loan by id and changes it in place, as `return_copy` does. The service remains the only thing that changes state.
++
++**Docs:**
++
++- The README's Concepts section gains a short Renewal entry, consistent with `GLOSSARY.md`.
++- The README's Loan entry mentions the renewals count.
++- The README's Blocked entry mentions the 0.01 renewal threshold.
++
++## Testing Decisions
++
++- **One seam: the public `LendingService` interface**, built from the shared `service` and `clock` fixtures: an `InMemoryRepository` and a `FixedClock` starting Monday 2 March 2026, with book `978-1` (copies `B1` and `B2`), DVD `dvd-1` (copy `D1`), adult `ann` and child `kid`. The shared fixtures stay unchanged. Tests that need more members or Titles register them themselves. No new seams.
++- **A good test** drives the service the way the desk would: `checkout`, move the clock, `renew`, and where needed `return_copy`, `place_hold`, `add_charge` and `pay`. It asserts only on what the service returns or raises:
++  - the Loan `renew` returns;
++  - `get_loan`, `loan_history`, `open_loans` and `overdue_loans`;
++  - `get_copy(...).status` and `balance()`;
++  - the errors.
++
++  Tests don't call policy functions or reach into the repository, so the limit, the window, the threshold and the date arithmetic are all checked through `renew`.
++- **Prior art:**
++  - the loan tests, for due dates, Sundays and `clock.set(...)` / `clock.advance(...)` with explicit dates;
++  - the fines tests, for Late days that leave out Sundays and for the replacement-cost cap;
++  - the blocked-member tests, for asserting on `AccountBlocked`'s member, Balance and threshold;
++  - the holds tests, for setting up Waiting and Ready Holds.
++- **Behaviours to cover:**
++  - A renewal:
++    - returns the same Loan (same `loan_id`, `copy_id`, member and `borrowed_on`), still open, with renewals 1 and the new due date;
++    - is what `get_loan` then shows;
++    - leaves `loan_history` with one Loan and the copy `ON_LOAN`.
++  - A new checkout has renewals 0.
++  - Every worked example above, including the Sunday case and the second renewal's window.
++  - The window edges: refused 6 days before the due date, allowed 5 days before, on the due date, and when overdue.
++  - The limit: a third renewal is `RenewalRefused`, and the Loan is unchanged.
++  - DVDs: `RenewalRefused` on any day, including the due date, with a Balance of 0.00.
++  - Money:
++    - `AccountBlocked` carrying the member, Balance and 0.01 when the Balance is 0.01, and when it is above that;
++    - allowed after paying back to 0.00;
++    - the same for a child.
++  - Holds:
++    - `RenewalRefused` while the Title has a Waiting Hold;
++    - allowed when the Title's only Holds are Ready.
++  - A returned Loan gives `RenewalRefused` (not `NoOpenLoan`), even after its copy has gone out again on a new Loan.
++  - An unknown id gives `LoanNotFound`.
++  - Overdue renewals:
++    - the Fine is posted at renewal and counts Late days only, with Sundays left out;
++    - a later late return fines only the Late days after the new due date;
++    - the cap holds across both Fines, using a Title with a small replacement cost, after which no further Fine is posted;
++    - a child renewing an overdue book is not fined;
++    - the renewed Loan leaves `overdue_loans`.
++  - A member who owed 0.00, renewed an overdue Loan and was fined is then `AccountBlocked` on their next renewal.
++  - A member at their loan limit can renew.
++  - Check order, where the error types differ:
++    - a returned Loan of a member who owes money gives `RenewalRefused`;
++    - a DVD Loan of a member who owes money gives `RenewalRefused`;
++    - a member who owes money gives `AccountBlocked` even when the Loan is also at its limit, too early, or has a Waiting Hold on its Title.
++  - Check order between `RenewalRefused` reasons (limit before too-early): the `reason` names the limit.
++  - A refused renewal changes nothing: the due date, the count and the Balance stay the same, including for an overdue Loan refused because of a Waiting Hold.
++  - The existing tests pass unchanged.
++
++## Out of Scope
++
++- Renewing DVDs, or any per-material renewal limits other than "books only".
++- Different renewal limits, windows or thresholds per member category.
++- Checking who asks for the renewal. `renew` takes only a loan id; staff renew on the member's behalf.
++- A log of each renewal (past due dates, renewal days). The count is the only record.
++- Renewal fees, automatic renewals, and telling members a renewal is possible or has happened (notifications).
++- Recalling a renewed copy when someone places a Hold after the renewal. The Hold only stops the next renewal.
++- Blocking renewals because the member is holding other overdue copies, as opposed to because of their Balance.
++- Changing ADR-0001, how Fines are posted on return, or the overdue report.
++- Persistence other than the in-memory repository.
++
++## Further Notes
++
++- **The Balance is checked before the renewal's Fine is posted.** The rule is a Balance of 0.00 "when they ask". Otherwise an overdue adult Loan could never be renewed. This settles the open question in the holds spec. Confirmed with the user.
++- **Money refusals reuse `AccountBlocked`** with a 0.01 renewal threshold, as Holds reuse it at 5.00. This settles the holds spec's other open question. Confirmed with the user.
++- **ADR-0001 is fulfilled, not changed.** Its "renewals of overdue Loans (planned)" consequence is exactly this feature, and the fine logic already caps the total of a Loan's Fines with more than one Fine in mind.
++- Because a renewal is allowed at most 5 days before the due date, and the loan period for books is 21 days, a renewal always moves the due date at least 16 days later. No special case is needed for a renewal that wouldn't move it.
++- `renew` doesn't check whether the library is open that day, just as `checkout` doesn't. A Sunday renewal (in tests) simply gets its due date moved to Monday.
++- All dates come from the injected Clock. Package code never calls `date.today()`.
+diff --git a/GLOSSARY.md b/GLOSSARY.md
+new file mode 100644
+index 0000000..078d96b
+--- /dev/null
++++ b/GLOSSARY.md
+@@ -0,0 +1,65 @@
++# Lending
++
++The circulation desk of the Elm Street public library: members, the catalogue, loans, and the money members owe for them.
++
++## Loans
++
++**Renewal**:
++Giving a Member a new due date on the Loan they already have, a full loan period from the day they renew, so the Loan keeps going as one Loan. Only books can be renewed: at most twice per Loan, no earlier than five days before the due date, and never while a Hold on the Title is Waiting.
++_Avoid_: Extension, re-checkout, re-issue
++
++## Accounts
++
++**Account**:
++The money side of a Member: every Charge and Payment recorded against them. Each Member has exactly one, from the day they register.
++_Avoid_: Member account, wallet, ledger
++
++**Charge**:
++An entry on an Account that increases what the Member owes. Fines and Manual charges are both kinds of Charge.
++_Avoid_: Debit
++
++**Fine**:
++A Charge for the Late days on a Loan, raised automatically when those Late days are settled, which today means when the copy comes back. All the Fines on one Loan together never exceed the Title's replacement cost. Child members are never fined.
++_Avoid_: Late fee, penalty, overdue charge
++
++**Manual charge**:
++A Charge that staff raise by hand, with a reason.
++_Avoid_: Staff charge, adjustment
++
++**Late day**:
++A day the library is open, falling after a Loan's due date up to and including the day the copy comes back. Days the library is closed are never Late days.
++_Avoid_: Overdue day (the overdue report counts calendar days, which is a different measure)
++
++**Payment**:
++Money a Member hands over, which reduces their Balance. A Payment is never assigned to particular Charges.
++_Avoid_: Credit, settlement
++
++**Balance**:
++What a Member owes right now: their Charges minus their Payments. It is never negative, and it does not include Fines still building up on copies not yet returned.
++_Avoid_: Debt, amount due, outstanding
++
++**Blocked**:
++The state of a Member whose Balance has reached the threshold for an action, such as borrowing. Each action has its own threshold.
++_Avoid_: Suspended, barred
++
++## Holds
++
++**Hold**:
++A Member's claim on the next copy of a Title that comes back, placed only when no copy of that Title is on the shelf. It is on the Title, never on a particular Copy. A Hold is Waiting until a copy is set aside for it, then Ready.
++_Avoid_: Reservation, request
++
++**Hold queue**:
++The Waiting and Ready Holds on one Title, in the order they were placed. A returned copy goes to the first Waiting Hold in it.
++_Avoid_: Waiting list, line
++
++**Hold shelf**:
++Where a returned copy is set aside for one Ready Hold until it is collected or the Pickup deadline passes.
++_Avoid_: Reserve shelf
++
++**Pickup deadline**:
++The last day a Ready Hold can be collected: seven days after it became Ready, moved to the next open day if the library is closed then.
++_Avoid_: Expiry date, hold-until date
++
++**Collect**:
++To check out the copy set aside for your own Ready Hold, which fulfils the Hold.
++_Avoid_: Pick up, claim
+diff --git a/README.md b/README.md
+index a7957c3..fcc6d85 100644
+--- a/README.md
++++ b/README.md
+@@ -8,11 +8,103 @@ in-memory repository behind a small interface.
+ 
+ - **Title** — a catalogue entry (ISBN, material, replacement cost).
+ - **Copy** — one physical item of a title, identified by its barcode.
+-  `AVAILABLE` on the shelf, `ON_LOAN`, or `WITHDRAWN` for good.
++  `AVAILABLE` on the shelf, `ON_LOAN`, `ON_HOLD_SHELF` when set aside for a
++  Ready Hold, or `WITHDRAWN` for good. A copy on the Hold shelf counts as out:
++  it isn't in `available_copies` and can't be withdrawn.
+ - **Loan** — a copy lent to a member, from `borrowed_on` to `due_on`.
+   Books go out for 21 days, DVDs for 7. The library is closed on Sundays, so a
+-  due date that would land on a Sunday moves to the Monday.
++  due date that would land on a Sunday moves to the Monday. `renewals` counts
++  how many times the Loan has been renewed, starting at 0 on checkout.
++- **Renewal** — giving a member a new due date on the Loan they already have
++  (`renew`), so the Loan keeps going as one Loan: same id, copy, member and
++  `borrowed_on`, still open, with the copy still `ON_LOAN`. The new due date is
++  the one a checkout of that material would get today. Renewing an overdue Loan
++  first posts the Fine for its Late days up to and including today, dated today
++  and linked to the Loan, so lateness never disappears; Late days then count
++  from the new due date. The loan limit and the borrowing threshold don't apply.
++  Only books can be renewed, at most twice per Loan, and no earlier than five
++  calendar days before the current due date, for every member category, and
++  only for a member who owes nothing when they ask (see Blocked). Nobody may
++  renew while a Hold on the Title is Waiting, so members who are queueing get
++  the next copy; Ready Holds don't count, and a Hold placed after a renewal
++  only stops the next one. A renewal that breaks a rule changes nothing and
++  posts no Fine. Rules are checked in this order, and the first one broken
++  decides: already returned, a DVD, money owed, renewed twice, too early, a
++  Waiting Hold. Money owed raises `AccountBlocked`; the others raise
++  `RenewalRefused`, which carries the `loan_id` and a `reason` naming the rule
++  broken.
+ - **Members** are adults (up to 8 open loans) or children (up to 4).
++- **Account** — the money side of a member: every Charge and Payment recorded
++  against them, in the order they were recorded, each dated by the `Clock`.
++  Every member has exactly one, from the day they register.
++- **Charge** — an entry on an Account that increases what the member owes.
++- **Fine** — a Charge for the Late days on a Loan, posted automatically when
++  the copy comes back (`return_copy`) or an overdue Loan is renewed (`renew`),
++  dated that day and linked to the Loan.
++  Late days cost 1.00 each for a DVD and 0.25 for a book. All the Fines on one
++  Loan together never exceed the Title's replacement cost, and children are
++  never fined. A copy still out on loan adds nothing to the Balance, however
++  overdue it is.
++- **Late day** — a day the library is open, falling after a Loan's due date
++  up to and including the day the copy comes back. Closed days are never Late
++  days, so this differs from the overdue report's calendar-day
++  `days_overdue`.
++- **Manual charge** — a Charge that staff raise by hand, with a reason
++  (`add_charge`). The reason is stored as given.
++- **Payment** — money a member hands over, which reduces their Balance
++  (`pay`). A Payment is never assigned to particular Charges. The library
++  never holds credit, so a Payment larger than the Balance is refused with
++  `InvalidAmount`; paying exactly the Balance brings it to 0.00.
++- **Balance** — what a member owes right now: their Charges minus their
++  Payments (`balance`). Worked out from the Account's entries, never stored,
++  never negative, and always a `Decimal` to two places. A new member's Balance
++  is 0.00.
++  Amounts on an Account must be positive `Decimal`s in whole cents; anything
++  else raises `InvalidAmount`.
++- **Blocked** — the state of a member whose Balance has reached the threshold
++  for an action. Each action has its own threshold; for borrowing it is 10.00,
++  for placing a Hold it is 5.00 and for renewing it is 0.01 (owing anything at
++  all), each the same for adults and children. `checkout` and `place_hold`
++  refuse a Blocked member with `AccountBlocked` (carrying the member id,
++  Balance and threshold) before looking at the copy or Title; `renew` does so
++  after the returned and DVD checks, and before posting any Fine for the
++  renewal itself. A Payment that brings the Balance below the threshold
++  unblocks them straight away. Fines still building up on copies not yet
++  returned don't count towards it.
++- **Hold** — a member's claim on the next copy of a Title that comes back
++  (`place_hold`). It is on the Title, never on a particular Copy, and can only
++  be placed when no copy of the Title is on the shelf. A Hold is refused with
++  `HoldNotAllowed` for a Title with no copies in circulation, or when the
++  member already has an active Hold on it or has it on loan. A Hold is
++  Waiting until a copy is set aside for it, then Ready. There is no limit on
++  how many Holds a member can have, and a member who becomes Blocked after
++  placing one keeps it.
++- **Hold queue** — the Waiting and Ready Holds on one Title, in the order they
++  were placed (`holds_for`), so Holds placed on the same day keep their order.
++  A returned or new copy goes to the first Waiting Hold in it.
++- **Hold shelf** — where a copy is set aside for one Ready Hold until
++  it is collected or the Pickup deadline passes. When a copy comes back
++  (`return_copy`) and someone is waiting for its Title, it goes to the Hold
++  shelf (`ON_HOLD_SHELF`) instead of the shelf, after any Fine is posted, and
++  the first Waiting Hold becomes Ready with that copy. With nobody waiting it
++  goes back on the shelf as `AVAILABLE`. A new copy (`add_copy`) is placed the
++  same way, so a Title never has a copy on the shelf while a Hold on it is
++  Waiting.
++- **Pickup deadline** — the last day a Ready Hold can be collected
++  (`pickup_by`): seven days after it became Ready, moved to the next open day
++  if the library is closed then, the same way due dates are. The daily job
++  (`expire_holds`) expires every Ready Hold whose deadline is before today and
++  returns them in placement order. Each copy passes to the next Waiting Hold,
++  with a deadline counted from the day the job runs, or goes back on the shelf.
++  Waiting Holds never expire, and expiry posts no Charge.
++- **Collect** — to check out the copy set aside for your own Ready Hold, which
++  fulfils the Hold. It is an ordinary `checkout`: the member gets a normal
++  Loan, the copy goes `ON_LOAN`, and the Hold becomes Fulfilled and leaves the
++  Hold queue, keeping its `copy_id` and `pickup_by`. Anyone else checking out
++  a copy on the Hold shelf, or the Hold's member after the Pickup deadline,
++  gets `CopyNotAvailable`. If the borrowing block or the loan limit refuses
++  the checkout, the Hold stays Ready and the copy stays on the Hold shelf, so
++  the member can pay or return something and still collect in time.
+ 
+ ## Conventions
+ 
+diff --git a/docs/adr/0001-fines-posted-at-return.md b/docs/adr/0001-fines-posted-at-return.md
+new file mode 100644
+index 0000000..7471b3d
+--- /dev/null
++++ b/docs/adr/0001-fines-posted-at-return.md
+@@ -0,0 +1,9 @@
++# Fines are posted when lateness ends, not while it builds up
++
++A Fine goes on a member's Account at the moment a late Loan is settled, when the copy comes back. Until then the Balance doesn't include it. So a member can keep a DVD six weeks overdue, owe 0.00 and still borrow, and that is deliberate. The other option was a Balance that includes Fines still building up on open Loans. We rejected it so that a Balance only ever moves when something is recorded: a Charge or a Payment. That keeps `balance()` the same number for every caller on a given day, and it leaves the borrowing block (and the later, lower hold block) depending on money actually owed, not on an estimate. Blocking members who are holding overdue copies is a separate rule to add if we want it. Don't fold it into the Balance.
++
++## Consequences
++
++- Lateness must never disappear. Any operation that moves a Loan's due date has to post the Fine built up so far, counted as if the copy had been returned that day. That means renewals of overdue Loans (planned) must do this. After that, Late days count against the new due date. One Loan can therefore carry more than one Fine.
++- The replacement-cost cap applies to the total of a Loan's Fines, not to each Fine. A later Fine is reduced by whatever earlier Fines on the same Loan already charged. Once the cap is reached, further Late days cost nothing and no Fine is recorded.
++- The overdue report keeps counting calendar days since the due date. A Fine counts Late days, which leave out days the library is closed. The two numbers differ on purpose.
+diff --git a/src/lending/__init__.py b/src/lending/__init__.py
+index e3c8459..7284592 100644
+--- a/src/lending/__init__.py
++++ b/src/lending/__init__.py
+@@ -1,12 +1,14 @@
+ """Circulation for a small public library: members, catalogue, loans."""
+ 
+ from .clock import Clock, FixedClock, SystemClock
+-from .models import Copy, CopyStatus, Loan, Material, Member, MemberCategory, Title
++from .models import (
++    Copy, CopyStatus, Hold, HoldStatus, Loan, Material, Member, MemberCategory, Title,
++)
+ from .repository import InMemoryRepository
+ from .service import LendingService
+ 
+ __all__ = [
+-    "Clock", "Copy", "CopyStatus", "FixedClock", "InMemoryRepository",
+-    "LendingService", "Loan", "Material", "Member", "MemberCategory",
+-    "SystemClock", "Title",
++    "Clock", "Copy", "CopyStatus", "FixedClock", "Hold", "HoldStatus",
++    "InMemoryRepository", "LendingService", "Loan", "Material", "Member",
++    "MemberCategory", "SystemClock", "Title",
+ ]
+diff --git a/src/lending/__pycache__/__init__.cpython-312.pyc b/src/lending/__pycache__/__init__.cpython-312.pyc
+new file mode 100644
+index 0000000..852f8dd
+Binary files /dev/null and b/src/lending/__pycache__/__init__.cpython-312.pyc differ
+diff --git a/src/lending/__pycache__/__init__.cpython-313.pyc b/src/lending/__pycache__/__init__.cpython-313.pyc
+new file mode 100644
+index 0000000..d6d37a5
+Binary files /dev/null and b/src/lending/__pycache__/__init__.cpython-313.pyc differ
+diff --git a/src/lending/__pycache__/clock.cpython-312.pyc b/src/lending/__pycache__/clock.cpython-312.pyc
+new file mode 100644
+index 0000000..5ffadc4
+Binary files /dev/null and b/src/lending/__pycache__/clock.cpython-312.pyc differ
+diff --git a/src/lending/__pycache__/clock.cpython-313.pyc b/src/lending/__pycache__/clock.cpython-313.pyc
+new file mode 100644
+index 0000000..80445f7
+Binary files /dev/null and b/src/lending/__pycache__/clock.cpython-313.pyc differ
+diff --git a/src/lending/__pycache__/errors.cpython-312.pyc b/src/lending/__pycache__/errors.cpython-312.pyc
+new file mode 100644
+index 0000000..1d521a3
+Binary files /dev/null and b/src/lending/__pycache__/errors.cpython-312.pyc differ
+diff --git a/src/lending/__pycache__/errors.cpython-313.pyc b/src/lending/__pycache__/errors.cpython-313.pyc
+new file mode 100644
+index 0000000..72d7bcb
+Binary files /dev/null and b/src/lending/__pycache__/errors.cpython-313.pyc differ
+diff --git a/src/lending/__pycache__/models.cpython-312.pyc b/src/lending/__pycache__/models.cpython-312.pyc
+new file mode 100644
+index 0000000..66601dc
+Binary files /dev/null and b/src/lending/__pycache__/models.cpython-312.pyc differ
+diff --git a/src/lending/__pycache__/models.cpython-313.pyc b/src/lending/__pycache__/models.cpython-313.pyc
+new file mode 100644
+index 0000000..ac1f0df
+Binary files /dev/null and b/src/lending/__pycache__/models.cpython-313.pyc differ
+diff --git a/src/lending/__pycache__/policy.cpython-312.pyc b/src/lending/__pycache__/policy.cpython-312.pyc
+new file mode 100644
+index 0000000..eb4b86f
+Binary files /dev/null and b/src/lending/__pycache__/policy.cpython-312.pyc differ
+diff --git a/src/lending/__pycache__/policy.cpython-313.pyc b/src/lending/__pycache__/policy.cpython-313.pyc
+new file mode 100644
+index 0000000..ceefb25
+Binary files /dev/null and b/src/lending/__pycache__/policy.cpython-313.pyc differ
+diff --git a/src/lending/__pycache__/reports.cpython-312.pyc b/src/lending/__pycache__/reports.cpython-312.pyc
+new file mode 100644
+index 0000000..32cf41d
+Binary files /dev/null and b/src/lending/__pycache__/reports.cpython-312.pyc differ
+diff --git a/src/lending/__pycache__/reports.cpython-313.pyc b/src/lending/__pycache__/reports.cpython-313.pyc
+new file mode 100644
+index 0000000..ecf93de
+Binary files /dev/null and b/src/lending/__pycache__/reports.cpython-313.pyc differ
+diff --git a/src/lending/__pycache__/repository.cpython-312.pyc b/src/lending/__pycache__/repository.cpython-312.pyc
+new file mode 100644
+index 0000000..029027a
+Binary files /dev/null and b/src/lending/__pycache__/repository.cpython-312.pyc differ
+diff --git a/src/lending/__pycache__/repository.cpython-313.pyc b/src/lending/__pycache__/repository.cpython-313.pyc
+new file mode 100644
+index 0000000..366fac6
+Binary files /dev/null and b/src/lending/__pycache__/repository.cpython-313.pyc differ
+diff --git a/src/lending/__pycache__/service.cpython-312.pyc b/src/lending/__pycache__/service.cpython-312.pyc
+new file mode 100644
+index 0000000..f964a2c
+Binary files /dev/null and b/src/lending/__pycache__/service.cpython-312.pyc differ
+diff --git a/src/lending/__pycache__/service.cpython-313.pyc b/src/lending/__pycache__/service.cpython-313.pyc
+new file mode 100644
+index 0000000..86f3e22
+Binary files /dev/null and b/src/lending/__pycache__/service.cpython-313.pyc differ
+diff --git a/src/lending/errors.py b/src/lending/errors.py
+index f7d538f..31c9555 100644
+--- a/src/lending/errors.py
++++ b/src/lending/errors.py
+@@ -1,5 +1,7 @@
+ """Domain errors. Every failure the service reports is a ``LendingError``."""
+ 
++from decimal import Decimal
++
+ 
+ class LendingError(Exception):
+     """Base class for all lending domain errors."""
+@@ -57,15 +59,56 @@ class LoanLimitReached(LendingError):
+         self.limit = limit
+ 
+ 
++class AccountBlocked(LendingError):
++    """The member's Balance has reached the threshold for what they asked to do."""
++
++    def __init__(self, member_id: str, balance: Decimal, threshold: Decimal) -> None:
++        super().__init__(f"member {member_id!r} owes {balance}, limit {threshold}")
++        self.member_id = member_id
++        self.balance = balance
++        self.threshold = threshold
++
++
+ class LoanNotFound(LendingError):
+     def __init__(self, loan_id: str) -> None:
+         super().__init__(f"no loan {loan_id!r}")
+         self.loan_id = loan_id
+ 
+ 
++class InvalidAmount(LendingError):
++    """A sum of money that can't go on an Account."""
++
++    def __init__(
++        self,
++        amount: object,
++        problem: str = "must be a positive Decimal in whole cents",
++    ) -> None:
++        super().__init__(f"amount {problem}, got {amount!r}")
++        self.amount = amount
++
++
++class HoldNotAllowed(LendingError):
++    """A Hold can't be placed, or can't be cancelled; the message says why."""
++
++
++class HoldNotFound(LendingError):
++    def __init__(self, hold_id: str) -> None:
++        super().__init__(f"no hold {hold_id!r}")
++        self.hold_id = hold_id
++
++
+ class NoOpenLoan(LendingError):
+     """A copy was handed back that is not out on loan."""
+ 
+     def __init__(self, copy_id: str) -> None:
+         super().__init__(f"copy {copy_id!r} is not on loan")
+         self.copy_id = copy_id
++
++
++class RenewalRefused(LendingError):
++    """A Loan can't be renewed; ``reason`` says why."""
++
++    def __init__(self, loan_id: str, reason: str) -> None:
++        super().__init__(f"loan {loan_id!r} can't be renewed: {reason}")
++        self.loan_id = loan_id
++        self.reason = reason
+diff --git a/src/lending/models.py b/src/lending/models.py
+index 7357f80..7c46934 100644
+--- a/src/lending/models.py
++++ b/src/lending/models.py
+@@ -21,6 +21,8 @@ class Material(Enum):
+ class CopyStatus(Enum):
+     AVAILABLE = "available"
+     ON_LOAN = "on_loan"
++    # Set aside for one Ready Hold. Counts as out, like ON_LOAN.
++    ON_HOLD_SHELF = "on_hold_shelf"
+     WITHDRAWN = "withdrawn"
+ 
+ 
+@@ -56,6 +58,8 @@ class Loan:
+     borrowed_on: date
+     due_on: date
+     returned_on: date | None = None
++    # How many times the Loan has been renewed; each Renewal moves ``due_on``.
++    renewals: int = 0
+ 
+     @property
+     def is_open(self) -> bool:
+@@ -63,3 +67,67 @@ class Loan:
+ 
+     def is_overdue(self, on: date) -> bool:
+         return self.is_open and on > self.due_on
++
++
++class HoldStatus(Enum):
++    WAITING = "waiting"
++    READY = "ready"
++    FULFILLED = "fulfilled"
++    CANCELLED = "cancelled"
++    EXPIRED = "expired"
++
++
++@dataclass
++class Hold:
++    """A Member's claim on the next copy of a Title that comes back."""
++
++    hold_id: str
++    member_id: str
++    isbn: str
++    placed_on: date
++    status: HoldStatus
++    # Both set when the Hold becomes Ready, and never cleared after that.
++    copy_id: str | None = None
++    pickup_by: date | None = None
++
++    @property
++    def is_active(self) -> bool:
++        """Waiting or Ready: still in the Hold queue."""
++        return self.status in (HoldStatus.WAITING, HoldStatus.READY)
++
++
++# Account entries. An Account is the list of these in the order they were
++# recorded; the Balance is always worked out from them, never stored.
++
++
++@dataclass(frozen=True)
++class AccountEntry:
++    # Always positive, in whole cents. Whether it adds to or takes away from
++    # the Balance depends on the kind of entry.
++    amount: Decimal
++    recorded_on: date
++
++
++@dataclass(frozen=True)
++class Charge(AccountEntry):
++    """An entry that increases what the Member owes."""
++
++
++@dataclass(frozen=True)
++class ManualCharge(Charge):
++    """A Charge raised by staff by hand."""
++
++    reason: str
++
++
++@dataclass(frozen=True)
++class Fine(Charge):
++    """A Charge for the Late days on a Loan, posted when its lateness ends."""
++
++    loan_id: str
++
++
++@dataclass(frozen=True)
++class Payment(AccountEntry):
++    """Money the Member hands over. Reduces the Balance as a whole, never a
++    particular Charge."""
+diff --git a/src/lending/policy.py b/src/lending/policy.py
+index faba597..f5f7cdb 100644
+--- a/src/lending/policy.py
++++ b/src/lending/policy.py
+@@ -1,4 +1,4 @@
+-"""Circulation policy: loan periods, limits and opening days.
++"""Circulation policy: loan periods, fine rates, limits and opening days.
+ 
+ Kept apart from the service so the numbers live in one place.
+ """
+@@ -6,6 +6,7 @@ Kept apart from the service so the numbers live in one place.
+ from __future__ import annotations
+ 
+ from datetime import date, timedelta
++from decimal import Decimal
+ 
+ from .models import Material, MemberCategory
+ 
+@@ -14,11 +15,38 @@ LOAN_DAYS: dict[Material, int] = {
+     Material.DVD: 7,
+ }
+ 
++# Fine per Late day.
++FINE_RATES: dict[Material, Decimal] = {
++    Material.BOOK: Decimal("0.25"),
++    Material.DVD: Decimal("1.00"),
++}
++
++NEVER_FINED: frozenset[MemberCategory] = frozenset({MemberCategory.CHILD})
++
+ LOAN_LIMITS: dict[MemberCategory, int] = {
+     MemberCategory.ADULT: 8,
+     MemberCategory.CHILD: 4,
+ }
+ 
++# A Balance at or above this blocks checkout, whatever the member's category.
++BORROWING_THRESHOLD = Decimal("10.00")
++
++# A Balance at or above this blocks placing a Hold, whatever the member's category.
++HOLD_THRESHOLD = Decimal("5.00")
++
++# A Balance at or above this blocks renewing, whatever the member's category.
++# Balances are whole cents, so this means owing anything at all.
++RENEWAL_THRESHOLD = Decimal("0.01")
++
++# Calendar days a Ready Hold waits on the Hold shelf to be collected.
++PICKUP_DAYS = 7
++
++# Renewals, the same for every member category.
++RENEWABLE_MATERIALS: frozenset[Material] = frozenset({Material.BOOK})
++MAX_RENEWALS = 2
++# Calendar days before the due date from which a Loan may be renewed.
++RENEWAL_WINDOW_DAYS = 5
++
+ # date.weekday(): Monday is 0, Sunday is 6. The library is closed on Sundays.
+ CLOSED_WEEKDAYS: frozenset[int] = frozenset({6})
+ 
+@@ -39,5 +67,33 @@ def due_date(material: Material, borrowed_on: date) -> date:
+     return next_open_day(borrowed_on + timedelta(days=LOAN_DAYS[material]))
+ 
+ 
++def pickup_deadline(ready_on: date) -> date:
++    """Pickup period counted in calendar days, never ending on a closed day."""
++    return next_open_day(ready_on + timedelta(days=PICKUP_DAYS))
++
++
++def earliest_renewal(due_on: date) -> date:
++    """The first day a Loan due on ``due_on`` may be renewed. Closed days count."""
++    return due_on - timedelta(days=RENEWAL_WINDOW_DAYS)
++
++
+ def loan_limit(category: MemberCategory) -> int:
+     return LOAN_LIMITS[category]
++
++
++def late_days(due_on: date, settled_on: date) -> int:
++    """Open days after ``due_on``, up to and including ``settled_on``."""
++    return sum(
++        1
++        for n in range(1, (settled_on - due_on).days + 1)
++        if is_open_day(due_on + timedelta(days=n))
++    )
++
++
++def fine_amount(
++    category: MemberCategory, material: Material, late_day_count: int
++) -> Decimal:
++    """What ``late_day_count`` Late days cost, before the replacement-cost cap."""
++    if category in NEVER_FINED:
++        return Decimal("0.00")
++    return FINE_RATES[material] * late_day_count
+diff --git a/src/lending/repository.py b/src/lending/repository.py
+index 52fb6b1..bcd98da 100644
+--- a/src/lending/repository.py
++++ b/src/lending/repository.py
+@@ -2,8 +2,14 @@
+ 
+ from __future__ import annotations
+ 
+-from .errors import CopyNotFound, LoanNotFound, MemberNotFound, TitleNotFound
+-from .models import Copy, Loan, Member, Title
++from .errors import (
++    CopyNotFound,
++    HoldNotFound,
++    LoanNotFound,
++    MemberNotFound,
++    TitleNotFound,
++)
++from .models import AccountEntry, Copy, Hold, Loan, Member, Title
+ 
+ 
+ class InMemoryRepository:
+@@ -12,6 +18,9 @@ class InMemoryRepository:
+         self._titles: dict[str, Title] = {}
+         self._copies: dict[str, Copy] = {}
+         self._loans: dict[str, Loan] = {}
++        self._accounts: dict[str, list[AccountEntry]] = {}
++        # dicts keep insertion order, so this is placement order.
++        self._holds: dict[str, Hold] = {}
+         self._sequences: dict[str, int] = {}
+ 
+     # identifiers -------------------------------------------------------
+@@ -26,6 +35,7 @@ class InMemoryRepository:
+ 
+     def add_member(self, member: Member) -> None:
+         self._members[member.member_id] = member
++        self._accounts[member.member_id] = []
+ 
+     def has_member(self, member_id: str) -> bool:
+         return member_id in self._members
+@@ -87,3 +97,37 @@ class InMemoryRepository:
+ 
+     def all_loans(self) -> list[Loan]:
+         return list(self._loans.values())
++
++    # holds -------------------------------------------------------------
++
++    def add_hold(self, hold: Hold) -> None:
++        self._holds[hold.hold_id] = hold
++
++    def get_hold(self, hold_id: str) -> Hold:
++        try:
++            return self._holds[hold_id]
++        except KeyError:
++            raise HoldNotFound(hold_id) from None
++
++    def holds_of(self, isbn: str) -> list[Hold]:
++        """Every Hold ever placed on the Title, in placement order."""
++        return [h for h in self._holds.values() if h.isbn == isbn]
++
++    def all_holds(self) -> list[Hold]:
++        """Every Hold ever placed, on any Title, in placement order."""
++        return list(self._holds.values())
++
++    # accounts ----------------------------------------------------------
++
++    def add_account_entry(self, member_id: str, entry: AccountEntry) -> None:
++        self._account(member_id).append(entry)
++
++    def account_entries(self, member_id: str) -> list[AccountEntry]:
++        """The member's Account, oldest entry first."""
++        return list(self._account(member_id))
++
++    def _account(self, member_id: str) -> list[AccountEntry]:
++        try:
++            return self._accounts[member_id]
++        except KeyError:
++            raise MemberNotFound(member_id) from None
+diff --git a/src/lending/service.py b/src/lending/service.py
+index 30bed8d..9246e10 100644
+--- a/src/lending/service.py
++++ b/src/lending/service.py
+@@ -2,30 +2,65 @@
+ 
+ from __future__ import annotations
+ 
++from collections.abc import Iterable
+ from datetime import date
+-from decimal import Decimal
++from decimal import Decimal, InvalidOperation
+ 
+ from . import policy
+ from .clock import Clock
+ from .errors import (
++    AccountBlocked,
+     CopyNotAvailable,
+     DuplicateCopy,
+     DuplicateMember,
+     DuplicateTitle,
++    HoldNotAllowed,
++    InvalidAmount,
+     LoanLimitReached,
+     NoOpenLoan,
++    RenewalRefused,
+ )
+ from .models import (
++    AccountEntry,
++    Charge,
+     Copy,
+     CopyStatus,
++    Fine,
++    Hold,
++    HoldStatus,
+     Loan,
++    ManualCharge,
+     Material,
+     Member,
+     MemberCategory,
++    Payment,
+     Title,
+ )
+ from .repository import InMemoryRepository
+ 
++CENT = Decimal("0.01")
++
++
++def _valid_amount(amount: object) -> Decimal:
++    """The amount in cents, if it may go on an Account; else ``InvalidAmount``.
++
++    The one rule for every Charge and Payment: a finite, positive ``Decimal``
++    that is a whole number of cents by value (``1.000`` is fine, ``0.001`` isn't).
++    """
++    if not isinstance(amount, Decimal) or not amount.is_finite() or amount <= 0:
++        raise InvalidAmount(amount)
++    try:
++        cents = amount.quantize(CENT)
++    except InvalidOperation:  # too many digits to hold in cents
++        raise InvalidAmount(amount) from None
++    if cents != amount:
++        raise InvalidAmount(amount)
++    return cents
++
++
++def _total(entries: Iterable[AccountEntry]) -> Decimal:
++    return sum((e.amount for e in entries), Decimal("0.00"))
++
+ 
+ class LendingService:
+     def __init__(self, repo: InMemoryRepository, clock: Clock) -> None:
+@@ -61,11 +96,13 @@ class LendingService:
+         return title
+ 
+     def add_copy(self, copy_id: str, isbn: str) -> Copy:
++        """Add a copy, set aside for the first Waiting Hold if anyone's waiting."""
+         self._repo.get_title(isbn)  # raises TitleNotFound
+         if self._repo.has_copy(copy_id):
+             raise DuplicateCopy(copy_id)
+         copy = Copy(copy_id, isbn)
+         self._repo.add_copy(copy)
++        self._set_aside(copy)
+         return copy
+ 
+     def get_copy(self, copy_id: str) -> Copy:
+@@ -89,9 +126,9 @@ class LendingService:
+ 
+     def checkout(self, member_id: str, copy_id: str) -> Loan:
+         member = self._repo.get_member(member_id)
++        self._refuse_if_blocked(member_id, policy.BORROWING_THRESHOLD)
+         copy = self._repo.get_copy(copy_id)
+-        if copy.status is not CopyStatus.AVAILABLE:
+-            raise CopyNotAvailable(copy_id, copy.status.value)
++        collecting = self._hold_to_collect(member_id, copy)
+         limit = policy.loan_limit(member.category)
+         if len(self.open_loans(member_id)) >= limit:
+             raise LoanLimitReached(member_id, limit)
+@@ -106,6 +143,8 @@ class LendingService:
+             due_on=policy.due_date(title.material, today),
+         )
+         copy.status = CopyStatus.ON_LOAN
++        if collecting is not None:
++            collecting.status = HoldStatus.FULFILLED
+         self._repo.add_loan(loan)
+         return loan
+ 
+@@ -115,7 +154,52 @@ class LendingService:
+         if loan is None:
+             raise NoOpenLoan(copy_id)
+         loan.returned_on = self._clock.today()
+-        copy.status = CopyStatus.AVAILABLE
++        self._post_fine(loan, settled_on=loan.returned_on)
++        self._set_aside(copy)
++        return loan
++
++    def renew(self, loan_id: str) -> Loan:
++        """Give the open Loan the due date of a checkout today, in place.
++
++        Only books, only for a member who owes nothing, at most
++        ``policy.MAX_RENEWALS`` times, not before ``policy.earliest_renewal``,
++        and not while a Hold on the Title is Waiting (Ready Holds don't count);
++        the first rule broken raises ``AccountBlocked`` for money owed, else
++        ``RenewalRefused``.
++
++        Lateness never disappears (ADR-0001): an overdue Loan is first fined for
++        its Late days up to today, then Late days count from the new due date.
++        The Balance is checked before that Fine, so it never blocks its own
++        renewal.
++        """
++        loan = self._repo.get_loan(loan_id)
++        if not loan.is_open:
++            raise RenewalRefused(loan_id, f"it was returned on {loan.returned_on}")
++        title = self._title_of(loan)
++        material = title.material
++        if material not in policy.RENEWABLE_MATERIALS:
++            raise RenewalRefused(
++                loan_id, f"only books can be renewed, not a {material.value}"
++            )
++        self._refuse_if_blocked(loan.member_id, policy.RENEWAL_THRESHOLD)
++        if loan.renewals >= policy.MAX_RENEWALS:
++            raise RenewalRefused(
++                loan_id, f"it has already been renewed {loan.renewals} times"
++            )
++        today = self._clock.today()
++        earliest = policy.earliest_renewal(loan.due_on)
++        if today < earliest:
++            raise RenewalRefused(
++                loan_id, f"too early, it can be renewed from {earliest}"
++            )
++        waiting = self._first_waiting_hold(title.isbn)
++        if waiting is not None:
++            raise RenewalRefused(
++                loan_id, f"hold {waiting.hold_id!r} is waiting for the Title"
++            )
++        self._post_fine(loan, settled_on=today)
++        loan.due_on = policy.due_date(material, today)
++        loan.renewals += 1
+         return loan
+ 
+     def get_loan(self, loan_id: str) -> Loan:
+@@ -134,3 +218,182 @@ class LendingService:
+         """Open loans past their due date on ``as_of`` (default: today)."""
+         day = as_of or self._clock.today()
+         return [l for l in self._repo.all_loans() if l.is_overdue(day)]
++
++    def _post_fine(self, loan: Loan, settled_on: date) -> None:
++        """Charge the Late days on ``loan`` up to ``settled_on`` (ADR-0001).
++
++        All the Fines on one Loan together never exceed the Title's replacement
++        cost, so this one is cut to whatever room earlier Fines left. Nothing is
++        written when that comes to zero.
++        """
++        member = self._repo.get_member(loan.member_id)
++        title = self._title_of(loan)
++        owed = policy.fine_amount(
++            member.category, title.material, policy.late_days(loan.due_on, settled_on)
++        )
++        already_fined = _total(
++            e
++            for e in self._repo.account_entries(loan.member_id)
++            if isinstance(e, Fine) and e.loan_id == loan.loan_id
++        )
++        amount = min(owed, title.replacement_cost - already_fined).quantize(CENT)
++        if amount > 0:
++            self._repo.add_account_entry(
++                loan.member_id,
++                Fine(amount, recorded_on=settled_on, loan_id=loan.loan_id),
++            )
++
++    def _title_of(self, loan: Loan) -> Title:
++        return self._repo.get_title(self._repo.get_copy(loan.copy_id).isbn)
++
++    # holds -------------------------------------------------------------
++
++    def place_hold(self, member_id: str, isbn: str) -> Hold:
++        """Join the Hold queue for a Title whose copies are all out."""
++        self._repo.get_member(member_id)
++        self._refuse_if_blocked(member_id, policy.HOLD_THRESHOLD)
++        self._repo.get_title(isbn)
++        copies = [
++            c for c in self._repo.copies_of(isbn) if c.status is not CopyStatus.WITHDRAWN
++        ]
++        if not copies:
++            raise HoldNotAllowed(f"{isbn!r} has no copies in circulation")
++        if any(c.status is CopyStatus.AVAILABLE for c in copies):
++            raise HoldNotAllowed(f"a copy of {isbn!r} is on the shelf")
++        if any(h.member_id == member_id for h in self.holds_for(isbn)):
++            raise HoldNotAllowed(f"member {member_id!r} already has a Hold on {isbn!r}")
++        copy_ids = {c.copy_id for c in copies}
++        if any(l.copy_id in copy_ids for l in self.open_loans(member_id)):
++            raise HoldNotAllowed(f"member {member_id!r} has {isbn!r} on loan")
++        hold = Hold(
++            hold_id=self._repo.next_id("H"),
++            member_id=member_id,
++            isbn=isbn,
++            placed_on=self._clock.today(),
++            status=HoldStatus.WAITING,
++        )
++        self._repo.add_hold(hold)
++        return hold
++
++    def cancel_hold(self, hold_id: str) -> Hold:
++        """Cancel a Waiting or Ready Hold. A Ready Hold's copy passes on."""
++        hold = self._repo.get_hold(hold_id)
++        if not hold.is_active:
++            raise HoldNotAllowed(f"hold {hold_id!r} is {hold.status.value}")
++        was_ready = hold.status is HoldStatus.READY
++        hold.status = HoldStatus.CANCELLED
++        if was_ready and hold.copy_id is not None:
++            self._set_aside(self._repo.get_copy(hold.copy_id))
++        return hold
++
++    def expire_holds(self) -> list[Hold]:
++        """The daily job: expire every Ready Hold past its Pickup deadline.
++
++        Each expired Hold's copy passes on with a deadline counted from today,
++        so a Hold made Ready here can't expire in the same run. Returns the
++        expired Holds in placement order. Expiry posts no Charge.
++        """
++        today = self._clock.today()
++        expired = [
++            h
++            for h in self._repo.all_holds()
++            if h.status is HoldStatus.READY
++            and h.pickup_by is not None
++            and h.pickup_by < today
++        ]
++        for hold in expired:
++            hold.status = HoldStatus.EXPIRED
++            if hold.copy_id is not None:
++                self._set_aside(self._repo.get_copy(hold.copy_id))
++        return expired
++
++    def holds_for(self, isbn: str) -> list[Hold]:
++        """The Title's Hold queue: its Waiting and Ready Holds, in placement order."""
++        self._repo.get_title(isbn)
++        return [h for h in self._repo.holds_of(isbn) if h.is_active]
++
++    def _hold_to_collect(self, member_id: str, copy: Copy) -> Hold | None:
++        """The Ready Hold that ``member_id`` collects by borrowing ``copy``.
++
++        ``None`` for a copy on the shelf. ``CopyNotAvailable`` unless the copy
++        is either on the shelf or set aside for this member's Ready Hold with
++        its Pickup deadline not yet passed.
++        """
++        if copy.status is CopyStatus.AVAILABLE:
++            return None
++        if copy.status is CopyStatus.ON_HOLD_SHELF:
++            hold = next(
++                (
++                    h
++                    for h in self.holds_for(copy.isbn)
++                    if h.status is HoldStatus.READY and h.copy_id == copy.copy_id
++                ),
++                None,
++            )
++            if (
++                hold is not None
++                and hold.member_id == member_id
++                and hold.pickup_by is not None
++                and self._clock.today() <= hold.pickup_by
++            ):
++                return hold
++        raise CopyNotAvailable(copy.copy_id, copy.status.value)
++
++    def _set_aside(self, copy: Copy) -> None:
++        """Put a freed or new copy where it belongs: on the Hold shelf for the
++        first Waiting Hold on its Title, or on the shelf if nobody is waiting.
++        """
++        waiting = self._first_waiting_hold(copy.isbn)
++        if waiting is None:
++            copy.status = CopyStatus.AVAILABLE
++            return
++        copy.status = CopyStatus.ON_HOLD_SHELF
++        waiting.status = HoldStatus.READY
++        waiting.copy_id = copy.copy_id
++        waiting.pickup_by = policy.pickup_deadline(self._clock.today())
++
++    def _first_waiting_hold(self, isbn: str) -> Hold | None:
++        """The Title's first Waiting Hold in placement order, if anyone's waiting."""
++        return next(
++            (h for h in self.holds_for(isbn) if h.status is HoldStatus.WAITING),
++            None,
++        )
++
++    # accounts ----------------------------------------------------------
++
++    def _refuse_if_blocked(self, member_id: str, threshold: Decimal) -> None:
++        """``AccountBlocked`` if the member's Balance has reached ``threshold``."""
++        owed = self.balance(member_id)
++        if owed >= threshold:
++            raise AccountBlocked(member_id, owed, threshold)
++
++    def balance(self, member_id: str) -> Decimal:
++        """What the member owes right now: their Charges minus their Payments."""
++        entries = self._repo.account_entries(member_id)
++        charged = _total(e for e in entries if isinstance(e, Charge))
++        paid = _total(e for e in entries if isinstance(e, Payment))
++        return charged - paid
++
++    def add_charge(self, member_id: str, amount: Decimal, reason: str) -> Decimal:
++        """Post a Manual charge and return the member's new Balance."""
++        self._repo.get_member(member_id)
++        charge = ManualCharge(
++            _valid_amount(amount), recorded_on=self._clock.today(), reason=reason
++        )
++        self._repo.add_account_entry(member_id, charge)
++        return self.balance(member_id)
++
++    def pay(self, member_id: str, amount: Decimal) -> Decimal:
++        """Record a Payment and return the member's new Balance.
++
++        The library never holds credit, so a Payment may not exceed the Balance.
++        """
++        self._repo.get_member(member_id)
++        paid = _valid_amount(amount)
++        owed = self.balance(member_id)
++        if paid > owed:
++            raise InvalidAmount(amount, f"is more than the Balance of {owed}")
++        self._repo.add_account_entry(
++            member_id, Payment(paid, recorded_on=self._clock.today())
++        )
++        return self.balance(member_id)
+diff --git a/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..f401fc7
+Binary files /dev/null and b/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/conftest.cpython-312.pyc b/tests/__pycache__/conftest.cpython-312.pyc
+new file mode 100644
+index 0000000..3248c2a
+Binary files /dev/null and b/tests/__pycache__/conftest.cpython-312.pyc differ
+diff --git a/tests/__pycache__/conftest.cpython-313-pytest-9.2.0.pyc b/tests/__pycache__/conftest.cpython-313-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..3695c69
+Binary files /dev/null and b/tests/__pycache__/conftest.cpython-313-pytest-9.2.0.pyc differ
+diff --git a/tests/__pycache__/test_account.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_account.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..d7496fa
+Binary files /dev/null and b/tests/__pycache__/test_account.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_account.cpython-312.pyc b/tests/__pycache__/test_account.cpython-312.pyc
+new file mode 100644
+index 0000000..fd76a66
+Binary files /dev/null and b/tests/__pycache__/test_account.cpython-312.pyc differ
+diff --git a/tests/__pycache__/test_account.cpython-313-pytest-9.2.0.pyc b/tests/__pycache__/test_account.cpython-313-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..758bdb9
+Binary files /dev/null and b/tests/__pycache__/test_account.cpython-313-pytest-9.2.0.pyc differ
+diff --git a/tests/__pycache__/test_blocked.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_blocked.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..f2b34a5
+Binary files /dev/null and b/tests/__pycache__/test_blocked.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_blocked.cpython-312.pyc b/tests/__pycache__/test_blocked.cpython-312.pyc
+new file mode 100644
+index 0000000..7dfafc7
+Binary files /dev/null and b/tests/__pycache__/test_blocked.cpython-312.pyc differ
+diff --git a/tests/__pycache__/test_blocked.cpython-313-pytest-9.2.0.pyc b/tests/__pycache__/test_blocked.cpython-313-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..fa0ab24
+Binary files /dev/null and b/tests/__pycache__/test_blocked.cpython-313-pytest-9.2.0.pyc differ
+diff --git a/tests/__pycache__/test_catalogue.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_catalogue.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..aa9d146
+Binary files /dev/null and b/tests/__pycache__/test_catalogue.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_catalogue.cpython-312.pyc b/tests/__pycache__/test_catalogue.cpython-312.pyc
+new file mode 100644
+index 0000000..d548132
+Binary files /dev/null and b/tests/__pycache__/test_catalogue.cpython-312.pyc differ
+diff --git a/tests/__pycache__/test_catalogue.cpython-313-pytest-9.2.0.pyc b/tests/__pycache__/test_catalogue.cpython-313-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..5e0d4ae
+Binary files /dev/null and b/tests/__pycache__/test_catalogue.cpython-313-pytest-9.2.0.pyc differ
+diff --git a/tests/__pycache__/test_fines.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_fines.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..588420a
+Binary files /dev/null and b/tests/__pycache__/test_fines.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_fines.cpython-312.pyc b/tests/__pycache__/test_fines.cpython-312.pyc
+new file mode 100644
+index 0000000..c658709
+Binary files /dev/null and b/tests/__pycache__/test_fines.cpython-312.pyc differ
+diff --git a/tests/__pycache__/test_fines.cpython-313-pytest-9.2.0.pyc b/tests/__pycache__/test_fines.cpython-313-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..ddc13c3
+Binary files /dev/null and b/tests/__pycache__/test_fines.cpython-313-pytest-9.2.0.pyc differ
+diff --git a/tests/__pycache__/test_holds.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_holds.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..0f243c2
+Binary files /dev/null and b/tests/__pycache__/test_holds.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_holds.cpython-312.pyc b/tests/__pycache__/test_holds.cpython-312.pyc
+new file mode 100644
+index 0000000..fb1084f
+Binary files /dev/null and b/tests/__pycache__/test_holds.cpython-312.pyc differ
+diff --git a/tests/__pycache__/test_holds.cpython-313-pytest-9.2.0.pyc b/tests/__pycache__/test_holds.cpython-313-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..0685897
+Binary files /dev/null and b/tests/__pycache__/test_holds.cpython-313-pytest-9.2.0.pyc differ
+diff --git a/tests/__pycache__/test_loans.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_loans.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..6e64280
+Binary files /dev/null and b/tests/__pycache__/test_loans.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_loans.cpython-312.pyc b/tests/__pycache__/test_loans.cpython-312.pyc
+new file mode 100644
+index 0000000..434920c
+Binary files /dev/null and b/tests/__pycache__/test_loans.cpython-312.pyc differ
+diff --git a/tests/__pycache__/test_loans.cpython-313-pytest-9.2.0.pyc b/tests/__pycache__/test_loans.cpython-313-pytest-9.2.0.pyc
+new file mode 100644
+index 0000000..ac5c531
+Binary files /dev/null and b/tests/__pycache__/test_loans.cpython-313-pytest-9.2.0.pyc differ
+diff --git a/tests/__pycache__/test_renewals.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_renewals.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..df6c305
+Binary files /dev/null and b/tests/__pycache__/test_renewals.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/test_account.py b/tests/test_account.py
+new file mode 100644
+index 0000000..039e93a
+--- /dev/null
++++ b/tests/test_account.py
+@@ -0,0 +1,139 @@
++from decimal import Decimal
++
++import pytest
++
++from lending.errors import InvalidAmount, MemberNotFound
++
++# Refused for Charges and Payments alike.
++INVALID_AMOUNTS = [
++    Decimal("0"),
++    Decimal("-1.00"),
++    Decimal("NaN"),
++    Decimal("sNaN"),
++    Decimal("Infinity"),
++    Decimal("-Infinity"),
++    Decimal("0.001"),
++    Decimal("2.505"),
++    Decimal("1E+30"),
++    2.5,
++    2,
++    "2.50",
++]
++
++
++def test_new_member_owes_nothing(service):
++    assert str(service.balance("ann")) == "0.00"
++
++
++def test_manual_charges_add_up_on_the_balance(service):
++    assert service.add_charge("ann", Decimal("2.50"), "damaged case") == Decimal("2.50")
++    assert service.add_charge("ann", Decimal("4.00"), "lost sleeve") == Decimal("6.50")
++    assert service.balance("ann") == Decimal("6.50")
++
++
++def test_a_manual_charge_needs_no_reason(service):
++    assert service.add_charge("ann", Decimal("3.00"), "") == Decimal("3.00")
++
++
++def test_unknown_member_has_no_balance(service):
++    with pytest.raises(MemberNotFound):
++        service.balance("nobody")
++
++
++def test_unknown_member_cannot_be_charged(service):
++    with pytest.raises(MemberNotFound):
++        service.add_charge("nobody", Decimal("1.00"), "damaged case")
++
++
++@pytest.mark.parametrize("amount", INVALID_AMOUNTS, ids=repr)
++def test_invalid_charge_amount_is_refused(service, amount):
++    service.add_charge("ann", Decimal("5.00"), "damaged case")
++    with pytest.raises(InvalidAmount) as refused:
++        service.add_charge("ann", amount, "damaged case")
++    assert refused.value.amount is amount
++    assert repr(amount) in str(refused.value)
++    assert service.balance("ann") == Decimal("5.00")
++
++
++def test_whole_cents_are_judged_by_value(service):
++    assert str(service.add_charge("ann", Decimal("1.000"), "damaged case")) == "1.00"
++    assert str(service.balance("ann")) == "1.00"
++
++
++def test_unknown_member_wins_over_invalid_amount(service):
++    with pytest.raises(MemberNotFound):
++        service.add_charge("nobody", Decimal("-1"), "damaged case")
++
++
++# Payments -------------------------------------------------------------
++
++
++def test_a_part_payment_reduces_the_balance(service):
++    service.add_charge("ann", Decimal("10.00"), "lost copy")
++    assert service.pay("ann", Decimal("4.00")) == Decimal("6.00")
++    assert service.balance("ann") == Decimal("6.00")
++
++
++def test_payments_add_up(service):
++    service.add_charge("ann", Decimal("10.00"), "lost copy")
++    service.pay("ann", Decimal("4.00"))
++    assert service.pay("ann", Decimal("2.50")) == Decimal("3.50")
++
++
++def test_paying_exactly_the_balance_clears_it(service):
++    service.add_charge("ann", Decimal("2.50"), "damaged case")
++    service.add_charge("ann", Decimal("4.00"), "lost sleeve")
++    assert str(service.pay("ann", Decimal("6.50"))) == "0.00"
++    assert str(service.balance("ann")) == "0.00"
++
++
++def test_a_payment_is_not_assigned_to_a_charge(service):
++    service.add_charge("ann", Decimal("2.50"), "damaged case")
++    service.add_charge("ann", Decimal("4.00"), "lost sleeve")
++    assert service.pay("ann", Decimal("5.00")) == Decimal("1.50")
++
++
++def test_charges_after_a_payment_add_to_what_is_left(service):
++    service.add_charge("ann", Decimal("5.00"), "damaged case")
++    service.pay("ann", Decimal("5.00"))
++    assert service.add_charge("ann", Decimal("1.25"), "lost sleeve") == Decimal("1.25")
++
++
++def test_overpayment_is_refused(service):
++    service.add_charge("ann", Decimal("6.00"), "damaged case")
++    with pytest.raises(InvalidAmount) as refused:
++        service.pay("ann", Decimal("6.01"))
++    assert refused.value.amount == Decimal("6.01")
++    assert "6.01" in str(refused.value)
++    assert service.balance("ann") == Decimal("6.00")
++
++
++def test_no_payment_is_taken_when_nothing_is_owed(service):
++    with pytest.raises(InvalidAmount):
++        service.pay("ann", Decimal("0.01"))
++    assert str(service.balance("ann")) == "0.00"
++
++
++@pytest.mark.parametrize("amount", INVALID_AMOUNTS, ids=repr)
++def test_invalid_payment_amount_is_refused(service, amount):
++    service.add_charge("ann", Decimal("5.00"), "damaged case")
++    with pytest.raises(InvalidAmount) as refused:
++        service.pay("ann", amount)
++    assert refused.value.amount is amount
++    assert repr(amount) in str(refused.value)
++    assert service.balance("ann") == Decimal("5.00")
++
++
++def test_payment_whole_cents_are_judged_by_value(service):
++    service.add_charge("ann", Decimal("3.00"), "damaged case")
++    assert str(service.pay("ann", Decimal("1.000"))) == "2.00"
++
++
++def test_unknown_member_cannot_pay(service):
++    with pytest.raises(MemberNotFound):
++        service.pay("nobody", Decimal("1.00"))
++
++
++def test_unknown_member_wins_over_invalid_payment(service):
++    with pytest.raises(MemberNotFound):
++        service.pay("nobody", Decimal("-1"))
+diff --git a/tests/test_blocked.py b/tests/test_blocked.py
+new file mode 100644
+index 0000000..63e0a96
+--- /dev/null
++++ b/tests/test_blocked.py
+@@ -0,0 +1,102 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++
++from lending import CopyStatus, Material
++from lending.errors import AccountBlocked, MemberNotFound
++
++
++def test_a_balance_of_exactly_ten_blocks_borrowing(service):
++    service.add_charge("ann", Decimal("10.00"), "lost copy")
++    with pytest.raises(AccountBlocked) as blocked:
++        service.checkout("ann", "B1")
++    assert blocked.value.member_id == "ann"
++    assert blocked.value.balance == Decimal("10.00")
++    assert blocked.value.threshold == Decimal("10.00")
++    assert service.get_copy("B1").status is CopyStatus.AVAILABLE
++    assert service.open_loans("ann") == []
++
++
++def test_a_higher_balance_is_blocked_too(service):
++    service.add_charge("ann", Decimal("12.00"), "lost copy")
++    with pytest.raises(AccountBlocked) as blocked:
++        service.checkout("ann", "B1")
++    assert blocked.value.balance == Decimal("12.00")
++    assert "owes 12.00, limit 10.00" in str(blocked.value)
++    assert service.get_copy("B1").status is CopyStatus.AVAILABLE
++
++
++def test_a_balance_just_under_ten_can_still_borrow(service):
++    service.add_charge("ann", Decimal("9.99"), "damaged case")
++    assert service.checkout("ann", "B1").copy_id == "B1"
++    assert service.get_copy("B1").status is CopyStatus.ON_LOAN
++
++
++def test_the_block_comes_before_the_copy_being_on_loan(service):
++    service.checkout("kid", "B1")
++    service.add_charge("ann", Decimal("10.00"), "lost copy")
++    with pytest.raises(AccountBlocked):
++        service.checkout("ann", "B1")
++
++
++def test_the_block_comes_before_the_loan_limit(service):
++    service.add_title("978-9", "Short Stories", Material.BOOK, Decimal("9.00"))
++    for n in range(9):
++        service.add_copy(f"S{n}", "978-9")
++    for n in range(8):
++        service.checkout("ann", f"S{n}")
++    service.add_charge("ann", Decimal("10.00"), "lost copy")
++    with pytest.raises(AccountBlocked):
++        service.checkout("ann", "S8")
++
++
++def test_the_block_comes_before_an_unknown_copy(service):
++    service.add_charge("ann", Decimal("10.00"), "lost copy")
++    with pytest.raises(AccountBlocked):
++        service.checkout("ann", "nope")
++
++
++def test_an_unknown_member_is_still_not_found(service):
++    with pytest.raises(MemberNotFound):
++        service.checkout("nobody", "B1")
++
++
++def test_a_child_is_blocked_by_manual_charges_at_the_same_threshold(service):
++    service.add_charge("kid", Decimal("9.99"), "damaged case")
++    service.checkout("kid", "B1")
++    service.add_charge("kid", Decimal("0.01"), "torn page")
++    with pytest.raises(AccountBlocked) as blocked:
++        service.checkout("kid", "B2")
++    assert blocked.value.member_id == "kid"
++    assert blocked.value.threshold == Decimal("10.00")
++
++
++def test_paying_below_the_threshold_unblocks_straight_away(service):
++    service.add_charge("ann", Decimal("12.00"), "lost copy")
++    with pytest.raises(AccountBlocked):
++        service.checkout("ann", "B1")
++    service.pay("ann", Decimal("2.01"))
++    assert service.checkout("ann", "B1").copy_id == "B1"
++
++
++def test_paying_only_down_to_the_threshold_still_blocks(service):
++    service.add_charge("ann", Decimal("12.00"), "lost copy")
++    service.pay("ann", Decimal("2.00"))
++    with pytest.raises(AccountBlocked):
++        service.checkout("ann", "B1")
++
++
++def test_a_fine_on_return_can_block(service, clock):
++    service.checkout("ann", "D1")
++    clock.set(date(2026, 6, 1))  # far past due: the Fine is capped at 12.00
++    service.return_copy("D1")
++    with pytest.raises(AccountBlocked):
++        service.checkout("ann", "B1")
++
++
++def test_an_overdue_copy_still_out_does_not_block(service, clock):
++    service.checkout("ann", "D1")
++    service.add_charge("ann", Decimal("9.00"), "damaged case")
++    clock.set(date(2026, 6, 1))  # Fine building up, but not posted (ADR-0001)
++    assert service.checkout("ann", "B1").copy_id == "B1"
+diff --git a/tests/test_fines.py b/tests/test_fines.py
+new file mode 100644
+index 0000000..3539166
+--- /dev/null
++++ b/tests/test_fines.py
+@@ -0,0 +1,92 @@
++from datetime import date
++from decimal import Decimal
++
++from lending import CopyStatus
++
++
++def test_late_book_is_fined_per_late_day_leaving_out_sundays(service, clock):
++    loan = service.checkout("ann", "B1")
++    assert loan.due_on == date(2026, 3, 23)
++    clock.set(date(2026, 3, 30))  # 24-30 March, less Sunday 29 March: 6 Late days
++    service.return_copy("B1")
++    assert service.balance("ann") == Decimal("1.50")
++
++
++def test_late_dvd_is_fined_per_late_day_leaving_out_sundays(service, clock):
++    loan = service.checkout("ann", "D1")
++    assert loan.due_on == date(2026, 3, 9)
++    clock.set(date(2026, 3, 16))  # 10-16 March, less Sunday 15 March: 6 Late days
++    service.return_copy("D1")
++    assert service.balance("ann") == Decimal("6.00")
++
++
++def test_return_on_the_due_date_is_not_fined(service, clock):
++    loan = service.checkout("ann", "D1")
++    clock.set(loan.due_on)
++    service.return_copy("D1")
++    assert str(service.balance("ann")) == "0.00"
++
++
++def test_early_return_is_not_fined(service, clock):
++    service.checkout("ann", "D1")
++    clock.advance(2)
++    service.return_copy("D1")
++    assert str(service.balance("ann")) == "0.00"
++
++
++def test_sunday_return_after_a_saturday_due_date_is_not_fined(service, clock):
++    clock.set(date(2026, 3, 7))  # a Saturday: +21 days is Saturday 28 March
++    loan = service.checkout("ann", "B1")
++    assert loan.due_on == date(2026, 3, 28)
++    clock.set(date(2026, 3, 29))
++    service.return_copy("B1")
++    assert str(service.balance("ann")) == "0.00"
++
++
++def test_a_very_late_dvd_costs_at_most_its_replacement_cost(service, clock):
++    service.checkout("ann", "D1")
++    clock.set(date(2026, 6, 1))
++    service.return_copy("D1")
++    assert service.balance("ann") == Decimal("12.00")
++
++
++def test_a_very_late_book_costs_at_most_its_replacement_cost(service, clock):
++    service.checkout("ann", "B1")
++    clock.set(date(2026, 12, 1))
++    service.return_copy("B1")
++    assert service.balance("ann") == Decimal("18.00")
++
++
++def test_a_child_is_never_fined(service, clock):
++    service.checkout("kid", "D1")
++    clock.set(date(2026, 3, 16))
++    loan = service.return_copy("D1")
++    assert str(service.balance("kid")) == "0.00"
++    assert not loan.is_open
++    assert service.open_loans("kid") == []
++    assert service.get_copy("D1").status is CopyStatus.AVAILABLE
++
++
++def test_a_late_return_still_hands_back_the_closed_loan(service, clock):
++    loan = service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 30))
++    returned = service.return_copy("B1")
++    assert returned is service.get_loan(loan.loan_id)
++    assert returned.returned_on == date(2026, 3, 30)
++    assert not returned.is_open
++    assert service.get_copy("B1").status is CopyStatus.AVAILABLE
++
++
++def test_an_overdue_copy_still_out_does_not_change_the_balance(service, clock):
++    service.checkout("ann", "D1")
++    clock.set(date(2026, 6, 1))
++    assert service.overdue_loans() != []
++    assert str(service.balance("ann")) == "0.00"
++
++
++def test_a_fine_adds_to_manual_charges(service, clock):
++    service.add_charge("ann", Decimal("2.50"), "damaged case")
++    service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 30))
++    service.return_copy("B1")
++    assert service.balance("ann") == Decimal("4.00")
+diff --git a/tests/test_holds.py b/tests/test_holds.py
+new file mode 100644
+index 0000000..b77e179
+--- /dev/null
++++ b/tests/test_holds.py
+@@ -0,0 +1,681 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++
++from lending import CopyStatus, HoldStatus, Material
++from lending.errors import (
++    AccountBlocked,
++    CopyNotAvailable,
++    DuplicateCopy,
++    HoldNotAllowed,
++    HoldNotFound,
++    LoanLimitReached,
++    MemberNotFound,
++    TitleNotFound,
++)
++
++
++def test_a_hold_on_a_title_with_every_copy_out_is_waiting(service):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    assert hold.hold_id == "H0001"
++    assert hold.member_id == "ann"
++    assert hold.isbn == "dvd-1"
++    assert hold.placed_on == date(2026, 3, 2)
++    assert hold.status is HoldStatus.WAITING
++    assert hold.copy_id is None
++    assert hold.pickup_by is None
++
++
++def test_the_hold_queue_is_in_placement_order(service, clock):
++    service.register_member("bob", "Bob Adult")
++    service.register_member("cat", "Cat Adult")
++    service.checkout("kid", "D1")
++    service.place_hold("bob", "dvd-1")
++    service.place_hold("ann", "dvd-1")  # same day, placed second
++    clock.advance()
++    service.place_hold("cat", "dvd-1")
++    assert [h.member_id for h in service.holds_for("dvd-1")] == ["bob", "ann", "cat"]
++
++
++def test_a_title_nobody_is_waiting_for_has_an_empty_queue(service):
++    assert service.holds_for("dvd-1") == []
++
++
++def test_the_queue_of_an_unknown_title_is_not_found(service):
++    with pytest.raises(TitleNotFound):
++        service.holds_for("nope")
++
++
++def test_no_hold_while_a_copy_is_on_the_shelf(service):
++    service.checkout("kid", "B1")  # B2 is still on the shelf
++    with pytest.raises(HoldNotAllowed, match="on the shelf"):
++        service.place_hold("ann", "978-1")
++    assert service.holds_for("978-1") == []
++
++
++def test_no_hold_on_a_title_with_no_copies(service):
++    service.add_title("978-2", "On Order", Material.BOOK, Decimal("15.00"))
++    with pytest.raises(HoldNotAllowed, match="no copies in circulation"):
++        service.place_hold("ann", "978-2")
++
++
++def test_no_hold_on_a_title_whose_copies_are_all_withdrawn(service):
++    service.withdraw_copy("D1")
++    with pytest.raises(HoldNotAllowed, match="no copies in circulation"):
++        service.place_hold("ann", "dvd-1")
++
++
++def test_no_second_hold_on_the_same_title(service):
++    service.checkout("kid", "D1")
++    first = service.place_hold("ann", "dvd-1")
++    with pytest.raises(HoldNotAllowed, match="already has a Hold"):
++        service.place_hold("ann", "dvd-1")
++    assert service.holds_for("dvd-1") == [first]
++
++
++def test_no_hold_on_a_title_the_member_has_on_loan(service):
++    service.checkout("ann", "B1")
++    service.checkout("kid", "B2")
++    with pytest.raises(HoldNotAllowed, match="on loan"):
++        service.place_hold("ann", "978-1")
++    assert service.holds_for("978-1") == []
++
++
++def test_a_balance_of_exactly_five_blocks_holds(service):
++    service.checkout("kid", "D1")
++    service.add_charge("ann", Decimal("5.00"), "damaged case")
++    with pytest.raises(AccountBlocked) as blocked:
++        service.place_hold("ann", "dvd-1")
++    assert blocked.value.member_id == "ann"
++    assert blocked.value.balance == Decimal("5.00")
++    assert blocked.value.threshold == Decimal("5.00")
++    assert service.holds_for("dvd-1") == []
++
++
++def test_a_higher_balance_blocks_holds_too(service):
++    service.checkout("kid", "D1")
++    service.add_charge("ann", Decimal("7.50"), "lost case")
++    with pytest.raises(AccountBlocked) as blocked:
++        service.place_hold("ann", "dvd-1")
++    assert blocked.value.balance == Decimal("7.50")
++    assert blocked.value.threshold == Decimal("5.00")
++
++
++def test_a_balance_just_under_five_can_place_a_hold(service):
++    service.checkout("kid", "D1")
++    service.add_charge("ann", Decimal("4.99"), "damaged case")
++    assert service.place_hold("ann", "dvd-1").status is HoldStatus.WAITING
++
++
++def test_a_child_is_blocked_from_holds_at_the_same_threshold(service):
++    service.checkout("ann", "D1")
++    service.add_charge("kid", Decimal("4.99"), "damaged case")
++    service.add_charge("kid", Decimal("0.01"), "torn page")
++    with pytest.raises(AccountBlocked) as blocked:
++        service.place_hold("kid", "dvd-1")
++    assert blocked.value.member_id == "kid"
++    assert blocked.value.balance == Decimal("5.00")
++    assert blocked.value.threshold == Decimal("5.00")
++
++
++def test_an_unknown_member_cannot_place_a_hold(service):
++    with pytest.raises(MemberNotFound):
++        service.place_hold("nobody", "dvd-1")
++
++
++def test_the_hold_block_comes_before_an_unknown_title(service):
++    service.add_charge("ann", Decimal("5.00"), "damaged case")
++    with pytest.raises(AccountBlocked):
++        service.place_hold("ann", "nope")
++
++
++def test_a_hold_on_an_unknown_title_is_not_found(service):
++    with pytest.raises(TitleNotFound):
++        service.place_hold("ann", "nope")
++
++
++def test_a_hold_keeps_its_place_when_its_member_becomes_blocked(service):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    service.place_hold("ann", "dvd-1")
++    service.place_hold("bob", "dvd-1")
++    service.add_charge("ann", Decimal("6.00"), "lost case")
++    queue = service.holds_for("dvd-1")
++    assert [h.member_id for h in queue] == ["ann", "bob"]
++    assert queue[0].status is HoldStatus.WAITING
++
++
++# a returned copy goes to the Hold shelf --------------------------------------
++
++
++def test_a_returned_copy_goes_to_the_hold_shelf_for_the_first_hold(service, clock):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    clock.set(date(2026, 3, 4))  # Wednesday
++    service.return_copy("D1")
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++    assert hold.status is HoldStatus.READY
++    assert hold.copy_id == "D1"
++    assert hold.pickup_by == date(2026, 3, 11)
++
++
++def test_a_pickup_deadline_on_a_sunday_moves_to_the_monday(service, clock):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    clock.set(date(2026, 3, 8))  # Sunday: +7 days is Sunday 15 March
++    service.return_copy("D1")
++    assert hold.pickup_by == date(2026, 3, 16)
++
++
++def test_only_the_first_waiting_hold_becomes_ready(service, clock):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    first = service.place_hold("ann", "dvd-1")
++    second = service.place_hold("bob", "dvd-1")
++    clock.advance(2)
++    service.return_copy("D1")
++    assert first.status is HoldStatus.READY
++    assert second.status is HoldStatus.WAITING
++    assert second.copy_id is None
++    assert second.pickup_by is None
++    assert service.holds_for("dvd-1") == [first, second]
++
++
++def test_each_returned_copy_goes_to_the_next_hold_in_placement_order(service, clock):
++    service.register_member("bob", "Bob Adult")
++    service.register_member("cat", "Cat Adult")
++    service.checkout("kid", "B1")
++    service.checkout("kid", "B2")
++    bobs = service.place_hold("bob", "978-1")
++    cats = service.place_hold("cat", "978-1")  # same day, placed second
++    clock.advance(3)
++    service.return_copy("B2")
++    assert (bobs.status, bobs.copy_id) == (HoldStatus.READY, "B2")
++    assert cats.status is HoldStatus.WAITING
++    clock.advance()
++    service.return_copy("B1")
++    assert (cats.status, cats.copy_id) == (HoldStatus.READY, "B1")
++    assert cats.pickup_by == date(2026, 3, 13)  # Friday 6 March + 7
++    assert service.get_copy("B1").status is CopyStatus.ON_HOLD_SHELF
++    assert service.get_copy("B2").status is CopyStatus.ON_HOLD_SHELF
++
++
++def test_a_return_to_the_hold_shelf_still_closes_the_loan_and_posts_the_fine(
++    service, clock
++):
++    service.register_member("bob", "Bob Adult")
++    loan = service.checkout("ann", "D1")  # due Monday 9 March
++    service.place_hold("bob", "dvd-1")
++    clock.set(date(2026, 3, 11))  # two Late days at 1.00
++    returned = service.return_copy("D1")
++    assert returned.loan_id == loan.loan_id
++    assert returned.returned_on == date(2026, 3, 11)
++    assert service.open_loans("ann") == []
++    assert service.balance("ann") == Decimal("2.00")
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++
++
++def test_a_return_with_nobody_waiting_for_its_title_shelves_the_copy(service):
++    service.checkout("kid", "D1")
++    service.checkout("ann", "B1")
++    service.checkout("kid", "B2")
++    hold = service.place_hold("ann", "dvd-1")  # waiting for a different Title
++    service.return_copy("B1")
++    assert service.get_copy("B1").status is CopyStatus.AVAILABLE
++    assert hold.status is HoldStatus.WAITING
++
++
++def test_a_copy_on_the_hold_shelf_is_not_available(service):
++    service.checkout("kid", "D1")
++    service.place_hold("ann", "dvd-1")
++    service.return_copy("D1")
++    assert service.available_copies("dvd-1") == []
++    with pytest.raises(CopyNotAvailable):
++        service.withdraw_copy("D1")
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++
++
++def test_a_hold_can_be_placed_when_the_only_copy_is_on_the_hold_shelf(service):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    anns = service.place_hold("ann", "dvd-1")
++    service.return_copy("D1")
++    bobs = service.place_hold("bob", "dvd-1")
++    assert bobs.status is HoldStatus.WAITING
++    assert service.holds_for("dvd-1") == [anns, bobs]
++
++
++# collecting --------------------------------------------------------------
++
++
++def test_the_hold_member_collects_the_set_aside_copy(service):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    service.return_copy("D1")
++    loan = service.checkout("ann", "D1")
++    assert (loan.member_id, loan.copy_id) == ("ann", "D1")
++    assert loan.borrowed_on == date(2026, 3, 2)
++    assert loan.due_on == date(2026, 3, 9)
++    assert service.open_loans("ann") == [loan]
++    assert service.get_copy("D1").status is CopyStatus.ON_LOAN
++    assert hold.status is HoldStatus.FULFILLED
++    assert service.holds_for("dvd-1") == []
++
++
++def test_a_hold_can_be_collected_on_its_pickup_deadline(service, clock):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    clock.set(date(2026, 3, 4))  # Wednesday
++    service.return_copy("D1")
++    clock.set(date(2026, 3, 11))  # the following Wednesday, the deadline
++    loan = service.checkout("ann", "D1")
++    assert loan.borrowed_on == date(2026, 3, 11)
++    assert hold.status is HoldStatus.FULFILLED
++
++
++def test_a_fulfilled_hold_keeps_its_copy_and_pickup_deadline(service, clock):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    clock.set(date(2026, 3, 4))
++    service.return_copy("D1")
++    clock.advance()
++    service.checkout("ann", "D1")
++    assert hold.status is HoldStatus.FULFILLED
++    assert hold.copy_id == "D1"
++    assert hold.pickup_by == date(2026, 3, 11)
++
++
++def test_no_collecting_after_the_pickup_deadline_even_before_the_job_runs(
++    service, clock
++):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    clock.set(date(2026, 3, 4))
++    service.return_copy("D1")
++    clock.set(date(2026, 3, 12))  # the day after the deadline
++    with pytest.raises(CopyNotAvailable) as refused:
++        service.checkout("ann", "D1")
++    assert refused.value.copy_id == "D1"
++    assert refused.value.status == "on_hold_shelf"
++    assert hold.status is HoldStatus.READY
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++    assert service.open_loans("ann") == []
++
++
++def test_a_set_aside_copy_is_not_lent_to_anyone_else(service):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    service.return_copy("D1")
++    with pytest.raises(CopyNotAvailable) as refused:
++        service.checkout("bob", "D1")
++    assert refused.value.copy_id == "D1"
++    assert refused.value.status == "on_hold_shelf"
++    assert hold.status is HoldStatus.READY
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++    assert service.open_loans("bob") == []
++
++
++def test_a_blocked_hold_member_keeps_the_hold_and_can_collect_after_paying(
++    service, clock
++):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    service.return_copy("D1")
++    service.add_charge("ann", Decimal("10.00"), "lost case")
++    with pytest.raises(AccountBlocked) as blocked:
++        service.checkout("ann", "D1")
++    assert blocked.value.member_id == "ann"
++    assert blocked.value.balance == Decimal("10.00")
++    assert blocked.value.threshold == Decimal("10.00")
++    assert hold.status is HoldStatus.READY
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++
++    clock.advance(2)  # still before the deadline
++    service.pay("ann", Decimal("0.01"))
++    service.checkout("ann", "D1")
++    assert hold.status is HoldStatus.FULFILLED
++    assert service.get_copy("D1").status is CopyStatus.ON_LOAN
++
++
++def test_a_hold_member_at_their_loan_limit_keeps_the_hold_and_can_collect_after_a_return(
++    service, clock
++):
++    service.add_copy("B3", "978-1")
++    service.add_copy("B4", "978-1")
++    service.checkout("ann", "D1")
++    hold = service.place_hold("kid", "dvd-1")
++    for copy_id in ("B1", "B2", "B3", "B4"):
++        service.checkout("kid", copy_id)  # a child's limit is 4
++    service.return_copy("D1")
++    with pytest.raises(LoanLimitReached) as refused:
++        service.checkout("kid", "D1")
++    assert refused.value.member_id == "kid"
++    assert refused.value.limit == 4
++    assert hold.status is HoldStatus.READY
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++
++    clock.advance(2)  # still before the deadline
++    service.return_copy("B1")
++    service.checkout("kid", "D1")
++    assert hold.status is HoldStatus.FULFILLED
++    assert service.get_copy("D1").status is CopyStatus.ON_LOAN
++
++
++# cancelling --------------------------------------------------------------
++
++
++def test_a_cancelled_waiting_hold_leaves_the_queue_and_those_behind_move_up(service):
++    service.register_member("bob", "Bob Adult")
++    service.register_member("cat", "Cat Adult")
++    service.checkout("kid", "D1")
++    anns = service.place_hold("ann", "dvd-1")
++    bobs = service.place_hold("bob", "dvd-1")
++    cats = service.place_hold("cat", "dvd-1")
++    cancelled = service.cancel_hold(bobs.hold_id)
++    assert cancelled is bobs
++    assert cancelled.status is HoldStatus.CANCELLED
++    assert cancelled.copy_id is None
++    assert cancelled.pickup_by is None
++    assert service.holds_for("dvd-1") == [anns, cats]
++    assert service.get_copy("D1").status is CopyStatus.ON_LOAN
++
++
++def test_a_cancelled_ready_hold_passes_its_copy_to_the_next_waiting_hold(
++    service, clock
++):
++    service.register_member("bob", "Bob Adult")
++    service.register_member("cat", "Cat Adult")
++    service.checkout("kid", "D1")
++    anns = service.place_hold("ann", "dvd-1")
++    bobs = service.place_hold("bob", "dvd-1")
++    cats = service.place_hold("cat", "dvd-1")
++    clock.set(date(2026, 3, 4))  # Wednesday
++    service.return_copy("D1")
++    clock.set(date(2026, 3, 8))  # Sunday: +7 days is Sunday 15 March
++    service.cancel_hold(anns.hold_id)
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++    assert bobs.status is HoldStatus.READY
++    assert bobs.copy_id == "D1"
++    assert bobs.pickup_by == date(2026, 3, 16)
++    assert cats.status is HoldStatus.WAITING
++    assert service.holds_for("dvd-1") == [bobs, cats]
++
++
++def test_a_cancelled_ready_hold_keeps_its_copy_and_pickup_deadline(service, clock):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    anns = service.place_hold("ann", "dvd-1")
++    service.place_hold("bob", "dvd-1")
++    clock.set(date(2026, 3, 4))
++    service.return_copy("D1")
++    clock.advance()
++    cancelled = service.cancel_hold(anns.hold_id)
++    assert cancelled.status is HoldStatus.CANCELLED
++    assert cancelled.copy_id == "D1"
++    assert cancelled.pickup_by == date(2026, 3, 11)
++
++
++def test_a_cancelled_ready_hold_with_nobody_waiting_shelves_its_copy(service):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    service.return_copy("D1")
++    service.cancel_hold(hold.hold_id)
++    assert service.get_copy("D1").status is CopyStatus.AVAILABLE
++    assert service.available_copies("dvd-1") == [service.get_copy("D1")]
++    assert service.holds_for("dvd-1") == []
++
++
++def test_a_cancelled_hold_cannot_be_cancelled_again(service):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    service.cancel_hold(hold.hold_id)
++    with pytest.raises(HoldNotAllowed, match="cancelled"):
++        service.cancel_hold(hold.hold_id)
++    assert hold.status is HoldStatus.CANCELLED
++
++
++def test_a_fulfilled_hold_cannot_be_cancelled(service):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    anns = service.place_hold("ann", "dvd-1")
++    bobs = service.place_hold("bob", "dvd-1")
++    service.return_copy("D1")
++    service.checkout("ann", "D1")
++    with pytest.raises(HoldNotAllowed, match="fulfilled"):
++        service.cancel_hold(anns.hold_id)
++    assert anns.status is HoldStatus.FULFILLED
++    assert service.get_copy("D1").status is CopyStatus.ON_LOAN
++    assert bobs.status is HoldStatus.WAITING
++
++
++def test_cancelling_an_unknown_hold_is_not_found(service):
++    with pytest.raises(HoldNotFound) as missing:
++        service.cancel_hold("H9999")
++    assert missing.value.hold_id == "H9999"
++
++
++def test_cancelling_a_hold_leaves_the_balance_unchanged(service):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    service.add_charge("ann", Decimal("1.50"), "torn page")
++    service.return_copy("D1")
++    service.cancel_hold(hold.hold_id)
++    assert service.balance("ann") == Decimal("1.50")
++
++
++def test_a_blocked_member_can_still_cancel_a_hold(service):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    anns = service.place_hold("ann", "dvd-1")
++    bobs = service.place_hold("bob", "dvd-1")
++    service.return_copy("D1")
++    service.add_charge("ann", Decimal("12.00"), "lost case")
++    service.add_charge("bob", Decimal("12.00"), "lost case")
++    assert service.cancel_hold(bobs.hold_id).status is HoldStatus.CANCELLED
++    assert service.cancel_hold(anns.hold_id).status is HoldStatus.CANCELLED
++    assert service.get_copy("D1").status is CopyStatus.AVAILABLE
++    assert service.balance("ann") == Decimal("12.00")
++    assert service.balance("bob") == Decimal("12.00")
++
++
++# the daily job -------------------------------------------------------------
++
++
++def test_nothing_expires_on_the_pickup_deadline(service, clock):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    clock.set(date(2026, 3, 4))  # Wednesday: deadline Wednesday 11 March
++    service.return_copy("D1")
++    clock.set(date(2026, 3, 11))
++    assert service.expire_holds() == []
++    assert hold.status is HoldStatus.READY
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++
++
++def test_a_ready_hold_expires_the_day_after_its_pickup_deadline(service, clock):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    clock.set(date(2026, 3, 4))
++    service.return_copy("D1")
++    clock.set(date(2026, 3, 12))  # Thursday
++    assert service.expire_holds() == [hold]
++    assert hold.status is HoldStatus.EXPIRED
++    assert hold.copy_id == "D1"
++    assert hold.pickup_by == date(2026, 3, 11)
++    assert service.holds_for("dvd-1") == []
++
++
++def test_an_expired_hold_passes_its_copy_to_the_next_waiting_hold(service, clock):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    anns = service.place_hold("ann", "dvd-1")
++    bobs = service.place_hold("bob", "dvd-1")
++    clock.set(date(2026, 3, 4))
++    service.return_copy("D1")
++    clock.set(date(2026, 3, 12))
++    assert service.expire_holds() == [anns]
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++    assert bobs.status is HoldStatus.READY
++    assert bobs.copy_id == "D1"
++    assert bobs.pickup_by == date(2026, 3, 19)
++    assert service.holds_for("dvd-1") == [bobs]
++
++
++def test_an_expired_hold_with_nobody_waiting_shelves_its_copy(service, clock):
++    service.checkout("kid", "D1")
++    service.place_hold("ann", "dvd-1")
++    clock.set(date(2026, 3, 4))
++    service.return_copy("D1")
++    clock.set(date(2026, 3, 12))
++    service.expire_holds()
++    assert service.get_copy("D1").status is CopyStatus.AVAILABLE
++    assert service.available_copies("dvd-1") == [service.get_copy("D1")]
++
++
++def test_a_second_run_on_the_same_day_changes_nothing(service, clock):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    anns = service.place_hold("ann", "dvd-1")
++    bobs = service.place_hold("bob", "dvd-1")
++    clock.set(date(2026, 3, 4))
++    service.return_copy("D1")
++    clock.set(date(2026, 3, 12))
++    service.expire_holds()
++    assert service.expire_holds() == []
++    assert anns.status is HoldStatus.EXPIRED
++    assert (bobs.status, bobs.copy_id, bobs.pickup_by) == (
++        HoldStatus.READY,
++        "D1",
++        date(2026, 3, 19),
++    )
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++
++
++def test_a_run_after_missed_days_catches_up_on_every_title(service, clock):
++    service.register_member("bob", "Bob Adult")
++    service.register_member("cat", "Cat Adult")
++    service.register_member("dan", "Dan Adult")
++    service.checkout("kid", "D1")
++    service.checkout("kid", "B1")
++    service.checkout("kid", "B2")
++    # Placed in a different order from the Titles, so placement order shows.
++    anns = service.place_hold("ann", "dvd-1")
++    bobs = service.place_hold("bob", "978-1")
++    cats = service.place_hold("cat", "978-1")
++    dans = service.place_hold("dan", "978-1")
++    clock.set(date(2026, 3, 4))
++    service.return_copy("B1")  # bob's, deadline 11 March
++    service.return_copy("D1")  # ann's, deadline 11 March
++    clock.set(date(2026, 3, 13))
++    service.return_copy("B2")  # cat's, deadline 20 March
++    clock.set(date(2026, 3, 16))  # Monday: no run since before the 11th
++    assert service.expire_holds() == [anns, bobs]
++    assert anns.status is HoldStatus.EXPIRED
++    assert bobs.status is HoldStatus.EXPIRED
++    assert (cats.status, cats.pickup_by) == (HoldStatus.READY, date(2026, 3, 20))
++    assert service.get_copy("D1").status is CopyStatus.AVAILABLE
++    assert service.get_copy("B1").status is CopyStatus.ON_HOLD_SHELF
++    assert (dans.status, dans.copy_id) == (HoldStatus.READY, "B1")
++    assert dans.pickup_by == date(2026, 3, 23)  # from the run, not the deadline
++
++
++def test_a_waiting_hold_never_expires(service, clock):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    clock.advance(200)
++    assert service.expire_holds() == []
++    assert hold.status is HoldStatus.WAITING
++    assert service.holds_for("dvd-1") == [hold]
++
++
++def test_expiry_leaves_the_balance_unchanged(service, clock):
++    service.checkout("ann", "D1")
++    hold = service.place_hold("kid", "dvd-1")
++    service.add_charge("kid", Decimal("1.50"), "torn page")
++    service.return_copy("D1")
++    clock.advance(30)
++    assert service.expire_holds() == [hold]
++    assert service.balance("kid") == Decimal("1.50")
++    assert service.balance("ann") == Decimal("0.00")
++
++
++def test_an_expired_hold_cannot_be_cancelled(service, clock):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    service.return_copy("D1")
++    clock.advance(30)
++    service.expire_holds()
++    with pytest.raises(HoldNotAllowed, match="expired"):
++        service.cancel_hold(hold.hold_id)
++    assert hold.status is HoldStatus.EXPIRED
++    assert service.get_copy("D1").status is CopyStatus.AVAILABLE
++
++
++# a new copy goes to the Hold shelf -----------------------------------------
++
++
++def test_a_new_copy_goes_to_the_hold_shelf_for_the_first_hold(service, clock):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    clock.set(date(2026, 3, 8))  # Sunday: +7 days is Sunday 15 March
++    copy = service.add_copy("D2", "dvd-1")
++    assert copy.copy_id == "D2"
++    assert copy.status is CopyStatus.ON_HOLD_SHELF
++    assert service.get_copy("D2").status is CopyStatus.ON_HOLD_SHELF
++    assert hold.status is HoldStatus.READY
++    assert hold.copy_id == "D2"
++    assert hold.pickup_by == date(2026, 3, 16)
++    assert service.available_copies("dvd-1") == []
++
++
++def test_a_new_copy_makes_only_the_first_waiting_hold_ready(service):
++    service.register_member("bob", "Bob Adult")
++    service.checkout("kid", "D1")
++    first = service.place_hold("ann", "dvd-1")
++    second = service.place_hold("bob", "dvd-1")
++    service.add_copy("D2", "dvd-1")
++    assert (first.status, first.copy_id) == (HoldStatus.READY, "D2")
++    assert second.status is HoldStatus.WAITING
++    assert second.copy_id is None
++    assert second.pickup_by is None
++    assert service.holds_for("dvd-1") == [first, second]
++
++
++def test_a_new_copy_of_a_title_nobody_is_waiting_for_is_on_the_shelf(service):
++    copy = service.add_copy("D2", "dvd-1")
++    assert copy.status is CopyStatus.AVAILABLE
++    assert service.available_copies("dvd-1") == [service.get_copy("D1"), copy]
++
++
++def test_a_new_copy_is_on_the_shelf_when_the_only_hold_is_already_ready(service):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    service.return_copy("D1")
++    copy = service.add_copy("D2", "dvd-1")
++    assert copy.status is CopyStatus.AVAILABLE
++    assert (hold.status, hold.copy_id) == (HoldStatus.READY, "D1")
++    assert service.get_copy("D1").status is CopyStatus.ON_HOLD_SHELF
++
++
++def test_a_new_copy_of_an_unknown_title_touches_no_hold(service):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    with pytest.raises(TitleNotFound):
++        service.add_copy("D2", "nope")
++    assert hold.status is HoldStatus.WAITING
++    assert hold.copy_id is None
++    assert hold.pickup_by is None
++
++
++def test_a_duplicate_copy_touches_no_hold(service):
++    service.checkout("kid", "D1")
++    hold = service.place_hold("ann", "dvd-1")
++    with pytest.raises(DuplicateCopy):
++        service.add_copy("D1", "dvd-1")
++    assert hold.status is HoldStatus.WAITING
++    assert hold.copy_id is None
++    assert hold.pickup_by is None
++    assert service.get_copy("D1").status is CopyStatus.ON_LOAN
+diff --git a/tests/test_renewals.py b/tests/test_renewals.py
+new file mode 100644
+index 0000000..c8114b2
+--- /dev/null
++++ b/tests/test_renewals.py
+@@ -0,0 +1,435 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++
++from lending import CopyStatus, HoldStatus, Material
++from lending.errors import AccountBlocked, LoanNotFound, RenewalRefused
++
++
++def test_a_new_checkout_has_no_renewals(service):
++    assert service.checkout("ann", "B1").renewals == 0
++
++
++def test_a_renewal_gives_the_same_loan_a_full_loan_period_from_today(service, clock):
++    loan = service.checkout("ann", "B1")  # Monday 2 March, due Monday 23 March
++    clock.set(date(2026, 3, 19))
++    renewed = service.renew(loan.loan_id)
++    assert renewed.due_on == date(2026, 4, 9)
++    assert renewed.renewals == 1
++    assert renewed.loan_id == loan.loan_id
++    assert renewed.copy_id == "B1"
++    assert renewed.member_id == "ann"
++    assert renewed.borrowed_on == date(2026, 3, 2)
++    assert renewed.is_open
++    assert service.get_loan(loan.loan_id) == renewed
++
++
++def test_a_renewed_loan_stays_one_open_loan_with_its_copy_on_loan(service, clock):
++    loan = service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 19))
++    service.renew(loan.loan_id)
++    assert [l.loan_id for l in service.loan_history("ann")] == [loan.loan_id]
++    assert [l.loan_id for l in service.open_loans("ann")] == [loan.loan_id]
++    assert service.get_copy("B1").status is CopyStatus.ON_LOAN
++
++
++def test_a_renewed_due_date_never_falls_on_a_sunday(service, clock):
++    loan = service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 22))  # a Sunday: +21 days is Sunday 12 April
++    assert service.renew(loan.loan_id).due_on == date(2026, 4, 13)
++
++
++def test_a_member_at_their_loan_limit_can_renew(service, clock):
++    service.add_title("978-9", "Picture Book", Material.BOOK, Decimal("9.00"))
++    for n in range(4):
++        service.add_copy(f"P{n}", "978-9")
++    loans = [service.checkout("kid", f"P{n}") for n in range(4)]
++    clock.set(date(2026, 3, 19))
++    assert service.renew(loans[0].loan_id).due_on == date(2026, 4, 9)
++
++
++def test_an_unknown_loan_cannot_be_renewed(service):
++    with pytest.raises(LoanNotFound):
++        service.renew("L999")
++
++
++def test_a_returned_loan_cannot_be_renewed(service, clock):
++    loan = service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 19))
++    service.return_copy("B1")
++    with pytest.raises(RenewalRefused) as refused:
++        service.renew(loan.loan_id)
++    assert refused.value.loan_id == loan.loan_id
++    assert loan.loan_id in str(refused.value)
++    assert refused.value.reason in str(refused.value)
++    assert service.get_loan(loan.loan_id).due_on == date(2026, 3, 23)
++    assert service.get_loan(loan.loan_id).renewals == 0
++
++
++def test_a_returned_loan_cannot_be_renewed_after_its_copy_went_out_again(
++    service, clock
++):
++    loan = service.checkout("ann", "B1")
++    service.return_copy("B1")
++    other = service.checkout("kid", "B1")
++    clock.set(date(2026, 3, 19))
++    with pytest.raises(RenewalRefused) as refused:
++        service.renew(loan.loan_id)
++    assert refused.value.loan_id == loan.loan_id
++    assert service.get_loan(other.loan_id).due_on == date(2026, 3, 23)
++    assert service.get_loan(other.loan_id).renewals == 0
++    assert service.get_loan(other.loan_id).is_open
++    assert service.get_copy("B1").status is CopyStatus.ON_LOAN
++
++
++def test_renewing_an_overdue_book_posts_the_fine_for_the_late_days_so_far(
++    service, clock
++):
++    loan = service.checkout("ann", "B1")  # due Monday 23 March
++    clock.set(date(2026, 3, 28))  # Late days 24-28 March: 5 x 0.25
++    renewed = service.renew(loan.loan_id)
++    assert service.balance("ann") == Decimal("1.25")
++    assert renewed.due_on == date(2026, 4, 18)
++    assert service.overdue_loans() == []
++
++
++def test_after_an_overdue_renewal_late_days_count_from_the_new_due_date(
++    service, clock
++):
++    loan = service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 28))  # fined 1.25, now due Saturday 18 April
++    service.renew(loan.loan_id)
++    clock.set(date(2026, 4, 21))  # Late days 20 and 21 April; 19 April is a Sunday
++    service.return_copy("B1")
++    assert service.balance("ann") == Decimal("1.75")
++
++
++def test_the_replacement_cost_caps_the_renewal_fine_and_later_fines_together(
++    service, clock
++):
++    service.add_title("978-2", "Pamphlet", Material.BOOK, Decimal("1.00"))
++    service.add_copy("C1", "978-2")
++    loan = service.checkout("ann", "C1")  # due Monday 23 March
++    clock.set(date(2026, 3, 28))  # 5 Late days would be 1.25
++    service.renew(loan.loan_id)
++    assert service.balance("ann") == Decimal("1.00")
++    clock.set(date(2026, 4, 21))
++    service.return_copy("C1")
++    assert service.balance("ann") == Decimal("1.00")
++
++
++def test_a_child_renewing_an_overdue_book_is_not_fined(service, clock):
++    loan = service.checkout("kid", "B1")
++    clock.set(date(2026, 3, 28))
++    assert service.renew(loan.loan_id).due_on == date(2026, 4, 18)
++    assert str(service.balance("kid")) == "0.00"
++
++
++@pytest.mark.parametrize("day", [date(2026, 3, 19), date(2026, 3, 23)])
++def test_renewing_on_or_before_the_due_date_posts_nothing(service, clock, day):
++    loan = service.checkout("ann", "B1")
++    clock.set(day)
++    service.renew(loan.loan_id)
++    assert str(service.balance("ann")) == "0.00"
++
++
++# only books, at most twice, from five days before the due date ---------------
++
++
++def _refusal_reason(service, loan_id):
++    """Ask to renew, expect a refusal, and check that it changed nothing."""
++    before = service.get_loan(loan_id)
++    due_on, renewals = before.due_on, before.renewals
++    balance = service.balance(before.member_id)
++    with pytest.raises(RenewalRefused) as refused:
++        service.renew(loan_id)
++    after = service.get_loan(loan_id)
++    assert (after.due_on, after.renewals) == (due_on, renewals)
++    assert service.balance(before.member_id) == balance
++    assert refused.value.loan_id == loan_id
++    return refused.value.reason
++
++
++# The renewal rules are the same for an adult and a child.
++FOR_EVERY_CATEGORY = pytest.mark.parametrize("member", ["ann", "kid"])
++
++
++@FOR_EVERY_CATEGORY
++@pytest.mark.parametrize(
++    "day",
++    [
++        date(2026, 3, 2),  # the day it was borrowed
++        date(2026, 3, 4),  # five days before the due date
++        date(2026, 3, 9),  # the due date
++        date(2026, 3, 14),  # overdue: Late days 10-14 March
++    ],
++)
++def test_a_dvd_is_never_renewed(service, clock, member, day):
++    loan = service.checkout(member, "D1")  # due Monday 9 March
++    clock.set(day)
++    assert "book" in _refusal_reason(service, loan.loan_id)
++    assert str(service.balance(member)) == "0.00"
++
++
++def test_a_returned_dvd_is_refused_for_the_return_not_for_being_a_dvd(
++    service, clock
++):
++    loan = service.checkout("ann", "D1")
++    clock.set(date(2026, 3, 9))
++    service.return_copy("D1")
++    assert "returned" in _refusal_reason(service, loan.loan_id)
++
++
++@FOR_EVERY_CATEGORY
++def test_a_book_cannot_be_renewed_six_days_before_its_due_date(
++    service, clock, member
++):
++    loan = service.checkout(member, "B1")  # due Monday 23 March
++    clock.set(date(2026, 3, 17))
++    assert "too early" in _refusal_reason(service, loan.loan_id)
++
++
++@FOR_EVERY_CATEGORY
++@pytest.mark.parametrize(
++    ("day", "due_on"),
++    [
++        (date(2026, 3, 18), date(2026, 4, 8)),  # five days before the due date
++        (date(2026, 3, 23), date(2026, 4, 13)),  # the due date
++        (date(2026, 3, 28), date(2026, 4, 18)),  # overdue
++    ],
++)
++def test_a_book_can_be_renewed_from_five_days_before_its_due_date(
++    service, clock, member, day, due_on
++):
++    loan = service.checkout(member, "B1")  # due Monday 23 March
++    clock.set(day)
++    assert service.renew(loan.loan_id).due_on == due_on
++
++
++@FOR_EVERY_CATEGORY
++def test_after_a_renewal_the_window_counts_from_the_new_due_date(
++    service, clock, member
++):
++    loan = service.checkout(member, "B1")
++    clock.set(date(2026, 3, 19))
++    service.renew(loan.loan_id)  # now due Thursday 9 April
++    clock.set(date(2026, 4, 3))
++    assert "too early" in _refusal_reason(service, loan.loan_id)
++    clock.set(date(2026, 4, 4))
++    renewed = service.renew(loan.loan_id)
++    assert renewed.due_on == date(2026, 4, 25)
++    assert renewed.renewals == 2
++
++
++def _renewed_twice(service, clock, member):
++    loan = service.checkout(member, "B1")
++    clock.set(date(2026, 3, 19))
++    service.renew(loan.loan_id)
++    clock.set(date(2026, 4, 4))
++    service.renew(loan.loan_id)  # now due Saturday 25 April
++    return loan
++
++
++@FOR_EVERY_CATEGORY
++@pytest.mark.parametrize(
++    "day",
++    [
++        date(2026, 4, 5),  # too early as well
++        date(2026, 4, 22),  # inside the window
++        date(2026, 4, 25),  # the due date
++        date(2026, 4, 30),  # overdue: refused without a Fine
++    ],
++)
++def test_a_third_renewal_is_refused_for_the_limit(service, clock, member, day):
++    loan = _renewed_twice(service, clock, member)
++    clock.set(day)
++    reason = _refusal_reason(service, loan.loan_id)
++    assert "already been renewed" in reason
++    assert "too early" not in reason
++    assert str(service.balance(member)) == "0.00"
++
++
++# members who owe anything can't renew ----------------------------------------
++
++
++def _block_error(service, loan_id):
++    """Ask to renew, expect a block, and check that it changed nothing."""
++    before = service.get_loan(loan_id)
++    due_on, renewals = before.due_on, before.renewals
++    balance = service.balance(before.member_id)
++    with pytest.raises(AccountBlocked) as blocked:
++        service.renew(loan_id)
++    after = service.get_loan(loan_id)
++    assert (after.due_on, after.renewals) == (due_on, renewals)
++    assert service.balance(before.member_id) == balance
++    assert blocked.value.member_id == before.member_id
++    assert blocked.value.balance == balance
++    assert blocked.value.threshold == Decimal("0.01")
++    return blocked.value
++
++
++@FOR_EVERY_CATEGORY
++@pytest.mark.parametrize("owed", [Decimal("0.01"), Decimal("4.50")])
++def test_a_member_who_owes_anything_is_blocked_from_renewing(
++    service, clock, member, owed
++):
++    loan = service.checkout(member, "B1")
++    service.add_charge(member, owed, "damaged case")
++    clock.set(date(2026, 3, 19))
++    assert _block_error(service, loan.loan_id).balance == owed
++
++
++def test_paying_back_to_nothing_unblocks_renewing_straight_away(service, clock):
++    loan = service.checkout("ann", "B1")
++    service.add_charge("ann", Decimal("0.01"), "torn page")
++    clock.set(date(2026, 3, 19))
++    _block_error(service, loan.loan_id)
++    service.pay("ann", Decimal("0.01"))
++    assert service.renew(loan.loan_id).due_on == date(2026, 4, 9)
++
++
++def test_the_renewal_fine_does_not_block_its_own_renewal_but_blocks_the_next(
++    service, clock
++):
++    loan = service.checkout("ann", "B1")  # due Monday 23 March
++    clock.set(date(2026, 3, 28))
++    assert service.renew(loan.loan_id).due_on == date(2026, 4, 18)
++    assert service.balance("ann") == Decimal("1.25")
++    clock.set(date(2026, 4, 13))  # five days before the new due date
++    assert _block_error(service, loan.loan_id).balance == Decimal("1.25")
++    service.pay("ann", Decimal("1.25"))
++    assert service.renew(loan.loan_id).renewals == 2
++
++
++def test_an_overdue_renewal_refused_for_money_owed_posts_no_fine(service, clock):
++    loan = service.checkout("ann", "B1")  # due Monday 23 March
++    service.add_charge("ann", Decimal("0.50"), "torn page")
++    clock.set(date(2026, 3, 28))  # 5 Late days, not fined
++    _block_error(service, loan.loan_id)
++    assert service.balance("ann") == Decimal("0.50")
++
++
++def test_a_returned_loan_is_refused_for_the_return_even_when_money_is_owed(
++    service, clock
++):
++    loan = service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 19))
++    service.return_copy("B1")
++    service.add_charge("ann", Decimal("3.00"), "lost card")
++    assert "returned" in _refusal_reason(service, loan.loan_id)
++
++
++def test_a_dvd_is_refused_for_being_a_dvd_even_when_money_is_owed(service, clock):
++    loan = service.checkout("ann", "D1")
++    service.add_charge("ann", Decimal("3.00"), "lost card")
++    clock.set(date(2026, 3, 9))
++    assert "book" in _refusal_reason(service, loan.loan_id)
++
++
++def test_money_owed_is_reported_before_the_renewal_limit(service, clock):
++    loan = _renewed_twice(service, clock, "ann")
++    service.add_charge("ann", Decimal("3.00"), "lost card")
++    clock.set(date(2026, 4, 22))
++    _block_error(service, loan.loan_id)
++
++
++def test_money_owed_is_reported_before_too_early(service, clock):
++    loan = service.checkout("ann", "B1")
++    service.add_charge("ann", Decimal("3.00"), "lost card")
++    clock.set(date(2026, 3, 17))  # six days before the due date
++    _block_error(service, loan.loan_id)
++
++
++# no renewal while someone is waiting for the Title ---------------------------
++
++
++def _someone_waits_for_978_1(service):
++    """With B1 already out, put B2 out with kid too, then have a third member
++    place a Waiting Hold on 978-1."""
++    service.checkout("kid", "B2")
++    service.register_member("cat", "Cat Adult")
++    return service.place_hold("cat", "978-1")
++
++
++def test_a_waiting_hold_on_the_title_refuses_the_renewal(service, clock):
++    loan = service.checkout("ann", "B1")  # due Monday 23 March
++    hold = _someone_waits_for_978_1(service)
++    clock.set(date(2026, 3, 19))
++    reason = _refusal_reason(service, loan.loan_id)
++    assert hold.hold_id in reason
++    assert "waiting" in reason
++    assert service.get_copy("B1").status is CopyStatus.ON_LOAN
++    assert [(h.hold_id, h.status) for h in service.holds_for("978-1")] == [
++        (hold.hold_id, HoldStatus.WAITING)
++    ]
++
++
++def test_once_the_waiting_hold_is_ready_the_renewal_goes_through(service, clock):
++    loan = service.checkout("ann", "B1")
++    hold = _someone_waits_for_978_1(service)
++    clock.set(date(2026, 3, 19))
++    service.return_copy("B2")  # set aside for cat's Hold, now Ready
++    assert service.holds_for("978-1")[0].status is HoldStatus.READY
++    renewed = service.renew(loan.loan_id)
++    assert (renewed.due_on, renewed.renewals) == (date(2026, 4, 9), 1)
++    assert [(h.hold_id, h.status) for h in service.holds_for("978-1")] == [
++        (hold.hold_id, HoldStatus.READY)
++    ]
++
++
++def test_once_the_waiting_hold_is_cancelled_the_renewal_goes_through(
++    service, clock
++):
++    loan = service.checkout("ann", "B1")
++    hold = _someone_waits_for_978_1(service)
++    clock.set(date(2026, 3, 19))
++    _refusal_reason(service, loan.loan_id)
++    service.cancel_hold(hold.hold_id)
++    assert service.renew(loan.loan_id).due_on == date(2026, 4, 9)
++
++
++def test_a_hold_placed_after_a_renewal_only_stops_the_next_one(service, clock):
++    loan = service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 19))
++    service.renew(loan.loan_id)  # now due Thursday 9 April
++    hold = _someone_waits_for_978_1(service)
++    assert service.get_loan(loan.loan_id).due_on == date(2026, 4, 9)
++    clock.set(date(2026, 4, 4))
++    assert hold.hold_id in _refusal_reason(service, loan.loan_id)
++
++
++def test_an_overdue_renewal_refused_for_a_waiting_hold_posts_no_fine(
++    service, clock
++):
++    loan = service.checkout("ann", "B1")  # due Monday 23 March
++    _someone_waits_for_978_1(service)
++    clock.set(date(2026, 3, 28))  # 5 Late days, not fined
++    assert "waiting" in _refusal_reason(service, loan.loan_id)
++    assert str(service.balance("ann")) == "0.00"
++
++
++def test_money_owed_is_reported_before_a_waiting_hold(service, clock):
++    loan = service.checkout("ann", "B1")
++    _someone_waits_for_978_1(service)
++    service.add_charge("ann", Decimal("3.00"), "lost card")
++    clock.set(date(2026, 3, 19))
++    _block_error(service, loan.loan_id)
++
++
++def test_the_renewal_limit_is_reported_before_a_waiting_hold(service, clock):
++    loan = _renewed_twice(service, clock, "ann")
++    _someone_waits_for_978_1(service)
++    clock.set(date(2026, 4, 22))
++    reason = _refusal_reason(service, loan.loan_id)
++    assert "already been renewed" in reason
++    assert "waiting" not in reason
++
++
++def test_too_early_is_reported_before_a_waiting_hold(service, clock):
++    loan = service.checkout("ann", "B1")
++    _someone_waits_for_978_1(service)
++    clock.set(date(2026, 3, 17))  # six days before the due date
++    reason = _refusal_reason(service, loan.loan_id)
++    assert "too early" in reason
++    assert "waiting" not in reason

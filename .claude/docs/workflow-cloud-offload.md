@@ -172,7 +172,7 @@ Cloud-offload landscape moves быстро (research-preview features живут
 - New cloud feature releases (new Routines triggers, изменения teleport-канала)
 - Pricing changes (`/ultrareview` cost shifts)
 - API surface stabilizes (research preview → GA may change defaults)
-- Cloud-команда исчезает из `/help` — сверить с `native-capabilities.md` (kit)
+- Cloud-команда исчезает из `/help` — сверить с `native-capabilities.md`
 
 ---
 

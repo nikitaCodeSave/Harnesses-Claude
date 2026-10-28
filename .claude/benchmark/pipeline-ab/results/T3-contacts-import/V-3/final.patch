@@ -1,0 +1,554 @@
+diff --git a/README.md b/README.md
+index 59c556f..a85baaf 100644
+--- a/README.md
++++ b/README.md
+@@ -1,7 +1,7 @@
+ # contactbook
+ 
+ Core of the contacts service: the `Contact` entity, field validation, an in-memory
+-repository, a small use-case layer and CSV export. Persistence adapters and the HTTP
++repository, a small use-case layer and CSV export/import. Persistence adapters and the HTTP
+ API live in other packages and depend on this one.
+ 
+ ## Layout
+@@ -14,6 +14,7 @@ src/contactbook/
+   repository.py  InMemoryContactRepository, keyed by case-insensitive email
+   service.py     ContactBook, use cases on top of a repository
+   export.py      CSV export
++  importer.py    CSV import (export columns, or first_name/last_name), with a per-row report
+ ```
+ 
+ Store only normalised values: go through `validation.py` (or `Contact.create`) rather
+diff --git a/src/contactbook/__init__.py b/src/contactbook/__init__.py
+index 016d153..ac82c49 100644
+--- a/src/contactbook/__init__.py
++++ b/src/contactbook/__init__.py
+@@ -4,6 +4,7 @@ from .errors import (
+     ContactError,
+     ContactNotFoundError,
+     DuplicateContactError,
++    ImportFileError,
+     ValidationError,
+ )
+ from .models import Contact
+@@ -18,6 +19,7 @@ __all__ = [
+     "ContactError",
+     "ContactNotFoundError",
+     "DuplicateContactError",
++    "ImportFileError",
+     "InMemoryContactRepository",
+     "ValidationError",
+ ]
+diff --git a/src/contactbook/__pycache__/__init__.cpython-312.pyc b/src/contactbook/__pycache__/__init__.cpython-312.pyc
+new file mode 100644
+index 0000000..521ed13
+Binary files /dev/null and b/src/contactbook/__pycache__/__init__.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/errors.cpython-312.pyc b/src/contactbook/__pycache__/errors.cpython-312.pyc
+new file mode 100644
+index 0000000..982ed68
+Binary files /dev/null and b/src/contactbook/__pycache__/errors.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/export.cpython-312.pyc b/src/contactbook/__pycache__/export.cpython-312.pyc
+new file mode 100644
+index 0000000..0f56e57
+Binary files /dev/null and b/src/contactbook/__pycache__/export.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/importer.cpython-312.pyc b/src/contactbook/__pycache__/importer.cpython-312.pyc
+new file mode 100644
+index 0000000..859cf85
+Binary files /dev/null and b/src/contactbook/__pycache__/importer.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/models.cpython-312.pyc b/src/contactbook/__pycache__/models.cpython-312.pyc
+new file mode 100644
+index 0000000..1234875
+Binary files /dev/null and b/src/contactbook/__pycache__/models.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/repository.cpython-312.pyc b/src/contactbook/__pycache__/repository.cpython-312.pyc
+new file mode 100644
+index 0000000..24c05d6
+Binary files /dev/null and b/src/contactbook/__pycache__/repository.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/service.cpython-312.pyc b/src/contactbook/__pycache__/service.cpython-312.pyc
+new file mode 100644
+index 0000000..098af1b
+Binary files /dev/null and b/src/contactbook/__pycache__/service.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/validation.cpython-312.pyc b/src/contactbook/__pycache__/validation.cpython-312.pyc
+new file mode 100644
+index 0000000..fe7d28d
+Binary files /dev/null and b/src/contactbook/__pycache__/validation.cpython-312.pyc differ
+diff --git a/src/contactbook/errors.py b/src/contactbook/errors.py
+index 8d435b2..7bed637 100644
+--- a/src/contactbook/errors.py
++++ b/src/contactbook/errors.py
+@@ -38,3 +38,11 @@ class ContactNotFoundError(ContactError):
+     def __init__(self, email: str) -> None:
+         super().__init__(f"no contact with email {email}")
+         self.email = email
++
++
++class ImportFileError(ContactError):
++    """A CSV file can't be imported at all (encoding, header, malformed CSV).
++
++    Problems with individual rows are not raised; they are listed in the
++    import report instead. When this is raised, nothing has been imported.
++    """
+diff --git a/src/contactbook/importer.py b/src/contactbook/importer.py
+new file mode 100644
+index 0000000..b4aac0d
+--- /dev/null
++++ b/src/contactbook/importer.py
+@@ -0,0 +1,244 @@
++"""CSV import of contacts.
++
++Reads the format written by export.py: a header row naming the columns, then one
++contact per row with tags joined by TAG_SEPARATOR in a single cell. Instead of
++``name`` the file may have ``first_name`` and ``last_name`` columns (as written by
++the address-book export); the name is then the two joined with a space. Rows are
++matched to stored contacts by email: unknown emails are added, known ones are
++updated.
++
++Imports never remove data: a filled name or phone cell replaces the stored value,
++an empty phone cell keeps it, and tags from the file are added to the stored ones.
++
++Problems with single rows are collected in the report and the row is skipped;
++the rest of the file is still imported. Problems with the file as a whole raise
++ImportFileError before anything is stored.
++"""
++
++from __future__ import annotations
++
++import csv
++import io
++from collections.abc import Callable, Sequence
++from dataclasses import dataclass, field, replace
++
++from .errors import ImportFileError, ValidationError
++from .export import EXPORT_COLUMNS, TAG_SEPARATOR
++from .models import Contact
++from .repository import InMemoryContactRepository
++from .validation import normalize_email, normalize_phone, normalize_tag, validate_name
++
++NAME_PARTS = ("first_name", "last_name")
++KNOWN_COLUMNS = (*EXPORT_COLUMNS, *NAME_PARTS)
++HEADER_ROW = 1
++
++
++@dataclass
++class RowIssue:
++    """A problem found in one row.
++
++    ``row`` is the row number as a spreadsheet shows it: the header is row 1,
++    the first contact row 2. ``column`` is the header name the issue is about,
++    or None when it concerns the row as a whole.
++    """
++
++    row: int
++    column: str | None
++    message: str
++
++
++@dataclass
++class ImportReport:
++    """What an import did. Emails are normalised, in file order.
++
++    Rows that match a stored contact without changing it appear in neither
++    ``created`` nor ``updated``. Rows listed in ``errors`` were skipped;
++    ``warnings`` did not stop anything from being imported.
++    """
++
++    created: list[str] = field(default_factory=list)
++    updated: list[str] = field(default_factory=list)
++    errors: list[RowIssue] = field(default_factory=list)
++    warnings: list[RowIssue] = field(default_factory=list)
++
++
++@dataclass(frozen=True)
++class _Row:
++    """A validated row. ``None`` for phone or tags means the cell was empty."""
++
++    number: int
++    name: str
++    email: str
++    phone: str | None
++    tags: frozenset[str] | None
++
++
++def import_contacts(repo: InMemoryContactRepository, data: str | bytes) -> ImportReport:
++    """Import contacts from CSV content into ``repo`` and report the outcome.
++
++    ``data`` is the file content, either raw bytes (UTF-8, with or without a
++    byte order mark) or already decoded text. Raises ImportFileError if the file
++    can't be read or its header doesn't say where names and emails are; in that case
++    the repository is left untouched.
++    """
++    records = _read_records(_decode(data))
++    if not any(_has_content(cells) for cells in records):
++        raise ImportFileError("the file is empty")
++
++    report = ImportReport()
++    columns = _read_header(records[0], report)
++    width = len(records[0])
++
++    rows: list[_Row] = []
++    first_seen: dict[str, int] = {}
++    for number, cells in enumerate(records[1:], start=HEADER_ROW + 1):
++        if not _has_content(cells):
++            continue
++        row = _parse_row(number, cells, columns, width, first_seen, report)
++        if row is not None:
++            rows.append(row)
++
++    for row in rows:
++        _apply(repo, row, report)
++    return report
++
++
++def _decode(data: str | bytes) -> str:
++    if isinstance(data, str):
++        return data.removeprefix("\ufeff")
++    if not isinstance(data, bytes | bytearray):
++        raise TypeError(f"expected str or bytes, got {type(data).__name__}")
++    try:
++        return bytes(data).decode("utf-8-sig")
++    except UnicodeDecodeError as exc:
++        raise ImportFileError(
++            f"the file is not UTF-8 text (invalid byte at position {exc.start}); "
++            "save it from the spreadsheet as 'CSV UTF-8'"
++        ) from None
++
++
++def _read_records(text: str) -> list[list[str]]:
++    reader = csv.reader(io.StringIO(text, newline=""))
++    try:
++        return list(reader)
++    except csv.Error as exc:
++        raise ImportFileError(f"not a valid CSV file (line {reader.line_num}): {exc}") from None
++
++
++def _read_header(cells: Sequence[str], report: ImportReport) -> dict[str, int]:
++    """Map known column names to their index; warn about unknown ones."""
++    columns: dict[str, int] = {}
++    for index, cell in enumerate(cells):
++        column = cell.strip().lower()
++        if not column:
++            continue
++        if column in columns:
++            if column in KNOWN_COLUMNS:
++                raise ImportFileError(f"column {column!r} appears more than once in the header")
++            continue
++        columns[column] = index
++        if column not in KNOWN_COLUMNS:
++            report.warnings.append(
++                RowIssue(HEADER_ROW, cell.strip(), "unknown column; its values are ignored")
++            )
++
++    parts = [column for column in NAME_PARTS if column in columns]
++    if "name" in columns and parts:
++        raise ImportFileError(
++            f"the header row has both name and {' and '.join(parts)}; "
++            "keep either name or first_name and last_name"
++        )
++    if len(parts) == 1:
++        (other,) = set(NAME_PARTS) - set(parts)
++        raise ImportFileError(f"the header row has {parts[0]} but no {other} column")
++    missing = [column for column in ("name", "email") if column not in columns]
++    if parts:
++        missing.remove("name")
++    if missing:
++        raise ImportFileError(
++            f"the header row has no {' or '.join(missing)} column "
++            f"(expected {','.join(EXPORT_COLUMNS)}, or first_name,last_name instead of name; "
++            f"found {','.join(cells)!r})"
++        )
++    return {column: index for column, index in columns.items() if column in KNOWN_COLUMNS}
++
++
++def _parse_row(
++    number: int,
++    cells: Sequence[str],
++    columns: dict[str, int],
++    width: int,
++    first_seen: dict[str, int],
++    report: ImportReport,
++) -> _Row | None:
++    """Validate one row; record its problems in ``report`` and return None if any."""
++    used = max(i for i, cell in enumerate(cells) if cell.strip()) + 1
++    if used > width:
++        # Usually an unquoted comma inside a value, which shifts every later cell.
++        report.errors.append(
++            RowIssue(number, None, f"has {used} values but the header has {width} columns")
++        )
++        return None
++
++    issues: list[RowIssue] = []
++
++    def cell(column: str) -> str:
++        index = columns.get(column)
++        return cells[index] if index is not None and index < len(cells) else ""
++
++    def check[T](column: str, normalise: Callable[[str], T], raw: str) -> T | None:
++        try:
++            return normalise(raw)
++        except ValidationError as exc:
++            issues.append(RowIssue(number, column, exc.message))
++            return None
++
++    if "name" in columns:
++        raw_name = cell("name")
++    else:
++        raw_name = " ".join(cell(part).strip() for part in NAME_PARTS)
++    name = check("name", validate_name, raw_name)
++    email = check("email", normalize_email, cell("email"))
++    if email is not None:
++        if email in first_seen:
++            issues.append(
++                RowIssue(number, "email", f"duplicate of row {first_seen[email]}; row skipped")
++            )
++        else:
++            first_seen[email] = number
++
++    phone = None
++    if cell("phone").strip():
++        phone = check("phone", normalize_phone, cell("phone"))
++
++    tags = None
++    raw_tags = [tag for tag in cell("tags").split(TAG_SEPARATOR) if tag.strip()]
++    if raw_tags:
++        tags = frozenset(check("tags", normalize_tag, tag) for tag in raw_tags)
++
++    if issues:
++        report.errors.extend(issues)
++        return None
++    assert name is not None and email is not None
++    return _Row(number, name, email, phone, tags)
++
++
++def _apply(repo: InMemoryContactRepository, row: _Row, report: ImportReport) -> None:
++    existing = repo.find(row.email)
++    if existing is None:
++        repo.add(Contact(row.name, row.email, row.phone, row.tags or frozenset()))
++        report.created.append(row.email)
++        return
++    changed = replace(
++        existing,
++        name=row.name,
++        phone=row.phone if row.phone is not None else existing.phone,
++        tags=existing.tags | (row.tags or frozenset()),
++    )
++    if changed != existing:
++        repo.update(changed)
++        report.updated.append(row.email)
++
++
++def _has_content(cells: Sequence[str]) -> bool:
++    return any(cell.strip() for cell in cells)
+diff --git a/tests/__pycache__/test_export.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_export.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..2c14d81
+Binary files /dev/null and b/tests/__pycache__/test_export.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_importer.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_importer.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..ddb858d
+Binary files /dev/null and b/tests/__pycache__/test_importer.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_models.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_models.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..a228d52
+Binary files /dev/null and b/tests/__pycache__/test_models.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_repository.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_repository.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..b338389
+Binary files /dev/null and b/tests/__pycache__/test_repository.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_service.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_service.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..e486f02
+Binary files /dev/null and b/tests/__pycache__/test_service.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_validation.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_validation.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..f78901d
+Binary files /dev/null and b/tests/__pycache__/test_validation.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/test_importer.py b/tests/test_importer.py
+new file mode 100644
+index 0000000..7d8223c
+--- /dev/null
++++ b/tests/test_importer.py
+@@ -0,0 +1,185 @@
++import pytest
++
++from contactbook.errors import ContactError, ImportFileError
++from contactbook.export import export_csv
++from contactbook.importer import ImportReport, RowIssue, import_contacts
++from contactbook.models import Contact
++from contactbook.repository import InMemoryContactRepository
++
++HEADER = "name,email,phone,tags\n"
++
++
++def ann(**overrides):
++    fields = {"name": "Ann Lee", "email": "ann@example.com"}
++    fields.update(overrides)
++    return Contact.create(**fields)
++
++
++def test_new_rows_are_created_with_normalised_values():
++    repo = InMemoryContactRepository()
++    report = import_contacts(
++        repo, HEADER + " Ann  Lee ,Ann@Example.COM,+1 (555) 123-4567,VIP; Key Account\n"
++    )
++    assert report == ImportReport(created=["ann@example.com"])
++    assert repo.get("ann@example.com") == Contact(
++        "Ann Lee", "ann@example.com", "+15551234567", frozenset({"vip", "key-account"})
++    )
++
++
++def test_export_round_trips():
++    contacts = [ann(phone="+15551234567", tags=["vip", "lead"]), ann(email="bob@example.com")]
++    repo = InMemoryContactRepository()
++    import_contacts(repo, export_csv(contacts))
++    assert repo.all() == contacts
++
++
++def test_reimporting_own_export_changes_nothing():
++    repo = InMemoryContactRepository([ann(tags=["vip"])])
++    report = import_contacts(repo, export_csv(repo.all()))
++    assert report == ImportReport()
++
++
++def test_existing_contact_is_updated_by_email_ignoring_case():
++    repo = InMemoryContactRepository([ann(phone="5551234567")])
++    report = import_contacts(repo, HEADER + "Ann Smith,ANN@example.com,5559876543,\n")
++    assert report.updated == ["ann@example.com"]
++    assert repo.get("ann@example.com") == ann(name="Ann Smith", phone="5559876543")
++
++
++def test_tags_are_added_to_stored_tags_never_removed():
++    repo = InMemoryContactRepository([ann(tags=["vip", "partner"])])
++    report = import_contacts(repo, HEADER + "Ann Lee,ann@example.com,,Lead;VIP\n")
++    assert report.updated == ["ann@example.com"]
++    assert repo.get("ann@example.com").tags == {"vip", "partner", "lead"}
++
++
++def test_tags_already_stored_are_not_an_update():
++    repo = InMemoryContactRepository([ann(tags=["vip", "partner"])])
++    assert import_contacts(repo, HEADER + "Ann Lee,ann@example.com,,vip\n") == ImportReport()
++
++
++def test_empty_phone_and_tags_cells_keep_stored_values():
++    repo = InMemoryContactRepository([ann(phone="5551234567", tags=["vip"])])
++    import_contacts(repo, HEADER + "Ann Smith,ann@example.com,,\n")
++    assert repo.get("ann@example.com") == ann(name="Ann Smith", phone="5551234567", tags=["vip"])
++
++
++def test_optional_columns_may_be_missing_and_order_does_not_matter():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, " Email ,NAME\nann@example.com,Ann Lee\n")
++    assert report.created == ["ann@example.com"]
++
++
++def test_first_and_last_name_columns_are_joined_into_name():
++    repo = InMemoryContactRepository()
++    report = import_contacts(
++        repo,
++        "email,First_Name,last_name\n"
++        "ann@example.com, Ann , Lee \n"
++        "bob@example.com,Bob,\n"
++        "cat@example.com,,\n",
++    )
++    assert report.created == ["ann@example.com", "bob@example.com"]
++    assert repo.get("ann@example.com").name == "Ann Lee"
++    assert repo.get("bob@example.com").name == "Bob"
++    assert report.errors == [RowIssue(4, "name", "is required")]
++
++
++def test_name_problem_in_first_and_last_name_file_is_reported_under_name():
++    long_last_name = "x" * 100
++    report = import_contacts(
++        InMemoryContactRepository(),
++        f"first_name,last_name,email\nAnn,{long_last_name},ann@example.com\n",
++    )
++    assert [(e.row, e.column) for e in report.errors] == [(2, "name")]
++
++
++def test_bad_rows_are_reported_and_skipped_while_good_rows_import():
++    repo = InMemoryContactRepository()
++    report = import_contacts(
++        repo,
++        HEADER
++        + "Ann Lee,ann@example.com,,\n"
++        + ",not-an-email,12,bad!tag\n"
++        + "Bob,bob@example.com,,\n",
++    )
++    assert report.created == ["ann@example.com", "bob@example.com"]
++    assert [(e.row, e.column) for e in report.errors] == [
++        (3, "name"),
++        (3, "email"),
++        (3, "phone"),
++        (3, "tags"),
++    ]
++    assert len(repo) == 2
++
++
++def test_duplicate_email_in_file_keeps_first_row():
++    repo = InMemoryContactRepository()
++    report = import_contacts(
++        repo, HEADER + "Ann Lee,ann@example.com,,\nAnn Smith,ANN@example.com,,\n"
++    )
++    assert report.created == ["ann@example.com"]
++    assert report.errors == [RowIssue(3, "email", "duplicate of row 2; row skipped")]
++    assert repo.get("ann@example.com").name == "Ann Lee"
++
++
++def test_row_numbers_count_spreadsheet_rows_not_lines():
++    repo = InMemoryContactRepository()
++    report = import_contacts(
++        repo, HEADER + '"Ann\nLee",ann@example.com,,\n,,,\nBob,bob,,\n'
++    )
++    assert repo.get("ann@example.com").name == "Ann Lee"
++    assert [e.row for e in report.errors] == [4]
++
++
++def test_row_with_more_values_than_columns_is_rejected():
++    repo = InMemoryContactRepository()
++    report = import_contacts(
++        repo, HEADER + "Lee, Ann,ann@example.com,5551234567,vip\nBob,bob@example.com,,,,\n"
++    )
++    assert report.errors == [RowIssue(2, None, "has 5 values but the header has 4 columns")]
++    assert report.created == ["bob@example.com"]
++
++
++def test_unknown_column_is_a_warning():
++    report = import_contacts(
++        InMemoryContactRepository(), "name,email,Company\nAnn,ann@example.com,Acme\n"
++    )
++    assert report.created == ["ann@example.com"]
++    assert report.warnings == [RowIssue(1, "Company", "unknown column; its values are ignored")]
++
++
++def test_bytes_with_bom_and_crlf_are_accepted():
++    data = "\ufeffname,email\r\nZoë,zoe@example.com\r\n".encode("utf-8")
++    repo = InMemoryContactRepository()
++    import_contacts(repo, data)
++    assert repo.get("zoe@example.com").name == "Zoë"
++
++
++def test_non_utf8_bytes_fail_the_whole_file():
++    with pytest.raises(ImportFileError):
++        import_contacts(InMemoryContactRepository(), "name,email\nZoë,z@x.io\n".encode("cp1252"))
++
++
++@pytest.mark.parametrize(
++    "data",
++    [
++        "",
++        "\n\n",
++        "phone,tags\n1234567,vip\n",
++        "name;email\nAnn;ann@example.com\n",
++        "name,email,email\n",
++        "first_name,email\n",
++        "name,first_name,last_name,email\n",
++        "first_name,last_name,last_name,email\n",
++    ],
++)
++def test_unusable_file_raises_and_imports_nothing(data):
++    repo = InMemoryContactRepository()
++    with pytest.raises(ImportFileError):
++        import_contacts(repo, data + "Ann,ann@example.com\n")
++    assert len(repo) == 0
++
++
++def test_import_file_error_is_a_contact_error():
++    assert issubclass(ImportFileError, ContactError)

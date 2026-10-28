@@ -33,7 +33,7 @@ for a documentation change is the reindex validator plus the drift detector belo
 ```bash
 # drift detector — version pins that leaked into version-free docs
 grep -rnE "Opus 4\.[0-9]|Opus [0-9]|Sonnet [0-9]|v?2\.1\.[0-9]{3}" --include="*.md" . \
-  | grep -vE "(archive/|devlog/|/audits/|CHANGELOG\.md|native-capabilities\.md)"
+  | grep -vE "(archive/|devlog/|/audits/|CHANGELOG\.md|native-capabilities\.md|harness-evolution\.md)"
 ```
 
 ## Boundaries
@@ -51,9 +51,11 @@ grep -rnE "Opus 4\.[0-9]|Opus [0-9]|Sonnet [0-9]|v?2\.1\.[0-9]{3}" --include="*.
 ## Conventions that are not obvious from the files
 
 - **Version pins live in exactly one file.** Only
-  `~/.claude/skills/claude-code-harness/references/native-capabilities.md` states a Claude Code
+  `.claude/docs/native-capabilities.md` states a Claude Code
   version. Every other live document describes behavior without binding it to a release and points
-  there. A pin duplicated in two documents goes stale in one of them silently.
+  there. A pin duplicated in two documents goes stale in one of them silently. The refresh ledger in
+  `.claude/docs/harness-evolution.md` records which version each grounding pass ran against — dated
+  provenance, not a pin, so the detector skips it too.
 - **Live layer vs archive.** Documents under `.claude/docs/` describe the current state, not the
   history of how it got there — "was → became" narrative belongs in git and the devlog. The
   archive directories are the opposite: frozen, never edited.

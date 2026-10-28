@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "grill",
+ "role": "dev",
+ "session": "34ef41cb-e865-4d5c-9e3e-066aa505bcb8",
+ "resume": false,
+ "prompt": "/grill-with-docs Add stock reservations to the `inventory` package. Checkout must be able to hold stock for a cart before payment, then either confirm the hold into an order or release it. Holds nobody confirms must lapse on their own after a while, and retries from the cart service must be safe (idempotency key).\n\nInterface — hidden tests call exactly this; `InventoryService(repository, ledger, clock)` keeps working as is:\n- `InventoryService.reserve(warehouse: str, items: dict[str, int], idempotency_key: str) -> Reservation`\n- `InventoryService.confirm_reservation(reservation_id: str) -> Order`\n- `InventoryService.release_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.get_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.available(sku, warehouse)` must take holds into account.\n- `inventory.models`: dataclass `Reservation` with `reservation_id: str`, `warehouse: str`, `items: dict[str, int]` (units held per SKU), `status: ReservationStatus`, `expires_at: datetime`, `order_id: str | None`; enum `ReservationStatus` with members `ACTIVE`, `CONFIRMED`, `RELEASED`, `EXPIRED`.\n- `inventory.errors`: new `ReservationNotFound`, `ReservationExpired`, `InvalidReservationState`, `IdempotencyConflict` (all subclass `InventoryError`); reuse the existing errors where they fit.\n- Time comes only from the injected clock. There is no background job: expiry must take effect without anyone calling a sweep.\n\nI own the business rules — ask me if something is unclear.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 02:27:20 socat[3398835] W exiting on signal 15\n",
+ "wall_s": 49.8,
+ "result": "I've read the whole package: service, repository, ledger, models, errors, reports and tests. There's no `GLOSSARY.md` or `docs/adr/` yet, so I'll create them once terms and decisions are settled. Some things in the code affect the questions below:\n\n- `available = max(0, on_hand - allocated)`, and `allocated` counts only `PLACED` orders. `place_order` checks `available`, so holds will limit regular orders automatically once `available` subtracts them.\n- `adjust` only stops on-hand from going below zero. A write-off can already drop on-hand below what's allocated, and the floor at zero hides that.\n- `StockRow(sku, on_hand, allocated, available)` is built by position in `tests/test_reports.py`.\n\nHere's round 1. These questions don't depend on each other.\n\n---\n\n❓ **Q1** - **What to call it**: You use \"hold\", \"reservation\" and \"lapse\". I'd make **Reservation** the one canonical term (it matches the API) and list \"hold\" as a word to avoid. Its time-based ending would be **expire** / `EXPIRED`, with \"lapse\" avoided. \"Release\" means only that a caller gave the stock back. A timeout is \"expire\", not \"release\".\n\n➡️ Yes: Reservation and expire are canonical; hold and lapse are aliases to avoid.\n\n---\n\n❓ **Q2** - **How long a reservation lasts**: What exact duration? Is it one fixed value, or set by whoever builds `InventoryService`? `InventoryService(repository, ledger, clock)` has to keep working, so any setting would be an optional keyword argument with a default.\n\n➡️ 15 minutes by default, overridable with an optional `reservation_ttl: timedelta` keyword argument on the constructor. `expires_at = now at reserve time + ttl`.\n\n---\n\n❓ **Q3** - **The exact expiry moment**: If `clock.now() == expires_at`, is the reservation still active or already expired?\n\n➡️ Already expired. It's active only while `now < expires_at`. At that same instant it stops counting against `available`, and `get_reservation` reports `EXPIRED`.\n\n---\n\n❓ **Q4** - **All or nothing**: A cart asks for `{\"MUG\": 2, \"TEE\": 6}`, but only 5 TEE are available. Should it get a partial reservation, or nothing?\n\n➡️ Nothing, the same as `place_order`. Raise the existing `InsufficientStock` for the first SKU that falls short and store nothing.\n\n---\n\n❓ **Q5** - **Retrying with the same key and same request**: The cart calls `reserve(\"WH1\", {\"MUG\": 2}, \"cart-42\")` twice. The second call should return the **same** reservation (same `reservation_id`) and reserve no more stock. What if the original has moved on by the time the retry arrives (confirmed, released or expired)?\n\n➡️ Yes, return the existing reservation as it is now, even if that's `CONFIRMED`, `RELEASED` or `EXPIRED`. The key stays bound to that reservation permanently and never creates a second one.\n\n---\n\n❓ **Q6** - **Same key, different request**: The key `cart-42` comes back with a different warehouse or different items. The quantities are compared per SKU, so the order of items in the dict doesn't matter.\n\n➡️ Raise `IdempotencyConflict`. This applies even if the original has since been released or has expired.\n\n---\n\n❓ **Q7** - **A failed reserve doesn't use up the key**: If `reserve(..., \"cart-42\")` fails (`InsufficientStock`, `UnknownSku`, bad quantity), can a later call with `cart-42` succeed?\n\n➡️ Yes. A key is bound only when a reservation is actually created, so the cart can retry after stock arrives. Keys are global, not per warehouse.\n\n---\n\n❓ **Q8** - **Confirm uses the reserved stock without checking again**: Confirm turns an `ACTIVE` reservation into a `PLACED` Order with the same lines, `placed_at = now`, from the normal `ORD-` sequence. The reservation becomes `CONFIRMED` with `order_id` set. Should confirm check `available` again? Suppose a write-off has shrunk on-hand in the meantime.\n\n➡️ Don't check again. The stock was promised to this reservation, so confirm just moves it from \"reserved\" to \"allocated\". Write-offs keep their current behaviour, as they already do for orders.\n\n---\n\n❓ **Q9** - **Confirm or release when not `ACTIVE`**: What happens when someone calls:\n- confirm on an `EXPIRED` reservation\n- release on an `EXPIRED` reservation\n- confirm or release on a `CONFIRMED` reservation\n- confirm or release on a `RELEASED` reservation\n\n➡️ Both confirm and release on `EXPIRED` raise `ReservationExpired`. Every other case raises `InvalidReservationState`, including confirming twice and releasing twice. This matches how `ship_order` and `cancel_order` behave today. The idempotency key covers `reserve` only.\n\n---\n\n❓ **Q10** - **Validating `reserve` input**: An unknown warehouse or SKU raises `UnknownWarehouse` / `UnknownSku`, and a quantity that isn't a positive int raises `InvalidQuantity`. Which error for empty `items`? And is an empty `idempotency_key` allowed?\n\n➡️ Empty `items` raises the existing `InvalidOrder` (it already means \"the request is malformed\"). An empty or blank `idempotency_key` raises `InvalidOrder` too.\n\n---\n\n❓ **Q11** - **Reserved stock in queries and the report**: `available` becomes `on_hand - allocated - reserved`, floored at 0. `allocated` stays orders-only, and a new `InventoryService.reserved(sku, warehouse)` query covers active reservations. Should the back-office `stock_report` show it?\n\n➡️ Yes, add a `reserved: int = 0` field at the **end** of `StockRow`, so existing positional uses keep working.\n\n---\n\n❓ **Q12** - **Out of scope**: No extending or refreshing a reservation, no editing its items, and no partial confirm.\n\n➡️ Yes, all three are out of scope for now.",
+ "is_error": false,
+ "num_turns": 7,
+ "total_cost_usd": 0.3160092,
+ "usage": {
+  "input_tokens": 8,
+  "cache_creation_input_tokens": 25580,
+  "cache_read_input_tokens": 78586,
+  "output_tokens": 4781,
+  "output_tokens_details": {
+   "thinking_tokens": 2283
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 25580,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 4781,
+   "cacheReadInputTokens": 78586,
+   "cacheCreationInputTokens": 25580,
+   "webSearchRequests": 0,
+   "costUSD": 0.3160092,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 2283,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 25580,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 49289,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "34ef41cb-e865-4d5c-9e3e-066aa505bcb8"
+}

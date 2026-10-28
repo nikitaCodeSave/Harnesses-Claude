@@ -28,7 +28,7 @@ continuity (`session-start-digest` inject devlog+progress) — плагином 
 ## Foundational principle
 
 **Минимум обвязки → максимум продуктивности под способной моделью.** (Model-agnostic; провенанс
-последнего re-grounding — refresh-ledger в `harness-evolution.md` кита.)
+последнего re-grounding — refresh-ledger в `harness-evolution.md`.)
 
 > «As models improve, developers should strip away unnecessary scaffolding rather than accumulate
 > complexity» — Rajasekaran, Anthropic (March 2026)
@@ -80,7 +80,7 @@ is too long» — Anthropic).
 |---|---|---|---|---|
 | **Trust gate** | пропустить/запретить/спросить tool call | `settings.json` permissions, `PreToolUse` hooks, `Stop` (advisory), subagent `tools:` whitelist, `defaultMode` | privilege escalation, irreversible action без ревью | **block-at-decision, не block-at-write** |
 | **Information gate** | какие байты модель видит на turn N | CLAUDE.md/rules (always), `SessionStart`→`additionalContext`, skill `description` trigger, `Read`, `@file` import | cold-start gap ИЛИ context rot | CLAUDE.md ≤200 строк; state on disk, не в контексте; дизайн под ~256K, не под потолок |
-| **Containment** | blast radius при ошибке inner-actor'а | custom/built-in subagents (fresh context), git worktrees, restricted `tools:`, process-sandbox | ошибка агента загрязнила main / порушила repo | spawn justified ТОЛЬКО при isolation / parallelism / compact-rescue |
+| **Containment** | blast radius при ошибке inner-actor'а | custom/built-in subagents (fresh context), git worktrees, restricted `tools:`, process-sandbox | ошибка агента загрязнила main / порушила repo | spawn justified ТОЛЬКО при isolation / parallelism / independent review |
 
 **Композиция в текущем harness'е** (какие границы закрывает компонент):
 

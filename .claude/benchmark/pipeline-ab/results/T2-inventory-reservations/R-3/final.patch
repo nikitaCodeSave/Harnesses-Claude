@@ -1,0 +1,1790 @@
+diff --git a/README.md b/README.md
+index e6e795d..3967447 100644
+--- a/README.md
++++ b/README.md
+@@ -9,13 +9,24 @@ persistence is an in-memory repository behind a small interface.
+   append-only `Ledger`; never stored. Only receipts, adjustments (counts,
+   write-offs) and shipments write to the ledger.
+ - **Allocated** — units promised to `PLACED` orders that have not shipped yet.
+-- **Available** — `on_hand - allocated`, floored at zero. This is what new
+-  orders may take.
++- **Held** — units set aside by `ACTIVE` reservations that have not reached
++  `expires_at`. Not part of `allocated`.
++- **Available** — `on_hand - allocated - held`, floored at zero. This is what
++  new orders and reservations may take.
+ 
+ Order lifecycle: `place_order` (allocates, all lines or nothing) →
+ `ship_order` (writes `SHIPMENT` ledger entries) or `cancel_order` (releases
+ the allocation).
+ 
++Reservation lifecycle: `reserve(warehouse, items, idempotency_key)` holds up
++to the requested units per SKU for 20 minutes (configurable per service via
++`hold_duration=`) → `confirm_reservation` (places a normal order for the held
++units) or `release_reservation`. An `ACTIVE` reservation counts as `EXPIRED`
++from `expires_at` on; there is no sweep job, expiry is judged against the clock
++on every read. Repeating `reserve` with the same key and request returns the
++original reservation; the same key with a different request raises
++`IdempotencyConflict`.
++
+ ## Conventions
+ 
+ - All time comes from an injected `Clock` (`FixedClock` in tests). Never call
+diff --git a/SPEC.md b/SPEC.md
+new file mode 100644
+index 0000000..c9dd40e
+--- /dev/null
++++ b/SPEC.md
+@@ -0,0 +1,186 @@
++# Stock reservations — specification
++
++## Why
++
++Checkout needs to hold stock for a cart before payment. After payment it
++either confirms the hold into an order or releases it. Abandoned carts must
++not keep stock locked forever, so holds that nobody confirms lapse on their
++own. The cart service retries requests, so creating a hold must be safe to
++repeat. Each request carries an idempotency key for this.
++
++## Interface (fixed — hidden tests call exactly this)
++
++`InventoryService(repository, ledger, clock)` keeps working as is.
++
++- `InventoryService.reserve(warehouse: str, items: dict[str, int], idempotency_key: str) -> Reservation`
++- `InventoryService.confirm_reservation(reservation_id: str) -> Order`
++- `InventoryService.release_reservation(reservation_id: str) -> Reservation`
++- `InventoryService.get_reservation(reservation_id: str) -> Reservation`
++- `InventoryService.available(sku, warehouse)` must take holds into account.
++- `inventory.models`: dataclass `Reservation` with `reservation_id: str`,
++  `warehouse: str`, `items: dict[str, int]` (units held per SKU),
++  `status: ReservationStatus`, `expires_at: datetime`, `order_id: str | None`;
++  enum `ReservationStatus` with members `ACTIVE`, `CONFIRMED`, `RELEASED`,
++  `EXPIRED`.
++- `inventory.errors`: new `ReservationNotFound`, `ReservationExpired`,
++  `InvalidReservationState`, `IdempotencyConflict` (all subclass
++  `InventoryError`); reuse the existing errors where they fit.
++- Time comes only from the injected clock. There is no background job: expiry
++  must take effect without anyone calling a sweep.
++
++## Terms
++
++- **Hold**: units of a SKU in a warehouse set aside by an ACTIVE, unexpired
++  reservation.
++- **Lapsed / expired**: a reservation that is still ACTIVE when
++  `clock.now() >= expires_at`. From that instant on, including the instant
++  itself, it counts as EXPIRED.
++- **Requested items**: the `items` the caller passed to `reserve`. This is
++  different from `Reservation.items`, which holds the units actually held.
++
++## Acceptance criteria
++
++### Hold lifetime
++
++1. `expires_at` is the clock time at `reserve` plus the service's hold
++   duration.
++2. A service built as `InventoryService(repository, ledger, clock)` has a hold
++   duration of 20 minutes. The duration is fixed per service instance and
++   cannot be set per call. The service may offer an optional way to choose a
++   different duration at construction.
++3. When `clock.now() >= expires_at`, an ACTIVE reservation is reported with
++   status `EXPIRED` and no longer holds stock. No sweep, job or other call is
++   needed for this. Reading `get_reservation` or `available` is enough to see
++   the effect.
++4. CONFIRMED and RELEASED reservations keep their status after `expires_at`
++   passes. Only ACTIVE reservations expire.
++5. Nothing ever extends a hold or moves `expires_at` after creation, including
++   an idempotent retry.
++
++### Availability
++
++6. `available(sku, warehouse)` = on-hand − allocated − units held by ACTIVE,
++   unexpired reservations for that SKU and warehouse, floored at 0.
++7. `allocated(sku, warehouse)` still counts only PLACED orders. Holds are not
++   included. `on_hand` is unaffected by holds.
++8. `stock_report` and `StockRow` are unchanged. Their `available` column
++   reflects holds through criterion 6.
++9. Releasing a hold or its expiry makes its units available again
++   immediately.
++10. `receive` and `adjust` are never blocked by holds. If a write-off takes
++    on-hand below what is held, `available` shows 0 and the affected
++    reservations stay as they are (status and `items` unchanged).
++
++### Reserve
++
++11. Each requested line holds `min(requested, available right now)` units.
++12. A line with 0 available is left out of `Reservation.items` entirely. It is
++    not recorded with quantity 0.
++13. If at least one line holds ≥ 1 unit, `reserve` returns a new reservation:
++    status `ACTIVE`, `order_id is None`, the given `warehouse`, and `items`
++    containing only the units actually held.
++14. If no line can hold anything, `reserve` raises `InsufficientStock` and
++    creates nothing: no reservation, no hold, and the key is not consumed.
++15. Validation reuses the existing errors: an unknown warehouse raises
++    `UnknownWarehouse`, an unknown SKU raises `UnknownSku`, and a non-positive
++    or non-integer quantity raises `InvalidQuantity`. An empty `items` raises
++    some `InventoryError`.
++16. A rejected request holds nothing, not even for its valid lines, and
++    consumes no key.
++17. Reservation IDs are `RES-0001`, `RES-0002`, … in creation order. This
++    sequence is separate from order IDs.
++
++### Idempotency
++
++18. Calling `reserve` again with a key already used by a successful `reserve`,
++    with the same warehouse and the same requested items (compared as a
++    mapping, so order does not matter), returns that existing reservation in
++    its current state, whatever that state is (ACTIVE, CONFIRMED, RELEASED or
++    EXPIRED). It creates no new hold, changes nothing, and does not move
++    `expires_at`.
++19. "Same request" compares requested items, not held items. A retry of a
++    partially filled reservation with the original request matches. A request
++    equal to what was held does not, unless it is also equal to what was
++    requested.
++20. Calling `reserve` with a key already used by a successful `reserve`, but
++    with a different warehouse or different requested items, raises
++    `IdempotencyConflict`. This applies even if the original reservation is
++    CONFIRMED, RELEASED or EXPIRED.
++21. Keys are global (not per warehouse) and never expire.
++22. A `reserve` call that raised leaves no trace. Its key can later be used
++    for any request.
++
++### Confirm
++
++23. `confirm_reservation` on an ACTIVE, unexpired reservation places an
++    ordinary PLACED `Order` in the same warehouse, for exactly the units in
++    `Reservation.items`. After a partial hold, the order covers only those
++    units. The order uses the normal order ID sequence and has `placed_at`
++    equal to the confirm time.
++24. Afterwards the reservation has status `CONFIRMED` and `order_id` set to
++    the new order's ID. The returned value is that order.
++25. Confirming does not change `available` for any SKU (the hold becomes an
++    allocation) or on-hand. On-hand moves only when the order ships.
++26. The resulting order behaves like any other order: it can be shipped or
++    cancelled with `ship_order` / `cancel_order`.
++27. Confirming a reservation that is already CONFIRMED returns the same order
++    (same `order_id`) and creates nothing. This holds at any time, including
++    after `expires_at`.
++28. Confirming an expired reservation, including one that hit `expires_at`
++    exactly, raises `ReservationExpired`. No order is created.
++29. Confirming a RELEASED reservation raises `InvalidReservationState`. No
++    order is created.
++
++### Release
++
++30. `release_reservation` on an ACTIVE, unexpired reservation sets its status
++    to `RELEASED` and frees its units at once. It returns the reservation.
++31. Releasing a reservation that is RELEASED or EXPIRED is a no-op. It returns
++    the reservation unchanged, without error.
++32. Releasing a CONFIRMED reservation raises `InvalidReservationState`. The
++    reservation and its order are unchanged.
++
++### Lookup
++
++33. `get_reservation` returns the reservation with its current status. A
++    lapsed ACTIVE reservation is reported as `EXPIRED`. Expired reservations
++    stay retrievable.
++34. An unknown reservation ID raises `ReservationNotFound` from
++    `get_reservation`, `confirm_reservation` and `release_reservation`.
++
++### Direct orders
++
++35. `place_order` can take only available stock (criterion 6), so direct
++    orders compete with holds. It stays all-or-nothing, exactly as today, and
++    raises `InsufficientStock` if any line exceeds available. Partial filling
++    applies to reservations only.
++
++### Compatibility
++
++36. The existing test suite passes unchanged.
++37. No package code reads the wall clock. All timestamps and expiry decisions
++    use the injected `Clock`.
++
++## Non-goals
++
++- Extending or refreshing a hold.
++- A sweep, scheduler or background expiry job.
++- Showing held units in `allocated()` or as a column in `stock_report`.
++- Blocking `receive` / `adjust` because of holds, or shrinking or cancelling
++  reservations when stock is written off.
++- Partial filling for `place_order`.
++- Changing a reservation's items after creation.
++- Expiring idempotency keys.
++- Linking an order cancellation back to its reservation.
++
++## Left to the implementer
++
++- If a write-off took on-hand below a hold, `confirm_reservation` may either
++  succeed or raise `InsufficientStock`.
++- When the reservation is CONFIRMED and its order is later cancelled or
++  shipped, what the reservation shows (it may simply stay CONFIRMED).
++- Whether the idempotency check for a reused key runs before or after
++  validation of the request.
++- Which SKU `InsufficientStock` reports when no line can hold anything.
++- Whether an empty idempotency key is accepted. If it is rejected, the error
++  is an `InventoryError` and, like any rejected request, leaves no trace.
+diff --git a/src/inventory/__init__.py b/src/inventory/__init__.py
+index 895d2d1..f74f709 100644
+--- a/src/inventory/__init__.py
++++ b/src/inventory/__init__.py
+@@ -9,6 +9,8 @@ from .models import (
+     OrderLine,
+     OrderStatus,
+     Product,
++    Reservation,
++    ReservationStatus,
+     Warehouse,
+ )
+ from .repository import InMemoryRepository
+@@ -26,5 +28,7 @@ __all__ = [
+     "OrderLine",
+     "OrderStatus",
+     "Product",
++    "Reservation",
++    "ReservationStatus",
+     "Warehouse",
+ ]
+diff --git a/src/inventory/__pycache__/__init__.cpython-312.pyc b/src/inventory/__pycache__/__init__.cpython-312.pyc
+new file mode 100644
+index 0000000..d20bc0d
+Binary files /dev/null and b/src/inventory/__pycache__/__init__.cpython-312.pyc differ
+diff --git a/src/inventory/__pycache__/clock.cpython-312.pyc b/src/inventory/__pycache__/clock.cpython-312.pyc
+new file mode 100644
+index 0000000..1f6b994
+Binary files /dev/null and b/src/inventory/__pycache__/clock.cpython-312.pyc differ
+diff --git a/src/inventory/__pycache__/errors.cpython-312.pyc b/src/inventory/__pycache__/errors.cpython-312.pyc
+new file mode 100644
+index 0000000..91aef34
+Binary files /dev/null and b/src/inventory/__pycache__/errors.cpython-312.pyc differ
+diff --git a/src/inventory/__pycache__/ledger.cpython-312.pyc b/src/inventory/__pycache__/ledger.cpython-312.pyc
+new file mode 100644
+index 0000000..29385f2
+Binary files /dev/null and b/src/inventory/__pycache__/ledger.cpython-312.pyc differ
+diff --git a/src/inventory/__pycache__/models.cpython-312.pyc b/src/inventory/__pycache__/models.cpython-312.pyc
+new file mode 100644
+index 0000000..ea0b5bd
+Binary files /dev/null and b/src/inventory/__pycache__/models.cpython-312.pyc differ
+diff --git a/src/inventory/__pycache__/reports.cpython-312.pyc b/src/inventory/__pycache__/reports.cpython-312.pyc
+new file mode 100644
+index 0000000..78a8253
+Binary files /dev/null and b/src/inventory/__pycache__/reports.cpython-312.pyc differ
+diff --git a/src/inventory/__pycache__/repository.cpython-312.pyc b/src/inventory/__pycache__/repository.cpython-312.pyc
+new file mode 100644
+index 0000000..1d2fa41
+Binary files /dev/null and b/src/inventory/__pycache__/repository.cpython-312.pyc differ
+diff --git a/src/inventory/__pycache__/service.cpython-312.pyc b/src/inventory/__pycache__/service.cpython-312.pyc
+new file mode 100644
+index 0000000..5ed9e00
+Binary files /dev/null and b/src/inventory/__pycache__/service.cpython-312.pyc differ
+diff --git a/src/inventory/errors.py b/src/inventory/errors.py
+index acdaf96..3265fec 100644
+--- a/src/inventory/errors.py
++++ b/src/inventory/errors.py
+@@ -59,3 +59,29 @@ class InvalidOrderState(InventoryError):
+         self.order_id = order_id
+         self.status = status
+         self.action = action
++
++
++class ReservationNotFound(InventoryError):
++    def __init__(self, reservation_id: str) -> None:
++        super().__init__(f"reservation {reservation_id!r} not found")
++        self.reservation_id = reservation_id
++
++
++class ReservationExpired(InventoryError):
++    def __init__(self, reservation_id: str) -> None:
++        super().__init__(f"reservation {reservation_id!r} has expired")
++        self.reservation_id = reservation_id
++
++
++class InvalidReservationState(InventoryError):
++    def __init__(self, reservation_id: str, status: object, action: str) -> None:
++        super().__init__(f"cannot {action} reservation {reservation_id!r} in status {status}")
++        self.reservation_id = reservation_id
++        self.status = status
++        self.action = action
++
++
++class IdempotencyConflict(InventoryError):
++    def __init__(self, key: str) -> None:
++        super().__init__(f"idempotency key {key!r} was already used for a different request")
++        self.key = key
+diff --git a/src/inventory/models.py b/src/inventory/models.py
+index bd885d5..b0a6a05 100644
+--- a/src/inventory/models.py
++++ b/src/inventory/models.py
+@@ -51,6 +51,29 @@ class Order:
+         return sum(line.quantity for line in self.lines if line.sku == sku)
+ 
+ 
++class ReservationStatus(Enum):
++    ACTIVE = "active"
++    CONFIRMED = "confirmed"
++    RELEASED = "released"
++    EXPIRED = "expired"
++
++
++@dataclass
++class Reservation:
++    """Stock held for a cart until it is confirmed into an order or released.
++
++    ``items`` are the units actually held per SKU, which can be less than what
++    was requested. An ACTIVE reservation lapses to EXPIRED at ``expires_at``.
++    """
++
++    reservation_id: str
++    warehouse: str
++    items: dict[str, int]
++    status: ReservationStatus
++    expires_at: datetime
++    order_id: str | None = None
++
++
+ class AdjustmentReason(Enum):
+     RECEIPT = "receipt"
+     ADJUSTMENT = "adjustment"
+diff --git a/src/inventory/repository.py b/src/inventory/repository.py
+index 3f1b66d..5322ace 100644
+--- a/src/inventory/repository.py
++++ b/src/inventory/repository.py
+@@ -2,8 +2,26 @@
+ 
+ from __future__ import annotations
+ 
+-from .errors import DuplicateEntity, OrderNotFound, UnknownSku, UnknownWarehouse
+-from .models import Order, OrderStatus, Product, Warehouse
++from dataclasses import dataclass
++
++from .errors import (
++    DuplicateEntity,
++    OrderNotFound,
++    ReservationNotFound,
++    UnknownSku,
++    UnknownWarehouse,
++)
++from .models import Order, OrderStatus, Product, Reservation, Warehouse
++
++
++@dataclass(frozen=True)
++class ReservationKey:
++    """What a successful ``reserve`` call bound its idempotency key to."""
++
++    key: str
++    warehouse: str
++    requested: dict[str, int]
++    reservation_id: str
+ 
+ 
+ class InMemoryRepository:
+@@ -12,6 +30,9 @@ class InMemoryRepository:
+         self._warehouses: dict[str, Warehouse] = {}
+         self._orders: dict[str, Order] = {}
+         self._order_seq = 0
++        self._reservations: dict[str, Reservation] = {}
++        self._reservation_seq = 0
++        self._reservation_keys: dict[str, ReservationKey] = {}
+ 
+     # -- catalogue -------------------------------------------------------
+     def add_product(self, product: Product) -> None:
+@@ -62,3 +83,32 @@ class InMemoryRepository:
+             if (warehouse is None or o.warehouse == warehouse)
+             and (status is None or o.status is status)
+         ]
++
++    # -- reservations ----------------------------------------------------
++    def next_reservation_id(self) -> str:
++        self._reservation_seq += 1
++        return f"RES-{self._reservation_seq:04d}"
++
++    def save_reservation(self, reservation: Reservation) -> None:
++        self._reservations[reservation.reservation_id] = reservation
++
++    def get_reservation(self, reservation_id: str) -> Reservation:
++        try:
++            return self._reservations[reservation_id]
++        except KeyError:
++            raise ReservationNotFound(reservation_id) from None
++
++    def reservations(self, warehouse: str | None = None) -> list[Reservation]:
++        return [
++            r
++            for r in self._reservations.values()
++            if warehouse is None or r.warehouse == warehouse
++        ]
++
++    def save_reservation_key(self, record: ReservationKey) -> None:
++        if record.key in self._reservation_keys:
++            raise DuplicateEntity("idempotency key", record.key)
++        self._reservation_keys[record.key] = record
++
++    def find_reservation_key(self, key: str) -> ReservationKey | None:
++        return self._reservation_keys.get(key)
+diff --git a/src/inventory/service.py b/src/inventory/service.py
+index 10e2ee4..64f6928 100644
+--- a/src/inventory/service.py
++++ b/src/inventory/service.py
+@@ -3,17 +3,32 @@
+ from __future__ import annotations
+ 
+ from collections.abc import Mapping
++from dataclasses import replace
++from datetime import timedelta
+ 
+ from .clock import Clock
+ from .errors import (
++    IdempotencyConflict,
+     InsufficientStock,
+     InvalidOrder,
+     InvalidOrderState,
+     InvalidQuantity,
++    InvalidReservationState,
++    ReservationExpired,
+ )
+ from .ledger import Ledger
+-from .models import Adjustment, AdjustmentReason, Order, OrderLine, OrderStatus
+-from .repository import InMemoryRepository
++from .models import (
++    Adjustment,
++    AdjustmentReason,
++    Order,
++    OrderLine,
++    OrderStatus,
++    Reservation,
++    ReservationStatus,
++)
++from .repository import InMemoryRepository, ReservationKey
++
++DEFAULT_HOLD_DURATION = timedelta(minutes=20)
+ 
+ 
+ class InventoryService:
+@@ -21,13 +36,27 @@ class InventoryService:
+ 
+     * on-hand   -- physical units, derived from the ledger;
+     * allocated -- units promised to PLACED orders (not yet shipped);
+-    * available -- what can still be promised: on-hand minus allocated.
++    * held      -- units set aside by ACTIVE, unexpired reservations;
++    * available -- what can still be promised: on-hand minus allocated minus held.
++
++    Reservations lapse on their own: an ACTIVE reservation counts as EXPIRED
++    from ``expires_at`` on, judged against the injected clock at read time.
+     """
+ 
+-    def __init__(self, repository: InMemoryRepository, ledger: Ledger, clock: Clock) -> None:
++    def __init__(
++        self,
++        repository: InMemoryRepository,
++        ledger: Ledger,
++        clock: Clock,
++        *,
++        hold_duration: timedelta = DEFAULT_HOLD_DURATION,
++    ) -> None:
++        if hold_duration <= timedelta(0):
++            raise ValueError("hold_duration must be positive")
+         self._repo = repository
+         self._ledger = ledger
+         self._clock = clock
++        self._hold_duration = hold_duration
+ 
+     # -- queries ---------------------------------------------------------
+     def on_hand(self, sku: str, warehouse: str) -> int:
+@@ -43,7 +72,12 @@ class InventoryService:
+ 
+     def available(self, sku: str, warehouse: str) -> int:
+         """Units that can still be promised. Never negative."""
+-        return max(0, self.on_hand(sku, warehouse) - self.allocated(sku, warehouse))
++        return max(
++            0,
++            self.on_hand(sku, warehouse)
++            - self.allocated(sku, warehouse)
++            - self._held(sku, warehouse),
++        )
+ 
+     # -- physical movements ---------------------------------------------
+     def receive(self, sku: str, warehouse: str, quantity: int, ref: str | None = None) -> Adjustment:
+@@ -111,7 +145,113 @@ class InventoryService:
+         self._repo.save_order(order)
+         return order
+ 
++    # -- reservations ----------------------------------------------------
++    def reserve(
++        self, warehouse: str, items: Mapping[str, int], idempotency_key: str
++    ) -> Reservation:
++        """Hold up to the requested units of each SKU for ``hold_duration``.
++
++        Each line holds what is available right now, possibly less than asked;
++        lines with nothing available are left out. Repeating a successful call
++        with the same key and request returns the original reservation as it
++        stands now.
++        """
++        requested = self._validate_items(warehouse, items)
++        if not isinstance(idempotency_key, str) or not idempotency_key:
++            raise InvalidOrder("a reservation needs a non-empty idempotency key")
++
++        previous = self._repo.find_reservation_key(idempotency_key)
++        if previous is not None:
++            if previous.warehouse != warehouse or previous.requested != requested:
++                raise IdempotencyConflict(idempotency_key)
++            return self.get_reservation(previous.reservation_id)
++
++        held: dict[str, int] = {}
++        for sku, quantity in requested.items():
++            take = min(quantity, self.available(sku, warehouse))
++            if take > 0:
++                held[sku] = take
++        if not held:
++            sku, quantity = next(iter(requested.items()))
++            raise InsufficientStock(sku, warehouse, quantity, self.available(sku, warehouse))
++
++        reservation = Reservation(
++            reservation_id=self._repo.next_reservation_id(),
++            warehouse=warehouse,
++            items=held,
++            status=ReservationStatus.ACTIVE,
++            expires_at=self._clock.now() + self._hold_duration,
++        )
++        self._repo.save_reservation(reservation)
++        self._repo.save_reservation_key(
++            ReservationKey(idempotency_key, warehouse, requested, reservation.reservation_id)
++        )
++        return _snapshot(reservation)
++
++    def get_reservation(self, reservation_id: str) -> Reservation:
++        return _snapshot(self._load_reservation(reservation_id))
++
++    def confirm_reservation(self, reservation_id: str) -> Order:
++        """Turn an ACTIVE hold into a PLACED order for exactly the held units.
++
++        Confirming an already CONFIRMED reservation returns its order again.
++        """
++        reservation = self._load_reservation(reservation_id)
++        if reservation.status is ReservationStatus.CONFIRMED:
++            assert reservation.order_id is not None
++            return self._repo.get_order(reservation.order_id)
++        if reservation.status is ReservationStatus.EXPIRED:
++            raise ReservationExpired(reservation_id)
++        if reservation.status is not ReservationStatus.ACTIVE:
++            raise InvalidReservationState(reservation_id, reservation.status, "confirm")
++        # The held units are already excluded from `available`, so the order
++        # takes them over directly without another availability check.
++        order = Order(
++            order_id=self._repo.next_order_id(),
++            warehouse=reservation.warehouse,
++            lines=tuple(OrderLine(sku, qty) for sku, qty in reservation.items.items()),
++            status=OrderStatus.PLACED,
++            placed_at=self._clock.now(),
++        )
++        self._repo.save_order(order)
++        reservation.status = ReservationStatus.CONFIRMED
++        reservation.order_id = order.order_id
++        self._repo.save_reservation(reservation)
++        return order
++
++    def release_reservation(self, reservation_id: str) -> Reservation:
++        """Free an ACTIVE hold. Releasing a RELEASED or EXPIRED one is a no-op."""
++        reservation = self._load_reservation(reservation_id)
++        if reservation.status is ReservationStatus.CONFIRMED:
++            raise InvalidReservationState(reservation_id, reservation.status, "release")
++        if reservation.status is ReservationStatus.ACTIVE:
++            reservation.status = ReservationStatus.RELEASED
++            self._repo.save_reservation(reservation)
++        return _snapshot(reservation)
++
+     # -- helpers ---------------------------------------------------------
++    def _load_reservation(self, reservation_id: str) -> Reservation:
++        """Fetch the stored reservation, marking it EXPIRED if it has lapsed."""
++        reservation = self._repo.get_reservation(reservation_id)
++        self._expire_if_lapsed(reservation)
++        return reservation
++
++    def _expire_if_lapsed(self, reservation: Reservation) -> None:
++        if (
++            reservation.status is ReservationStatus.ACTIVE
++            and self._clock.now() >= reservation.expires_at
++        ):
++            reservation.status = ReservationStatus.EXPIRED
++            self._repo.save_reservation(reservation)
++
++    def _held(self, sku: str, warehouse: str) -> int:
++        total = 0
++        for reservation in self._repo.reservations(warehouse=warehouse):
++            self._expire_if_lapsed(reservation)
++            if reservation.status is ReservationStatus.ACTIVE:
++                total += reservation.items.get(sku, 0)
++        return total
++
+     def _check_location(self, sku: str, warehouse: str) -> None:
+         self._repo.get_warehouse(warehouse)
+         self._repo.get_product(sku)
+@@ -129,3 +269,8 @@ class InventoryService:
+ def _check_quantity(quantity: object) -> None:
+     if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
+         raise InvalidQuantity(quantity)
++
++
++def _snapshot(reservation: Reservation) -> Reservation:
++    """A copy for callers, so they cannot change stored state by mutating it."""
++    return replace(reservation, items=dict(reservation.items))
+diff --git a/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..f8ae413
+Binary files /dev/null and b/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_ledger.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_ledger.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..35e2168
+Binary files /dev/null and b/tests/__pycache__/test_ledger.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_orders.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_orders.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..ce978f4
+Binary files /dev/null and b/tests/__pycache__/test_orders.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_reports.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_reports.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..6f772a9
+Binary files /dev/null and b/tests/__pycache__/test_reports.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_stock.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_stock.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..db5f172
+Binary files /dev/null and b/tests/__pycache__/test_stock.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..9fab05a
+Binary files /dev/null and b/tests/acceptance/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_availability_with_holds.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_availability_with_holds.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..d2bf125
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_availability_with_holds.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_confirm_reservation.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_confirm_reservation.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..61d2917
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_confirm_reservation.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_direct_orders_vs_holds.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_direct_orders_vs_holds.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..5b459d9
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_direct_orders_vs_holds.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_hold_lifetime.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_hold_lifetime.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..06fbb80
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_hold_lifetime.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_release_and_lookup.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_release_and_lookup.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..5aa6f85
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_release_and_lookup.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_reservation_compatibility.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_reservation_compatibility.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..5e4cecd
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_reservation_compatibility.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_reservation_idempotency.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_reservation_idempotency.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..65cbd56
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_reservation_idempotency.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_reservation_interface.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_reservation_interface.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..0a31f2e
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_reservation_interface.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/__pycache__/test_reserve.cpython-312-pytest-9.0.1.pyc b/tests/acceptance/__pycache__/test_reserve.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..2cc3a21
+Binary files /dev/null and b/tests/acceptance/__pycache__/test_reserve.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/acceptance/conftest.py b/tests/acceptance/conftest.py
+new file mode 100644
+index 0000000..6c10ea6
+--- /dev/null
++++ b/tests/acceptance/conftest.py
+@@ -0,0 +1,16 @@
++"""Shared fixtures for the stock-reservation acceptance tests (SPEC.md).
++
++The ``clock``, ``repo``, ``ledger`` and ``service`` fixtures come from
++``tests/conftest.py``. Clock starts at 2024-03-01 09:00 UTC.
++"""
++
++import pytest
++
++
++@pytest.fixture
++def stocked(service):
++    """WH1: MUG 10, TEE 5, CAP 0. WH2: MUG 4."""
++    service.receive("MUG", "WH1", 10)
++    service.receive("TEE", "WH1", 5)
++    service.receive("MUG", "WH2", 4)
++    return service
+diff --git a/tests/acceptance/test_availability_with_holds.py b/tests/acceptance/test_availability_with_holds.py
+new file mode 100644
+index 0000000..805b57f
+--- /dev/null
++++ b/tests/acceptance/test_availability_with_holds.py
+@@ -0,0 +1,125 @@
++"""SPEC.md acceptance criteria 6-10: availability."""
++
++import dataclasses
++from datetime import timedelta
++
++from inventory import models
++from inventory.reports import StockRow, stock_report
++
++HOLD = timedelta(minutes=20)
++
++
++# -- 6. available = on-hand - allocated - active holds, floored at 0 ----------
++def test_available_subtracts_allocations_and_holds(stocked):
++    stocked.place_order("WH1", {"MUG": 3})
++    stocked.reserve("WH1", {"MUG": 4}, "k1")
++    assert stocked.available("MUG", "WH1") == 10 - 3 - 4
++
++
++def test_available_sums_holds_from_several_reservations(stocked):
++    stocked.reserve("WH1", {"MUG": 2}, "k1")
++    stocked.reserve("WH1", {"MUG": 3, "TEE": 1}, "k2")
++    assert stocked.available("MUG", "WH1") == 5
++    assert stocked.available("TEE", "WH1") == 4
++
++
++def test_holds_only_count_for_their_own_sku_and_warehouse(stocked):
++    stocked.reserve("WH1", {"MUG": 6}, "k1")
++    assert stocked.available("TEE", "WH1") == 5
++    assert stocked.available("MUG", "WH2") == 4
++
++
++def test_only_active_unexpired_reservations_hold_stock(stocked, clock):
++    released = stocked.reserve("WH1", {"MUG": 1}, "k1")
++    stocked.release_reservation(released.reservation_id)
++    confirmed = stocked.reserve("WH1", {"MUG": 2}, "k2")
++    stocked.confirm_reservation(confirmed.reservation_id)  # becomes an allocation
++    stocked.reserve("WH1", {"MUG": 3}, "k3")
++    clock.advance(minutes=10)
++    stocked.reserve("WH1", {"MUG": 4}, "k4")
++    clock.advance(minutes=10)  # k3 has lapsed, k4 has not
++    assert stocked.available("MUG", "WH1") == 10 - 2 - 4
++
++
++def test_available_is_floored_at_zero(stocked):
++    stocked.reserve("WH1", {"MUG": 10}, "k1")
++    stocked.adjust("MUG", "WH1", -4, "breakage")
++    assert stocked.available("MUG", "WH1") == 0
++
++
++# -- 7. allocated counts only PLACED orders; on-hand unaffected ---------------
++def test_allocated_does_not_include_holds(stocked):
++    stocked.place_order("WH1", {"MUG": 2})
++    stocked.reserve("WH1", {"MUG": 5}, "k1")
++    assert stocked.allocated("MUG", "WH1") == 2
++
++
++def test_on_hand_is_not_affected_by_holds(stocked):
++    stocked.reserve("WH1", {"MUG": 5, "TEE": 5}, "k1")
++    assert stocked.on_hand("MUG", "WH1") == 10
++    assert stocked.on_hand("TEE", "WH1") == 5
++
++
++# -- 8. stock_report unchanged, available column reflects holds ---------------
++def test_stock_row_fields_are_unchanged():
++    assert [f.name for f in dataclasses.fields(StockRow)] == [
++        "sku",
++        "on_hand",
++        "allocated",
++        "available",
++    ]
++
++
++def test_stock_report_available_reflects_holds(stocked, repo):
++    stocked.place_order("WH1", {"MUG": 1})
++    stocked.reserve("WH1", {"MUG": 4, "TEE": 2}, "k1")
++    assert stock_report(repo, stocked, "WH1") == [
++        StockRow("CAP", 0, 0, 0),
++        StockRow("MUG", 10, 1, 5),
++        StockRow("TEE", 5, 0, 3),
++    ]
++
++
++# -- 9. release / expiry frees units immediately ------------------------------
++def test_release_frees_units_immediately(stocked):
++    res = stocked.reserve("WH1", {"MUG": 6}, "k1")
++    stocked.release_reservation(res.reservation_id)
++    assert stocked.available("MUG", "WH1") == 10
++
++
++def test_expiry_frees_units_at_the_exact_instant(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 6}, "k1")
++    clock.set(res.expires_at)
++    assert stocked.available("MUG", "WH1") == 10
++
++
++def test_freed_units_can_be_reserved_again(stocked, clock):
++    stocked.reserve("WH1", {"MUG": 10}, "k1")
++    clock.advance(HOLD)
++    again = stocked.reserve("WH1", {"MUG": 10}, "k2")
++    assert again.items == {"MUG": 10}
++
++
++# -- 10. receive / adjust are never blocked by holds -------------------------
++def test_receive_is_not_blocked_by_holds(stocked):
++    stocked.reserve("WH1", {"MUG": 10}, "k1")
++    stocked.receive("MUG", "WH1", 3)
++    assert stocked.on_hand("MUG", "WH1") == 13
++    assert stocked.available("MUG", "WH1") == 3
++
++
++def test_write_off_below_held_units_is_allowed(stocked):
++    stocked.reserve("WH1", {"MUG": 8}, "k1")
++    stocked.adjust("MUG", "WH1", -10, "flood")
++    assert stocked.on_hand("MUG", "WH1") == 0
++    assert stocked.available("MUG", "WH1") == 0
++
++
++def test_write_off_leaves_reservation_unchanged(stocked):
++    res = stocked.reserve("WH1", {"MUG": 8, "TEE": 2}, "k1")
++    stocked.adjust("MUG", "WH1", -5, "breakage")
++    after = stocked.get_reservation(res.reservation_id)
++    assert after.status is models.ReservationStatus.ACTIVE
++    assert after.items == {"MUG": 8, "TEE": 2}
++    assert after.expires_at == res.expires_at
++    assert stocked.available("MUG", "WH1") == 0
+diff --git a/tests/acceptance/test_confirm_reservation.py b/tests/acceptance/test_confirm_reservation.py
+new file mode 100644
+index 0000000..032b9b8
+--- /dev/null
++++ b/tests/acceptance/test_confirm_reservation.py
+@@ -0,0 +1,167 @@
++"""SPEC.md acceptance criteria 23-29: confirm."""
++
++from datetime import timedelta
++
++import pytest
++
++from inventory import Order, OrderStatus, errors, models
++
++TICK = timedelta(microseconds=1)
++
++
++def _lines(order):
++    return {line.sku: line.quantity for line in order.lines}
++
++
++# -- 23. confirm places an ordinary PLACED order for the held units ----------
++def test_confirm_places_order_for_held_units(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 4, "TEE": 2}, "k1")
++    clock.advance(minutes=5)
++    confirmed_at = clock.now()
++    order = stocked.confirm_reservation(res.reservation_id)
++    assert isinstance(order, Order)
++    assert order.status is OrderStatus.PLACED
++    assert order.warehouse == "WH1"
++    assert _lines(order) == {"MUG": 4, "TEE": 2}
++    assert order.placed_at == confirmed_at
++
++
++def test_confirm_after_partial_hold_orders_only_held_units(stocked):
++    res = stocked.reserve("WH1", {"MUG": 25, "TEE": 1, "CAP": 3}, "k1")
++    order = stocked.confirm_reservation(res.reservation_id)
++    assert _lines(order) == {"MUG": 10, "TEE": 1}
++
++
++def test_confirm_uses_the_normal_order_id_sequence(stocked):
++    stocked.place_order("WH1", {"MUG": 1})
++    res = stocked.reserve("WH1", {"MUG": 1}, "k1")
++    order = stocked.confirm_reservation(res.reservation_id)
++    assert order.order_id == "ORD-0002"
++    assert stocked.place_order("WH1", {"MUG": 1}).order_id == "ORD-0003"
++
++
++def test_confirmed_order_is_stored_like_any_order(stocked, repo):
++    res = stocked.reserve("WH2", {"MUG": 3}, "k1")
++    order = stocked.confirm_reservation(res.reservation_id)
++    stored = repo.get_order(order.order_id)
++    assert stored.status is OrderStatus.PLACED
++    assert stored.warehouse == "WH2"
++    assert _lines(stored) == {"MUG": 3}
++
++
++def test_confirm_just_before_expiry_succeeds(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 2}, "k1")
++    clock.set(res.expires_at - TICK)
++    order = stocked.confirm_reservation(res.reservation_id)
++    assert _lines(order) == {"MUG": 2}
++
++
++# -- 24. reservation becomes CONFIRMED and points at the order -----------------
++def test_confirm_marks_reservation_confirmed_with_order_id(stocked):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    order = stocked.confirm_reservation(res.reservation_id)
++    after = stocked.get_reservation(res.reservation_id)
++    assert after.status is models.ReservationStatus.CONFIRMED
++    assert after.order_id == order.order_id
++
++
++# -- 25. confirming moves the hold into an allocation -------------------------
++def test_confirm_does_not_change_available_or_on_hand(stocked):
++    res = stocked.reserve("WH1", {"MUG": 4, "TEE": 5}, "k1")
++    before = {
++        sku: (stocked.available(sku, "WH1"), stocked.on_hand(sku, "WH1"))
++        for sku in ("MUG", "TEE", "CAP")
++    }
++    stocked.confirm_reservation(res.reservation_id)
++    after = {
++        sku: (stocked.available(sku, "WH1"), stocked.on_hand(sku, "WH1"))
++        for sku in ("MUG", "TEE", "CAP")
++    }
++    assert after == before == {"MUG": (6, 10), "TEE": (0, 5), "CAP": (0, 0)}
++
++
++def test_confirmed_units_show_as_allocated(stocked):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    assert stocked.allocated("MUG", "WH1") == 0
++    stocked.confirm_reservation(res.reservation_id)
++    assert stocked.allocated("MUG", "WH1") == 4
++
++
++def test_confirmed_units_stay_taken_after_expires_at(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    stocked.confirm_reservation(res.reservation_id)
++    clock.advance(hours=1)
++    assert stocked.available("MUG", "WH1") == 6
++
++
++# -- 26. the order can be shipped or cancelled -------------------------------
++def test_confirmed_order_can_be_shipped(stocked):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    order = stocked.confirm_reservation(res.reservation_id)
++    shipped = stocked.ship_order(order.order_id)
++    assert shipped.status is OrderStatus.SHIPPED
++    assert stocked.on_hand("MUG", "WH1") == 6
++    assert stocked.allocated("MUG", "WH1") == 0
++    assert stocked.available("MUG", "WH1") == 6
++
++
++def test_confirmed_order_can_be_cancelled(stocked):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    order = stocked.confirm_reservation(res.reservation_id)
++    cancelled = stocked.cancel_order(order.order_id)
++    assert cancelled.status is OrderStatus.CANCELLED
++    assert stocked.on_hand("MUG", "WH1") == 10
++    assert stocked.allocated("MUG", "WH1") == 0
++    assert stocked.available("MUG", "WH1") == 10
++
++
++# -- 27. confirming twice returns the same order ------------------------------
++def test_confirming_again_returns_same_order_and_creates_nothing(stocked, repo):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    first = stocked.confirm_reservation(res.reservation_id)
++    second = stocked.confirm_reservation(res.reservation_id)
++    assert second.order_id == first.order_id
++    assert len(repo.orders()) == 1
++    assert stocked.allocated("MUG", "WH1") == 4
++    assert stocked.place_order("WH1", {"MUG": 1}).order_id == "ORD-0002"
++
++
++def test_confirming_again_after_expires_at_returns_same_order(stocked, clock, repo):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    first = stocked.confirm_reservation(res.reservation_id)
++    clock.advance(hours=5)
++    second = stocked.confirm_reservation(res.reservation_id)
++    assert second.order_id == first.order_id
++    assert len(repo.orders()) == 1
++
++
++# -- 28. confirming an expired reservation -> ReservationExpired -------------
++def test_confirm_at_exact_expiry_raises(stocked, clock, repo):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    clock.set(res.expires_at)
++    with pytest.raises(errors.ReservationExpired):
++        stocked.confirm_reservation(res.reservation_id)
++    assert repo.orders() == []
++    assert stocked.allocated("MUG", "WH1") == 0
++
++
++def test_confirm_long_after_expiry_raises_and_creates_no_order(stocked, clock, repo):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    clock.advance(hours=3)
++    with pytest.raises(errors.ReservationExpired):
++        stocked.confirm_reservation(res.reservation_id)
++    assert repo.orders() == []
++    assert stocked.available("MUG", "WH1") == 10
++    assert stocked.get_reservation(res.reservation_id).status is models.ReservationStatus.EXPIRED
++    assert stocked.place_order("WH1", {"MUG": 1}).order_id == "ORD-0001"
++
++
++# -- 29. confirming a RELEASED reservation -> InvalidReservationState --------
++def test_confirm_released_reservation_raises(stocked, repo):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    stocked.release_reservation(res.reservation_id)
++    with pytest.raises(errors.InvalidReservationState):
++        stocked.confirm_reservation(res.reservation_id)
++    assert repo.orders() == []
++    assert stocked.get_reservation(res.reservation_id).status is models.ReservationStatus.RELEASED
++    assert stocked.available("MUG", "WH1") == 10
+diff --git a/tests/acceptance/test_direct_orders_vs_holds.py b/tests/acceptance/test_direct_orders_vs_holds.py
+new file mode 100644
+index 0000000..830a052
+--- /dev/null
++++ b/tests/acceptance/test_direct_orders_vs_holds.py
+@@ -0,0 +1,40 @@
++"""SPEC.md acceptance criterion 35: direct orders compete with holds."""
++
++import pytest
++
++from inventory import errors
++
++
++def test_place_order_cannot_take_held_units(stocked):
++    stocked.reserve("WH1", {"MUG": 6}, "k1")
++    with pytest.raises(errors.InsufficientStock):
++        stocked.place_order("WH1", {"MUG": 5})
++
++
++def test_place_order_can_take_what_holds_leave(stocked):
++    stocked.reserve("WH1", {"MUG": 6}, "k1")
++    order = stocked.place_order("WH1", {"MUG": 4})
++    assert {line.sku: line.quantity for line in order.lines} == {"MUG": 4}
++    assert stocked.available("MUG", "WH1") == 0
++
++
++def test_place_order_stays_all_or_nothing(stocked, repo):
++    stocked.reserve("WH1", {"TEE": 4}, "k1")
++    with pytest.raises(errors.InsufficientStock):
++        stocked.place_order("WH1", {"MUG": 2, "TEE": 2})
++    assert repo.orders() == []
++    assert stocked.available("MUG", "WH1") == 10
++    assert stocked.available("TEE", "WH1") == 1
++
++
++def test_place_order_can_use_units_once_hold_expires(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 6}, "k1")
++    clock.set(res.expires_at)
++    order = stocked.place_order("WH1", {"MUG": 10})
++    assert order.quantity_of("MUG") == 10
++
++
++def test_place_order_can_use_units_once_hold_released(stocked):
++    res = stocked.reserve("WH1", {"MUG": 6}, "k1")
++    stocked.release_reservation(res.reservation_id)
++    assert stocked.place_order("WH1", {"MUG": 10}).quantity_of("MUG") == 10
+diff --git a/tests/acceptance/test_hold_lifetime.py b/tests/acceptance/test_hold_lifetime.py
+new file mode 100644
+index 0000000..2164b24
+--- /dev/null
++++ b/tests/acceptance/test_hold_lifetime.py
+@@ -0,0 +1,121 @@
++"""SPEC.md acceptance criteria 1-5: hold lifetime."""
++
++from datetime import timedelta
++
++import pytest
++
++from inventory import errors, models
++
++HOLD = timedelta(minutes=20)
++TICK = timedelta(microseconds=1)
++
++
++# -- 1. expires_at = clock time at reserve + hold duration --------------------
++def test_expires_at_is_reserve_time_plus_hold(stocked, clock):
++    clock.advance(minutes=7, seconds=3)
++    reserved_at = clock.now()
++    res = stocked.reserve("WH1", {"MUG": 2}, "k1")
++    assert res.expires_at == reserved_at + HOLD
++
++
++# -- 2. default hold is 20 minutes, fixed per service ---------------------------
++def test_default_hold_duration_is_twenty_minutes(stocked, clock):
++    start = clock.now()
++    res = stocked.reserve("WH1", {"MUG": 1}, "k1")
++    assert res.expires_at - start == timedelta(minutes=20)
++
++
++def test_hold_duration_is_the_same_for_every_call(stocked, clock):
++    first_at = clock.now()
++    first = stocked.reserve("WH1", {"MUG": 1}, "k1")
++    clock.advance(hours=3)
++    second_at = clock.now()
++    second = stocked.reserve("WH1", {"TEE": 1}, "k2")
++    assert first.expires_at - first_at == HOLD
++    assert second.expires_at - second_at == HOLD
++
++
++def test_reserve_has_no_per_call_duration_parameter(stocked):
++    with pytest.raises(TypeError):
++        stocked.reserve("WH1", {"MUG": 1}, "k1", timedelta(hours=1))
++
++
++# -- 3. ACTIVE reservations lapse on their own ---------------------------------
++def test_reservation_is_active_just_before_expiry(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    clock.set(res.expires_at - TICK)
++    assert stocked.get_reservation(res.reservation_id).status is models.ReservationStatus.ACTIVE
++    assert stocked.available("MUG", "WH1") == 6
++
++
++def test_reservation_expires_at_the_exact_instant(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    clock.set(res.expires_at)
++    assert stocked.get_reservation(res.reservation_id).status is models.ReservationStatus.EXPIRED
++
++
++def test_expiry_frees_stock_without_any_other_call(stocked, clock):
++    stocked.reserve("WH1", {"MUG": 4}, "k1")
++    assert stocked.available("MUG", "WH1") == 6
++    clock.advance(HOLD)
++    # Nothing but the read itself happens here.
++    assert stocked.available("MUG", "WH1") == 10
++
++
++def test_expiry_visible_through_available_before_get_reservation(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 4, "TEE": 2}, "k1")
++    clock.advance(minutes=45)
++    assert stocked.available("TEE", "WH1") == 5
++    assert stocked.get_reservation(res.reservation_id).status is models.ReservationStatus.EXPIRED
++
++
++# -- 4. only ACTIVE reservations expire ------------------------------------------
++def test_confirmed_reservation_stays_confirmed_after_expires_at(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 3}, "k1")
++    stocked.confirm_reservation(res.reservation_id)
++    clock.advance(hours=2)
++    after = stocked.get_reservation(res.reservation_id)
++    assert after.status is models.ReservationStatus.CONFIRMED
++
++
++def test_released_reservation_stays_released_after_expires_at(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 3}, "k1")
++    stocked.release_reservation(res.reservation_id)
++    clock.advance(hours=2)
++    after = stocked.get_reservation(res.reservation_id)
++    assert after.status is models.ReservationStatus.RELEASED
++
++
++# -- 5. nothing ever moves expires_at ----------------------------------------
++def test_idempotent_retry_does_not_move_expires_at(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 3}, "k1")
++    original = res.expires_at
++    clock.advance(minutes=10)
++    retry = stocked.reserve("WH1", {"MUG": 3}, "k1")
++    assert retry.expires_at == original
++    assert stocked.get_reservation(res.reservation_id).expires_at == original
++
++
++def test_retry_does_not_revive_a_lapsed_hold(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 3}, "k1")
++    clock.advance(minutes=25)
++    retry = stocked.reserve("WH1", {"MUG": 3}, "k1")
++    assert retry.expires_at == res.expires_at
++    assert retry.status is models.ReservationStatus.EXPIRED
++    assert stocked.available("MUG", "WH1") == 10
++
++
++def test_reads_and_other_operations_do_not_move_expires_at(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 3}, "k1")
++    original = res.expires_at
++    clock.advance(minutes=5)
++    stocked.get_reservation(res.reservation_id)
++    stocked.available("MUG", "WH1")
++    stocked.reserve("WH1", {"MUG": 1}, "k2")
++    stocked.receive("MUG", "WH1", 5)
++    stocked.place_order("WH1", {"MUG": 1})
++    clock.advance(minutes=10)
++    assert stocked.get_reservation(res.reservation_id).expires_at == original
++    clock.set(original)
++    with pytest.raises(errors.ReservationExpired):
++        stocked.confirm_reservation(res.reservation_id)
+diff --git a/tests/acceptance/test_release_and_lookup.py b/tests/acceptance/test_release_and_lookup.py
+new file mode 100644
+index 0000000..9420a3d
+--- /dev/null
++++ b/tests/acceptance/test_release_and_lookup.py
+@@ -0,0 +1,120 @@
++"""SPEC.md acceptance criteria 30-34: release and lookup."""
++
++from datetime import timedelta
++
++import pytest
++
++from inventory import OrderStatus, errors, models
++
++
++# -- 30. release frees an ACTIVE reservation ----------------------------------
++def test_release_marks_reservation_released_and_returns_it(stocked):
++    res = stocked.reserve("WH1", {"MUG": 4, "TEE": 2}, "k1")
++    released = stocked.release_reservation(res.reservation_id)
++    assert isinstance(released, models.Reservation)
++    assert released.reservation_id == res.reservation_id
++    assert released.status is models.ReservationStatus.RELEASED
++    assert stocked.get_reservation(res.reservation_id).status is models.ReservationStatus.RELEASED
++
++
++def test_release_frees_units_at_once(stocked):
++    res = stocked.reserve("WH1", {"MUG": 4, "TEE": 2}, "k1")
++    stocked.release_reservation(res.reservation_id)
++    assert stocked.available("MUG", "WH1") == 10
++    assert stocked.available("TEE", "WH1") == 5
++
++
++# -- 31. releasing RELEASED or EXPIRED is a no-op ------------------------------
++def test_releasing_twice_is_a_no_op(stocked):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    first = stocked.release_reservation(res.reservation_id)
++    second = stocked.release_reservation(res.reservation_id)
++    assert second.reservation_id == first.reservation_id
++    assert second.status is models.ReservationStatus.RELEASED
++    assert second.items == first.items
++    assert second.expires_at == first.expires_at
++    assert stocked.available("MUG", "WH1") == 10
++
++
++def test_releasing_expired_reservation_is_a_no_op(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    clock.set(res.expires_at)
++    released = stocked.release_reservation(res.reservation_id)
++    assert released.reservation_id == res.reservation_id
++    assert released.status is models.ReservationStatus.EXPIRED
++    assert released.expires_at == res.expires_at
++    assert stocked.get_reservation(res.reservation_id).status is models.ReservationStatus.EXPIRED
++    assert stocked.available("MUG", "WH1") == 10
++
++
++# -- 32. releasing CONFIRMED -> InvalidReservationState -------------------
++def test_releasing_confirmed_reservation_raises(stocked):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    order = stocked.confirm_reservation(res.reservation_id)
++    with pytest.raises(errors.InvalidReservationState):
++        stocked.release_reservation(res.reservation_id)
++    after = stocked.get_reservation(res.reservation_id)
++    assert after.status is models.ReservationStatus.CONFIRMED
++    assert after.order_id == order.order_id
++    assert after.items == {"MUG": 4}
++
++
++def test_releasing_confirmed_reservation_leaves_order_alone(stocked, repo):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    order = stocked.confirm_reservation(res.reservation_id)
++    with pytest.raises(errors.InvalidReservationState):
++        stocked.release_reservation(res.reservation_id)
++    assert repo.get_order(order.order_id).status is OrderStatus.PLACED
++    assert stocked.allocated("MUG", "WH1") == 4
++    assert stocked.available("MUG", "WH1") == 6
++
++
++def test_releasing_confirmed_reservation_after_expires_at_raises(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    stocked.confirm_reservation(res.reservation_id)
++    clock.advance(hours=1)
++    with pytest.raises(errors.InvalidReservationState):
++        stocked.release_reservation(res.reservation_id)
++
++
++# -- 33. get_reservation reports the current status ----------------------------
++def test_get_reservation_returns_the_reservation(stocked):
++    res = stocked.reserve("WH2", {"MUG": 9}, "k1")
++    got = stocked.get_reservation(res.reservation_id)
++    assert isinstance(got, models.Reservation)
++    assert got.reservation_id == res.reservation_id
++    assert got.warehouse == "WH2"
++    assert got.items == {"MUG": 4}
++    assert got.status is models.ReservationStatus.ACTIVE
++    assert got.expires_at == res.expires_at
++    assert got.order_id is None
++
++
++def test_get_reservation_reports_lapsed_reservation_as_expired(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    clock.advance(minutes=20)
++    assert stocked.get_reservation(res.reservation_id).status is models.ReservationStatus.EXPIRED
++
++
++def test_expired_reservations_stay_retrievable(stocked, clock):
++    res = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    clock.advance(timedelta(days=90))
++    got = stocked.get_reservation(res.reservation_id)
++    assert got.reservation_id == res.reservation_id
++    assert got.status is models.ReservationStatus.EXPIRED
++    assert got.expires_at == res.expires_at
++
++
++# -- 34. unknown IDs -> ReservationNotFound -----------------------------------
++@pytest.mark.parametrize("method", ["get_reservation", "confirm_reservation", "release_reservation"])
++def test_unknown_reservation_id_raises(stocked, method):
++    stocked.reserve("WH1", {"MUG": 1}, "k1")
++    with pytest.raises(errors.ReservationNotFound):
++        getattr(stocked, method)("RES-9999")
++
++
++@pytest.mark.parametrize("method", ["get_reservation", "confirm_reservation", "release_reservation"])
++def test_order_id_is_not_a_reservation_id(stocked, method):
++    stocked.place_order("WH1", {"MUG": 1})
++    with pytest.raises(errors.ReservationNotFound):
++        getattr(stocked, method)("ORD-0001")
+diff --git a/tests/acceptance/test_reservation_compatibility.py b/tests/acceptance/test_reservation_compatibility.py
+new file mode 100644
+index 0000000..0762c9b
+--- /dev/null
++++ b/tests/acceptance/test_reservation_compatibility.py
+@@ -0,0 +1,90 @@
++"""SPEC.md acceptance criteria 36-37: compatibility."""
++
++import re
++import subprocess
++import sys
++from datetime import datetime, timedelta, timezone
++from pathlib import Path
++
++import pytest
++
++from inventory import FixedClock, InventoryService, models
++
++ROOT = Path(__file__).resolve().parents[2]
++PACKAGE = ROOT / "src" / "inventory"
++
++
++# -- 36. the existing suite passes unchanged --------------------------------
++def test_existing_test_suite_passes():
++    result = subprocess.run(
++        [
++            sys.executable,
++            "-m",
++            "pytest",
++            "-q",
++            "-p",
++            "no:cacheprovider",
++            "tests",
++            "--ignore=tests/acceptance",
++        ],
++        cwd=ROOT,
++        capture_output=True,
++        text=True,
++    )
++    assert result.returncode == 0, result.stdout + result.stderr
++
++
++def test_existing_tests_are_unmodified():
++    probe = subprocess.run(
++        ["git", "rev-parse", "--verify", "HEAD"], cwd=ROOT, capture_output=True, text=True
++    )
++    if probe.returncode != 0:
++        pytest.skip("not a git checkout")
++    existing = [
++        str(p.relative_to(ROOT)) for p in (ROOT / "tests").glob("*.py")
++    ]
++    diff = subprocess.run(
++        ["git", "diff", "--name-only", "HEAD", "--", *existing],
++        cwd=ROOT,
++        capture_output=True,
++        text=True,
++    )
++    assert diff.stdout.strip() == ""
++
++
++# -- 37. no package code reads the wall clock --------------------------------
++WALL_CLOCK = [
++    re.compile(r"\b(datetime|date)\s*\.\s*(now|utcnow|today)\s*\("),
++    re.compile(r"\btime\s*\.\s*(time|time_ns|monotonic|monotonic_ns|perf_counter|localtime|gmtime|ctime)\s*\("),
++    re.compile(r"^\s*from\s+time\s+import\b", re.MULTILINE),
++]
++
++
++def test_package_source_never_reads_the_wall_clock():
++    offenders = []
++    for path in sorted(PACKAGE.rglob("*.py")):
++        source = path.read_text()
++        for pattern in WALL_CLOCK:
++            for match in pattern.finditer(source):
++                offenders.append(f"{path.name}: {match.group(0).strip()}")
++    assert offenders == []
++
++
++@pytest.mark.parametrize(
++    "start",
++    [
++        datetime(1999, 12, 31, 23, 50, tzinfo=timezone.utc),
++        datetime(2199, 6, 1, 12, 0, tzinfo=timezone.utc),
++    ],
++)
++def test_expiry_follows_the_injected_clock_only(repo, ledger, start):
++    clock = FixedClock(start)
++    service = InventoryService(repo, ledger, clock)
++    service.receive("MUG", "WH1", 5)
++    res = service.reserve("WH1", {"MUG": 2}, "k1")
++    assert res.expires_at == start + timedelta(minutes=20)
++    assert service.get_reservation(res.reservation_id).status is models.ReservationStatus.ACTIVE
++    assert service.available("MUG", "WH1") == 3
++    clock.advance(minutes=20)
++    assert service.get_reservation(res.reservation_id).status is models.ReservationStatus.EXPIRED
++    assert service.available("MUG", "WH1") == 5
+diff --git a/tests/acceptance/test_reservation_idempotency.py b/tests/acceptance/test_reservation_idempotency.py
+new file mode 100644
+index 0000000..1921e83
+--- /dev/null
++++ b/tests/acceptance/test_reservation_idempotency.py
+@@ -0,0 +1,171 @@
++"""SPEC.md acceptance criteria 18-22: idempotency."""
++
++from datetime import timedelta
++
++import pytest
++
++from inventory import errors, models
++
++STATES = ("ACTIVE", "CONFIRMED", "RELEASED", "EXPIRED")
++
++
++def _reservation_in(service, clock, state, warehouse="WH1", items=None, key="k1"):
++    """Create a reservation via ``key`` and drive it into ``state``."""
++    items = items if items is not None else {"MUG": 3, "TEE": 1}
++    res = service.reserve(warehouse, items, key)
++    if state == "CONFIRMED":
++        service.confirm_reservation(res.reservation_id)
++    elif state == "RELEASED":
++        service.release_reservation(res.reservation_id)
++    elif state == "EXPIRED":
++        clock.advance(minutes=20)
++    return service.get_reservation(res.reservation_id)
++
++
++# -- 18. same key + same request returns the existing reservation -----------
++@pytest.mark.parametrize("state", STATES)
++def test_retry_returns_existing_reservation_in_current_state(stocked, clock, state):
++    before = _reservation_in(stocked, clock, state)
++    clock.advance(minutes=1)
++    retry = stocked.reserve("WH1", {"MUG": 3, "TEE": 1}, "k1")
++    assert retry.reservation_id == before.reservation_id
++    assert retry.status is getattr(models.ReservationStatus, state)
++    assert retry.items == before.items
++    assert retry.expires_at == before.expires_at
++    assert retry.order_id == before.order_id
++    assert retry.warehouse == "WH1"
++
++
++@pytest.mark.parametrize("state", STATES)
++def test_retry_changes_nothing(stocked, clock, state, repo):
++    before = _reservation_in(stocked, clock, state)
++    snapshot = (
++        stocked.available("MUG", "WH1"),
++        stocked.available("TEE", "WH1"),
++        stocked.allocated("MUG", "WH1"),
++        stocked.on_hand("MUG", "WH1"),
++        len(repo.orders()),
++    )
++    stocked.reserve("WH1", {"MUG": 3, "TEE": 1}, "k1")
++    after = stocked.get_reservation(before.reservation_id)
++    assert after.status is before.status
++    assert after.items == before.items
++    assert after.expires_at == before.expires_at
++    assert after.order_id == before.order_id
++    assert snapshot == (
++        stocked.available("MUG", "WH1"),
++        stocked.available("TEE", "WH1"),
++        stocked.allocated("MUG", "WH1"),
++        stocked.on_hand("MUG", "WH1"),
++        len(repo.orders()),
++    )
++
++
++def test_retry_with_items_in_a_different_order_matches(stocked):
++    first = stocked.reserve("WH1", {"MUG": 3, "TEE": 1}, "k1")
++    retry = stocked.reserve("WH1", {"TEE": 1, "MUG": 3}, "k1")
++    assert retry.reservation_id == first.reservation_id
++    assert stocked.available("MUG", "WH1") == 7
++
++
++def test_retry_creates_no_second_hold(stocked):
++    stocked.reserve("WH1", {"MUG": 4}, "k1")
++    stocked.reserve("WH1", {"MUG": 4}, "k1")
++    stocked.reserve("WH1", {"MUG": 4}, "k1")
++    assert stocked.available("MUG", "WH1") == 6
++
++
++def test_retry_after_more_stock_arrives_does_not_top_up_a_partial_hold(stocked):
++    first = stocked.reserve("WH1", {"MUG": 15}, "k1")
++    stocked.receive("MUG", "WH1", 20)
++    retry = stocked.reserve("WH1", {"MUG": 15}, "k1")
++    assert retry.reservation_id == first.reservation_id
++    assert retry.items == {"MUG": 10}
++    assert stocked.available("MUG", "WH1") == 20
++
++
++# -- 19. "same request" compares requested items, not held items --------------
++def test_retry_of_partial_fill_with_original_request_matches(stocked):
++    first = stocked.reserve("WH1", {"MUG": 15, "CAP": 2}, "k1")
++    assert first.items == {"MUG": 10}
++    retry = stocked.reserve("WH1", {"CAP": 2, "MUG": 15}, "k1")
++    assert retry.reservation_id == first.reservation_id
++    assert retry.items == {"MUG": 10}
++
++
++def test_request_equal_to_held_items_conflicts_after_partial_fill(stocked):
++    stocked.reserve("WH1", {"MUG": 15, "CAP": 2}, "k1")
++    with pytest.raises(errors.IdempotencyConflict):
++        stocked.reserve("WH1", {"MUG": 10}, "k1")
++
++
++def test_request_equal_to_held_items_matches_when_fully_filled(stocked):
++    first = stocked.reserve("WH1", {"MUG": 4}, "k1")
++    retry = stocked.reserve("WH1", dict(first.items), "k1")
++    assert retry.reservation_id == first.reservation_id
++
++
++# -- 20. same key + different request -> IdempotencyConflict ----------------
++@pytest.mark.parametrize("state", STATES)
++@pytest.mark.parametrize(
++    "warehouse, items",
++    [
++        ("WH2", {"MUG": 3, "TEE": 1}),  # different warehouse
++        ("WH1", {"MUG": 3}),  # line missing
++        ("WH1", {"MUG": 3, "TEE": 2}),  # different quantity
++        ("WH1", {"MUG": 3, "TEE": 1, "CAP": 1}),  # extra line
++    ],
++)
++def test_reused_key_with_different_request_conflicts(stocked, clock, state, warehouse, items):
++    before = _reservation_in(stocked, clock, state)
++    with pytest.raises(errors.IdempotencyConflict):
++        stocked.reserve(warehouse, items, "k1")
++    after = stocked.get_reservation(before.reservation_id)
++    assert after.status is before.status
++    assert after.items == before.items
++
++
++def test_conflict_creates_nothing(stocked):
++    stocked.reserve("WH1", {"MUG": 3}, "k1")
++    with pytest.raises(errors.IdempotencyConflict):
++        stocked.reserve("WH1", {"TEE": 2}, "k1")
++    assert stocked.available("TEE", "WH1") == 5
++    assert stocked.reserve("WH1", {"TEE": 2}, "k2").reservation_id == "RES-0002"
++
++
++# -- 21. keys are global and never expire ---------------------------------------
++def test_keys_are_global_across_warehouses(stocked):
++    stocked.reserve("WH1", {"MUG": 2}, "shared")
++    with pytest.raises(errors.IdempotencyConflict):
++        stocked.reserve("WH2", {"MUG": 2}, "shared")
++    assert stocked.available("MUG", "WH2") == 4
++
++
++def test_keys_never_expire(stocked, clock):
++    first = stocked.reserve("WH1", {"MUG": 2}, "k1")
++    clock.advance(timedelta(days=400))
++    retry = stocked.reserve("WH1", {"MUG": 2}, "k1")
++    assert retry.reservation_id == first.reservation_id
++    assert retry.status is models.ReservationStatus.EXPIRED
++    with pytest.raises(errors.IdempotencyConflict):
++        stocked.reserve("WH1", {"MUG": 5}, "k1")
++
++
++# -- 22. a raised reserve leaves no trace -------------------------------------
++def test_key_of_failed_reserve_can_be_used_for_any_request(stocked):
++    with pytest.raises(errors.InsufficientStock):
++        stocked.reserve("WH1", {"CAP": 1}, "k1")
++    with pytest.raises(errors.UnknownSku):
++        stocked.reserve("WH1", {"GHOST": 1}, "k1")
++    res = stocked.reserve("WH2", {"MUG": 2}, "k1")
++    assert res.warehouse == "WH2"
++    assert res.items == {"MUG": 2}
++    assert res.reservation_id == "RES-0001"
++
++
++def test_conflicting_call_leaves_original_key_binding_intact(stocked):
++    first = stocked.reserve("WH1", {"MUG": 2}, "k1")
++    with pytest.raises(errors.IdempotencyConflict):
++        stocked.reserve("WH1", {"MUG": 3}, "k1")
++    retry = stocked.reserve("WH1", {"MUG": 2}, "k1")
++    assert retry.reservation_id == first.reservation_id
+diff --git a/tests/acceptance/test_reservation_interface.py b/tests/acceptance/test_reservation_interface.py
+new file mode 100644
+index 0000000..dec355f
+--- /dev/null
++++ b/tests/acceptance/test_reservation_interface.py
+@@ -0,0 +1,48 @@
++"""Interface section of SPEC.md: models, errors and method signatures."""
++
++import dataclasses
++import inspect
++
++from inventory import InventoryService, errors, models
++
++
++def test_reservation_is_a_dataclass_with_the_specified_fields():
++    assert dataclasses.is_dataclass(models.Reservation)
++    names = {f.name for f in dataclasses.fields(models.Reservation)}
++    assert {"reservation_id", "warehouse", "items", "status", "expires_at", "order_id"} <= names
++
++
++def test_reservation_status_has_exactly_the_specified_members():
++    assert {m.name for m in models.ReservationStatus} == {
++        "ACTIVE",
++        "CONFIRMED",
++        "RELEASED",
++        "EXPIRED",
++    }
++
++
++def test_new_errors_subclass_inventory_error():
++    for name in (
++        "ReservationNotFound",
++        "ReservationExpired",
++        "InvalidReservationState",
++        "IdempotencyConflict",
++    ):
++        cls = getattr(errors, name)
++        assert issubclass(cls, errors.InventoryError), name
++
++
++def test_service_exposes_the_reservation_methods():
++    for name in ("reserve", "confirm_reservation", "release_reservation", "get_reservation"):
++        assert callable(getattr(InventoryService, name, None)), name
++
++
++def test_reserve_takes_warehouse_items_and_idempotency_key():
++    params = list(inspect.signature(InventoryService.reserve).parameters)
++    assert params[1:4] == ["warehouse", "items", "idempotency_key"]
++
++
++def test_service_is_still_built_from_repository_ledger_clock(repo, ledger, clock):
++    service = InventoryService(repo, ledger, clock)
++    service.receive("MUG", "WH1", 1)
++    assert service.reserve("WH1", {"MUG": 1}, "k").items == {"MUG": 1}
+diff --git a/tests/acceptance/test_reserve.py b/tests/acceptance/test_reserve.py
+new file mode 100644
+index 0000000..02641fa
+--- /dev/null
++++ b/tests/acceptance/test_reserve.py
+@@ -0,0 +1,146 @@
++"""SPEC.md acceptance criteria 11-17: reserve."""
++
++import pytest
++
++from inventory import errors, models
++
++
++# -- 11. each line holds min(requested, available) ----------------------------
++def test_line_holds_everything_when_enough_is_available(stocked):
++    res = stocked.reserve("WH1", {"MUG": 7}, "k1")
++    assert res.items == {"MUG": 7}
++
++
++def test_line_holds_only_what_is_available(stocked):
++    res = stocked.reserve("WH1", {"MUG": 25, "TEE": 3}, "k1")
++    assert res.items == {"MUG": 10, "TEE": 3}
++
++
++def test_partial_fill_accounts_for_orders_and_other_holds(stocked):
++    stocked.place_order("WH1", {"MUG": 3})
++    stocked.reserve("WH1", {"MUG": 4}, "k1")
++    res = stocked.reserve("WH1", {"MUG": 5}, "k2")
++    assert res.items == {"MUG": 3}
++    assert stocked.available("MUG", "WH1") == 0
++
++
++def test_partial_fill_uses_the_requested_warehouse_only(stocked):
++    res = stocked.reserve("WH2", {"MUG": 9}, "k1")
++    assert res.items == {"MUG": 4}
++    assert stocked.available("MUG", "WH1") == 10
++
++
++# -- 12. lines with 0 available are omitted ----------------------------------
++def test_line_with_nothing_available_is_left_out(stocked):
++    res = stocked.reserve("WH1", {"MUG": 2, "CAP": 3}, "k1")
++    assert res.items == {"MUG": 2}
++    assert "CAP" not in res.items
++
++
++def test_line_exhausted_by_other_holds_is_left_out(stocked):
++    stocked.reserve("WH1", {"TEE": 5}, "k1")
++    res = stocked.reserve("WH1", {"TEE": 1, "MUG": 1}, "k2")
++    assert res.items == {"MUG": 1}
++
++
++# -- 13. a successful reserve returns a new ACTIVE reservation ----------------
++def test_reserve_returns_active_reservation(stocked):
++    res = stocked.reserve("WH1", {"MUG": 2, "TEE": 9, "CAP": 1}, "k1")
++    assert isinstance(res, models.Reservation)
++    assert res.status is models.ReservationStatus.ACTIVE
++    assert res.order_id is None
++    assert res.warehouse == "WH1"
++    assert res.items == {"MUG": 2, "TEE": 5}
++
++
++# -- 14. nothing can be held -> InsufficientStock, nothing created ---------
++def test_reserve_raises_when_nothing_can_be_held(stocked):
++    with pytest.raises(errors.InsufficientStock):
++        stocked.reserve("WH1", {"CAP": 2}, "k1")
++
++
++def test_failed_reserve_creates_no_reservation_or_hold(stocked):
++    stocked.reserve("WH1", {"TEE": 5}, "k0")
++    with pytest.raises(errors.InsufficientStock):
++        stocked.reserve("WH1", {"CAP": 2, "TEE": 1}, "k1")
++    assert stocked.available("MUG", "WH1") == 10
++    assert stocked.available("TEE", "WH1") == 0
++    nxt = stocked.reserve("WH1", {"MUG": 1}, "k2")
++    assert nxt.reservation_id == "RES-0002"
++    with pytest.raises(errors.ReservationNotFound):
++        stocked.get_reservation("RES-0003")
++
++
++def test_insufficient_stock_does_not_consume_the_key(stocked):
++    with pytest.raises(errors.InsufficientStock):
++        stocked.reserve("WH1", {"CAP": 2}, "k1")
++    stocked.receive("CAP", "WH1", 5)
++    res = stocked.reserve("WH1", {"CAP": 2}, "k1")
++    assert res.items == {"CAP": 2}
++    assert res.status is models.ReservationStatus.ACTIVE
++
++
++# -- 15. validation reuses the existing errors --------------------------------
++def test_unknown_warehouse_is_rejected(stocked):
++    with pytest.raises(errors.UnknownWarehouse):
++        stocked.reserve("NOPE", {"MUG": 1}, "k1")
++
++
++def test_unknown_sku_is_rejected(stocked):
++    with pytest.raises(errors.UnknownSku):
++        stocked.reserve("WH1", {"GHOST": 1}, "k1")
++
++
++@pytest.mark.parametrize("quantity", [0, -1, 1.5, "2", True, None])
++def test_bad_quantity_is_rejected(stocked, quantity):
++    with pytest.raises(errors.InvalidQuantity):
++        stocked.reserve("WH1", {"MUG": quantity}, "k1")
++
++
++def test_empty_items_is_rejected(stocked):
++    with pytest.raises(errors.InventoryError):
++        stocked.reserve("WH1", {}, "k1")
++
++
++# -- 16. a rejected request holds nothing and consumes no key ----------------
++@pytest.mark.parametrize(
++    "warehouse, items, error",
++    [
++        ("WH1", {"MUG": 3, "GHOST": 1}, "UnknownSku"),
++        ("WH1", {"MUG": 3, "TEE": 0}, "InvalidQuantity"),
++        ("WH1", {"MUG": 3, "TEE": -2}, "InvalidQuantity"),
++        ("NOPE", {"MUG": 3}, "UnknownWarehouse"),
++    ],
++)
++def test_rejected_request_holds_nothing_and_keeps_key_free(stocked, warehouse, items, error):
++    with pytest.raises(getattr(errors, error)):
++        stocked.reserve(warehouse, items, "k1")
++    assert stocked.available("MUG", "WH1") == 10
++    assert stocked.available("TEE", "WH1") == 5
++    res = stocked.reserve("WH1", {"TEE": 2}, "k1")
++    assert res.items == {"TEE": 2}
++    assert res.reservation_id == "RES-0001"
++
++
++# -- 17. reservation IDs ----------------------------------------------------
++def test_reservation_ids_are_sequential(stocked):
++    ids = [stocked.reserve("WH1", {"MUG": 1}, f"k{i}").reservation_id for i in range(3)]
++    assert ids == ["RES-0001", "RES-0002", "RES-0003"]
++
++
++def test_reservation_ids_are_independent_of_order_ids(stocked):
++    first_order = stocked.place_order("WH1", {"MUG": 1})
++    stocked.place_order("WH1", {"MUG": 1})
++    res = stocked.reserve("WH1", {"MUG": 1}, "k1")
++    assert first_order.order_id == "ORD-0001"
++    assert res.reservation_id == "RES-0001"
++    order = stocked.confirm_reservation(res.reservation_id)
++    assert order.order_id == "ORD-0003"
++    assert stocked.place_order("WH1", {"MUG": 1}).order_id == "ORD-0004"
++    assert stocked.reserve("WH1", {"MUG": 1}, "k2").reservation_id == "RES-0002"
++
++
++def test_idempotent_retry_does_not_consume_an_id(stocked):
++    stocked.reserve("WH1", {"MUG": 1}, "k1")
++    stocked.reserve("WH1", {"MUG": 1}, "k1")
++    assert stocked.reserve("WH1", {"MUG": 1}, "k2").reservation_id == "RES-0002"

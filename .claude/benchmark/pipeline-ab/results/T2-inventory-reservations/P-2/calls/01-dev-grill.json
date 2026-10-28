@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "grill",
+ "role": "dev",
+ "session": "b6f42b5f-f1a5-4066-a747-e42d1adf869a",
+ "resume": false,
+ "prompt": "/grill-with-docs Add stock reservations to the `inventory` package. Checkout must be able to hold stock for a cart before payment, then either confirm the hold into an order or release it. Holds nobody confirms must lapse on their own after a while, and retries from the cart service must be safe (idempotency key).\n\nInterface — hidden tests call exactly this; `InventoryService(repository, ledger, clock)` keeps working as is:\n- `InventoryService.reserve(warehouse: str, items: dict[str, int], idempotency_key: str) -> Reservation`\n- `InventoryService.confirm_reservation(reservation_id: str) -> Order`\n- `InventoryService.release_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.get_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.available(sku, warehouse)` must take holds into account.\n- `inventory.models`: dataclass `Reservation` with `reservation_id: str`, `warehouse: str`, `items: dict[str, int]` (units held per SKU), `status: ReservationStatus`, `expires_at: datetime`, `order_id: str | None`; enum `ReservationStatus` with members `ACTIVE`, `CONFIRMED`, `RELEASED`, `EXPIRED`.\n- `inventory.errors`: new `ReservationNotFound`, `ReservationExpired`, `InvalidReservationState`, `IdempotencyConflict` (all subclass `InventoryError`); reuse the existing errors where they fit.\n- Time comes only from the injected clock. There is no background job: expiry must take effect without anyone calling a sweep.\n\nI own the business rules — ask me if something is unclear.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 01:48:24 socat[3245146] W exiting on signal 15\n",
+ "wall_s": 60.6,
+ "result": "I've read the whole package (service, models, errors, repository, reports, tests, README). Some context from the code that shapes these questions:\n\n- `available = on_hand − allocated`, where **allocated** means units promised to `PLACED` orders. `place_order` checks against `available()`, so once holds count toward it, direct orders automatically can't take held stock.\n- The existing model already allows over-allocation: `adjust()` can write off stock below what's allocated, and `available` is floored at 0. Only `ship_order` checks physical stock.\n- `StockRow` in `reports.py` has `on_hand / allocated / available`. Once holds exist, those three columns won't add up any more.\n\nHere is the first round.\n\n---\n\n❓ **Q1** - **Naming: what is a \"hold\" called?** Your brief uses \"hold\", \"reservation\" and \"lapse\" for overlapping ideas. My proposal for the glossary:\n- **Reservation**: a time-limited claim on stock for one cart, in one warehouse. Avoid: hold, lock, cart allocation.\n- **Reserved** (quantity): units of a SKU under *active* reservations. It is separate from **Allocated**, which stays \"promised to PLACED orders\".\n- **Available** = on-hand − allocated − reserved, floored at 0.\n- **Expire** (not \"lapse\" or \"time out\"): an active reservation passing its `expires_at` with nobody acting on it. **Release**: the cart explicitly gives the reservation up. **Confirm**: the reservation turns into a PLACED Order.\n\n➡️ Yes, use these terms, and keep \"allocated\" meaning orders only.\n\n---\n\n❓ **Q2** - **Hold duration**: How long does a reservation live? `reserve()`'s signature is fixed, so the duration can't be passed per call. Options: (a) a hard-coded constant, (b) an optional keyword-only constructor argument, `InventoryService(repo, ledger, clock, reservation_ttl=timedelta(minutes=15))`, so existing calls keep working, (c) a per-warehouse setting.\n\n➡️ (b), with a default of **15 minutes** from the moment of reserving.\n\n---\n\n❓ **Q3** - **Expiry boundary**: At exactly `now == expires_at`, has the reservation expired?\n\n➡️ Yes. A reservation is live only while `now < expires_at`. At `expires_at` it stops counting toward Reserved, `get_reservation` reports `EXPIRED`, and it can no longer be confirmed.\n\n---\n\n❓ **Q4** - **Confirming an expired reservation**: If the cart calls `confirm_reservation` after `expires_at` (for example, payment was slow), what happens? (a) raise `ReservationExpired` and the cart must reserve again, or (b) quietly \"revive\" it if the stock is still available.\n\n➡️ (a). Raise `ReservationExpired` and don't change any state. The reservation stays `EXPIRED`.\n\n---\n\n❓ **Q5** - **Retrying confirm**: If `confirm_reservation` is called again on a reservation that's already `CONFIRMED` (say, the cart's network timed out on the first call), should it return the **same** Order again instead of raising?\n\n➡️ Yes. Return the existing order (`order_id` is stored on the reservation) and never create a second one. Confirming a `RELEASED` reservation raises `InvalidReservationState`.\n\n---\n\n❓ **Q6** - **Releasing in each state**:\n- `ACTIVE` → becomes `RELEASED` and the stock frees up immediately.\n- `RELEASED` (a retry) → return it unchanged, no error.\n- `EXPIRED` → return it unchanged with status still `EXPIRED`, no error. The cart wanted the stock freed and it already is.\n- `CONFIRMED` → raise `InvalidReservationState`. To undo a confirmed reservation, cancel the order instead.\n\n➡️ Yes, exactly that table. (The alternative for `EXPIRED` would be to raise `ReservationExpired`. Say so if you prefer strict.)\n\n---\n\n❓ **Q7** - **Idempotency key semantics**:\n- **Same key, same request** (same warehouse and the same `items` dict, ignoring key order) → return the original reservation **as it is now**, even if it has since been confirmed, released or expired. No new reservation, no new stock check. A new checkout attempt needs a new key.\n- **Same key, different request** → `IdempotencyConflict`.\n- **Scope**: keys are global, not per warehouse, and are remembered forever (for as long as the repository lives).\n- **Failed attempts don't use up the key**: if `reserve` raises (say `InsufficientStock`), nothing is recorded, so retrying the same key can succeed once stock arrives.\n\n➡️ Yes to all four.\n\n---\n\n❓ **Q8** - **Does confirm re-check stock?** Between reserve and confirm, someone could write off stock with `adjust()` so that on-hand drops below what's reserved. Should confirm (a) always succeed, because the reservation was a promise (this matches how PLACED orders already tolerate write-offs and only `ship_order` checks physical stock), or (b) re-check and raise `InsufficientStock`?\n\n➡️ (a). Confirm moves the units from reserved to allocated without re-checking. Any shortfall comes up at shipping, the same way it does today.\n\n---\n\n❓ **Q9** - **What does confirm produce?** A normal `PLACED` Order with the next `ORD-` id, `placed_at` set to the confirm time, and the same lines as the reservation. After that it lives the normal order life: shipping or cancelling it never touches the reservation again, which stays `CONFIRMED`.\n\n➡️ Yes.\n\n---\n\n❓ **Q10** - **Validating `reserve`**: Should it behave like `place_order` and be all or nothing? That means reusing `UnknownWarehouse`, `UnknownSku`, `InvalidQuantity` and `InsufficientStock` (measured against availability *after* other reservations), and `InvalidOrder` for empty `items`. That error name says \"order\", but it's the existing error for \"request has no lines\".\n\n➡️ Yes. Reuse `InvalidOrder` for empty items rather than adding a new error.\n\n---\n\n❓ **Q11** - **Back-office stock report**: Once reservations exist, `on_hand − allocated ≠ available` in `stock_report`. Should I add a `reserved` column to `StockRow` (and a `service.reserved(sku, warehouse)` query), or leave the report as it is?\n\n➡️ Yes. Add a `reserved` column (with `service.reserved()`) so each row still adds up.",
+ "is_error": false,
+ "num_turns": 9,
+ "total_cost_usd": 0.32908400000000004,
+ "usage": {
+  "input_tokens": 8,
+  "cache_creation_input_tokens": 24414,
+  "cache_read_input_tokens": 79500,
+  "output_tokens": 5892,
+  "output_tokens_details": {
+   "thinking_tokens": 3059
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 24414,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 5892,
+   "cacheReadInputTokens": 79500,
+   "cacheCreationInputTokens": 24414,
+   "webSearchRequests": 0,
+   "costUSD": 0.32908400000000004,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 3059,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 24414,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 60043,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "b6f42b5f-f1a5-4066-a747-e42d1adf869a"
+}

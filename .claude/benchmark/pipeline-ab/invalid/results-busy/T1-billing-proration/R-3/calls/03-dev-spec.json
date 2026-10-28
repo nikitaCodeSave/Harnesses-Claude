@@ -1,0 +1,84 @@
+{
+ "n": 3,
+ "label": "spec",
+ "role": "dev",
+ "session": "9e1e639f-c110-41ae-a9a5-785f8e199e4f",
+ "resume": true,
+ "prompt": "Answers by number:\n\n**1.** Agree with (b), with one addition. A switch between monthly and annual also waits for the end of the period, in both directions. We never refund unused annual time. Nothing is billed at the request, and `change_plan` returns `None`. The renewal on the period end starts a period of the new interval at that interval's full price.\n\n**2.** No credit should ever arise. Downgrades and interval switches are deferred, so nothing is refunded, credited or forfeited. No credit balance is needed.\n\n**3.** Don't use cost per day. Compare the plans' monthly list prices, whichever interval the customer is on or moving to. A more expensive plan is an upgrade and a cheaper one is a downgrade. Your Pro monthly to Basic annual example is a downgrade, so it is deferred. Changing only the interval on the same plan is neither.\n\n**4.** Not as you proposed.\n- (a) An upgrade never moves the billing period. The start and end stay the same, and the next renewal bills the new plan at full price.\n- (b) An interval switch never starts a new period today. It happens at the period end.\n- An upgrade combined with an interval switch is split. The upgrade applies now, prorated at the prices of the current interval. The interval switch is scheduled for the period end.\n\n**5.** Mostly agree.\n- Remaining days count from the change date, inclusive, up to `period_end`, exclusive. Days in the period are real calendar days.\n- Each of the two lines is price × remaining days ÷ period days, computed exactly with no rounded daily rate. Each is rounded half-up to cents on its own, and the total is the sum of the two rounded lines.\n- Both lines use the prices of the interval the customer is currently on.\n- Example: Pro to Premium on Mar 11 in a Mar 1–Apr 1 period gives −20.32 and +50.81, total 30.49.\n\n**6.**\n- Canceled raises `SubscriptionNotActive`, unknown plan raises `PlanNotFound`, and a retired target raises `PlanNotAvailable`. Leaving a retired plan is allowed.\n- Same plan and same interval depends on state. If a change is scheduled, the request cancels it, returns `None` and bills nothing. If nothing is scheduled, raise `InvalidPlanChange`.\n- Trial: any change applies immediately in full, covering plan and interval, whether up, down or interval. It returns `None` with no invoice, and the trial end date doesn't move. At trial end the customer is billed the full price of the plan and interval they are on by then.\n- Overdue renewal: I don't mind, so use your recommendation.\n- Any rejected request changes nothing, with no invoice and the subscription untouched.\n\n**7.** Agree with one pending change at a time. Each request states the full target (plan and interval) and replaces whatever was scheduled. An upgrade applied now also discards anything scheduled, unless the same request schedules an interval switch itself. A scheduled change hasn't happened yet, so an upgrade requested while a downgrade is pending is prorated from the current plan. Example: on Pro with Basic scheduled, then Premium requested on Mar 11, the invoice is 30.49. How the pending change is stored on `Subscription` is up to you.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:39:48 socat[755709] W exiting on signal 15\n",
+ "wall_s": 21.2,
+ "result": "That settles almost everything. Your examples check out, assuming Premium is $75/month: 30 × 21/31 = 20.32 and 75 × 21/31 = 50.81. A few gaps remain, mostly created by the new rules:\n\n**8. Monthly and annual prices that rank differently.** Upgrades are classified by monthly price but prorated at the current interval's prices. Suppose plan X is $40/month but $350/year and plan Y is $35/month but $380/year. An annual customer \"upgrading\" from Y to X would then get a negative proration, which is a credit. Options:\n- (a) Reject with `InvalidPlanChange`.\n- (b) Treat it as an upgrade anyway and allow the credit.\n- (c) Classify by the current interval's price instead.\n- *Recommendation: (a).* It keeps \"no credit ever arises\" true.\n\n**9. Equal monthly prices on different plans.** Two plans can have the same monthly list price. Is a switch between them deferred like a downgrade, or rejected?\n- *Recommendation:* defer it to the period end, like a downgrade.\n\n**10. Upgrade whose rounded total is $0.00.** Example: $10.00 to $10.01 on the last day of a period. Both lines round to 0.32.\n- *Recommendation:* still apply the upgrade now and issue the two-line invoice with a 0.00 total, so the change has a record.\n- The alternative is to apply it and return `None`.\n\n**11. Retirement and scheduled changes.**\n- (a) Suppose a downgrade to Basic is scheduled, then Basic is retired before the period end. *Recommendation:* the scheduled change still applies, since it was sold while Basic was active.\n- (b) Suppose the customer is on a retired plan and asks only to switch interval, keeping the same plan. That plan is the \"target\", but they aren't buying a new plan. *Recommendation:* allow it.\n\n**12. Catch-up renewals.** If `renew_due` bills several overdue periods at once, the scheduled change applies at the first renewal, and every later period in the catch-up is on the new plan and interval. I'm assuming this; tell me if you disagree.",
+ "is_error": false,
+ "num_turns": 1,
+ "total_cost_usd": 0.2699476,
+ "usage": {
+  "input_tokens": 2,
+  "cache_creation_input_tokens": 3949,
+  "cache_read_input_tokens": 28110,
+  "output_tokens": 1872,
+  "output_tokens_details": {
+   "thinking_tokens": 1157
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 3949,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 4365,
+   "thinkingTokens": 2178,
+   "cacheReadInputTokens": 76038,
+   "cacheCreationInputTokens": 20926,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 20926,
+   "webSearchRequests": 0,
+   "costUSD": 0.2699476,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 20659,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "9e1e639f-c110-41ae-a9a5-785f8e199e4f"
+}

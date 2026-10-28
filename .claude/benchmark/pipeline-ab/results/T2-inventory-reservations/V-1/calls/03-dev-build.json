@@ -1,0 +1,84 @@
+{
+ "n": 3,
+ "label": "build",
+ "role": "dev",
+ "session": "27b589ca-0ee6-4d3e-a9b4-125d16d1e606",
+ "resume": true,
+ "prompt": "1. No, 20 minutes from creation, fixed. A retry doesn't extend it. Expired from expires_at on, that instant included. Agreed on that part.\n\n2. Agreed on all of it: the key stays bound for good, and a retry with a different warehouse or items gives IdempotencyConflict even if the original is finished. A failed reserve leaves no trace, so the key can be reused. One note: \"same request\" means the same requested items, not what was actually held.\n\n3. Agreed. Confirming an already-confirmed reservation returns the same order and creates nothing, even after the 20 minutes. Expired gives ReservationExpired, released gives InvalidReservationState. Available doesn't change at confirm, because the hold becomes the order's allocation.\n\n4. Agreed on all of it. Releasing a released or expired reservation returns it unchanged, with no error.\n\n5. Confirming anyway is fine. receive and adjust are never blocked by holds. If a write-off leaves on-hand below what is held, available shows 0 and the reservations stay as they are.\n\nOn your list of extras:\n- Validation: same checks as place_order (UnknownWarehouse, UnknownSku, InvalidQuantity), and a rejected request holds nothing. But \"all lines or nothing\" is wrong for stock. Each line holds as many units as are available right now, up to what was asked. A line with nothing available is left out of items entirely. Only if no line can hold anything does reserve fail with InsufficientStock, and then nothing is created. place_order stays all-or-nothing.\n- available = on-hand − allocated to PLACED orders − active holds, per SKU per warehouse, floored at 0. A hold in one warehouse doesn't affect another.\n- Holds never write to the ledger or change on-hand.\n- Global keys are right.\n- The held column and held() query are fine.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 01:16:24 socat[3116150] W exiting on signal 15\n",
+ "wall_s": 135.4,
+ "result": "Stock reservations are in, following the rules you gave. All 56 tests pass: the 20 existing ones plus 36 new ones in `tests/test_reservations.py`, one or more for each rule. Nothing is committed yet.\n\n**How it works**\n- **Expiry needs no sweep.** Whenever a hold is read, it's checked against the clock. Once `now >= expires_at` it stops counting toward `held()` and `available()`, and from then on `get_reservation`, `confirm` and `release` all see it as `EXPIRED`. One catch: a `Reservation` object a caller got earlier won't change its own `status` until something reads it again through the service.\n- **Retries:** each idempotency key is stored with the warehouse and the items *requested*, not the items actually held. A repeat of the same request (dict order doesn't matter) gets back the original reservation, whatever state it's in now. A different request with the same key raises `IdempotencyConflict`. A key is only stored after a successful `reserve`, so a failed call uses up neither the key nor a reservation ID.\n- **`reserve`** checks the request the same way `place_order` does (unknown warehouse or SKU, bad quantity, empty request), then holds as much of each line as is available, up to the amount asked. Lines with nothing available are left out. It raises `InsufficientStock` only when nothing at all can be held.\n- **`confirm_reservation`** turns the held items into a `PLACED` order through the same order-creation code `place_order` now uses. It doesn't re-check stock, so `available` stays the same. Confirming again returns the same order and creates nothing.\n- **Untouched:** holds never write to the ledger, and `receive`, `adjust` and `place_order` work as before, except that `place_order` now sees less available stock while holds exist.\n\n**Additions**\n- **`held(sku, warehouse)`**: new query. `available` is now on-hand minus allocated minus held, floored at 0.\n- **`StockRow.held`**: new report column, defaulting to `0`. Existing comparisons using four arguments still work.\n- **Hold length:** a `RESERVATION_TTL` constant (20 minutes) in `service.py`.\n- **Reservation IDs:** formatted `RES-0001`, `RES-0002`, and so on.\n- **`models.py`:** `Reservation` has exactly the fields you specified. The stored request behind each idempotency key is kept separately, in a small `ReservationRequest` record in the repository.\n- **Errors:** the four new ones subclass `InventoryError`. An empty `reserve` request reuses the existing `InvalidOrder` error, as `place_order` does.\n- **Docs:** the README describes the reservation lifecycle and the rules.\n\nOne edge case I didn't ask you about: the idempotency key is looked up only after the request passes validation. So a malformed request that reuses a key gets the validation error (e.g. `InvalidQuantity`), not `IdempotencyConflict`.",
+ "is_error": false,
+ "num_turns": 14,
+ "total_cost_usd": 0.9261812000000001,
+ "usage": {
+  "input_tokens": 18,
+  "cache_creation_input_tokens": 23745,
+  "cache_read_input_tokens": 385301,
+  "output_tokens": 16931,
+  "output_tokens_details": {
+   "thinking_tokens": 4042
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 23745,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 24,
+   "outputTokens": 20519,
+   "thinkingTokens": 6389,
+   "cacheReadInputTokens": 422366,
+   "cacheCreationInputTokens": 53904,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 53904,
+   "webSearchRequests": 0,
+   "costUSD": 0.9261812000000001,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 134899,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "27b589ca-0ee6-4d3e-a9b4-125d16d1e606"
+}

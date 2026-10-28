@@ -249,13 +249,13 @@ Emit hook lifecycle events for observability tooling. Use for:
 
 «Deeper coordination pairs with more explicit context services»; «stronger execution environments with more structured governance.»
 
-**Implication для нашего harness'а**: main-thread orchestration policy (subagent spawn only при isolation/parallelism/auto-compact-rescue) — deliberate position, не default. Multi-level recursive ≠ universally bad; для production-critical / multi-day autonomous работы opt-in допустим (D-022 в [principles.md](principles.md)).
+**Implication для нашего harness'а**: main-thread orchestration policy (subagent spawn only при isolation/parallelism/independent review) — deliberate position, не default. Multi-level recursive ≠ universally bad; для production-critical / multi-day autonomous работы opt-in допустим (D-022 в [principles.md](principles.md)).
 
 ---
 
 ## Sources
 
-- [code.claude.com/docs/en/changelog](https://code.claude.com/docs/en/changelog) — dispatch flags, worktree settings, cross-session messaging (актуальный срез фич — `native-capabilities.md` в ките)
+- [code.claude.com/docs/en/changelog](https://code.claude.com/docs/en/changelog) — dispatch flags, worktree settings, cross-session messaging (актуальный срез фич — `native-capabilities.md`)
 - [code.claude.com/docs/en/agent-view](https://code.claude.com/docs/en/agent-view) — agent view feature
 - [claude.com/blog/agent-view-in-claude-code](https://www.claude.com/blog/agent-view-in-claude-code)
 - [claude.com/blog — How Anthropic secures its AI-native SDLC](https://claude.com/blog/how-anthropic-secures-its-ai-native-software-development-lifecycle) — hard access boundaries, инцидент agent-to-agent

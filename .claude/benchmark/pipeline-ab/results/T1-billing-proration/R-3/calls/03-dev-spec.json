@@ -1,0 +1,84 @@
+{
+ "n": 3,
+ "label": "spec",
+ "role": "dev",
+ "session": "7e9caaed-7cfd-4782-b3e5-ed67838e7e72",
+ "resume": true,
+ "prompt": "1. Keep the anchor (a) for every upgrade, including when an interval switch comes with it. The upgrade happens now, prorated at the prices of the interval the customer is currently on. The interval switch waits until the period end, and the renewal then starts a period of the new interval at its full price. Don't restart the period.\n\n2. Yes to (a): defer to period end. Nothing is billed or credited, change_plan returns None, and the renewal moves them to the cheaper plan at its full price. Only one change can be scheduled at a time. Each request states the full target (plan + interval) and replaces whatever was scheduled before. An upgrade that applies now also discards anything scheduled, unless the same request itself schedules an interval switch. An upgrade requested while a downgrade is pending is prorated from the current plan, since the downgrade hasn't happened yet. Asking for the plan and interval they already have cancels a pending change and returns None. If nothing is pending, raise InvalidPlanChange.\n\n3. Don't compare prorated values. Upgrade vs downgrade is decided by the plans' monthly list price, whatever interval the customer is on or moving to. A more expensive plan is an upgrade and a cheaper one is a downgrade. A same-plan interval switch is neither, and it always waits for the period end, in both directions (monthly→annual too). Nothing is billed at the request. The renewal starts the new interval and bills its full price. We never refund unused annual time.\n\n4. Calendar days, with remaining days counted from the change date inclusive to period_end exclusive. Days in the period are real calendar days (28-31 for a month, 365/366 for a year). Each line is computed exactly as price × remaining days / period days, with no rounded daily rate in between. Each line is rounded half-up to cents on its own, and the total is the sum of the two rounded lines. Don't round the net difference instead. The invoice is issued on the change date and recorded like any other invoice. Example: Pro→Premium on Mar 11 in a Mar 1–Apr 1 period gives 21/31, lines -20.32 and +50.81, total 30.49.\n\n5. Edge cases:\n- Trial: yes, but any change applies immediately, whether up, down or an interval switch. Plan and interval both switch now, nothing is billed, and it returns None. The trial end date doesn't move. At trial end the customer is billed the full price of whatever plan and interval they're on by then.\n- Canceled: SubscriptionNotActive. Correct.\n- Unknown plan: PlanNotFound. Retired target: PlanNotAvailable. Moving off a retired plan is allowed. Correct.\n- Same plan and interval: as in 2, cancel if something is pending, otherwise InvalidPlanChange.\n- Overdue renewal: I don't mind, so use your recommendation.\n- First day of the period: fine.\n- Zero-net upgrade: I don't mind whether it records an invoice.\n- Any rejected request changes nothing: no invoice, and the subscription is untouched.\n\n6. Non-goals: those are fine as listed.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 02:17:51 socat[3363083] W exiting on signal 15\n",
+ "wall_s": 25.8,
+ "result": "Your answers cover almost everything. Three gaps remain, all caused by the rule that compares monthly list prices:\n\n1. **Two different plans with the same monthly list price.** By that rule the change is neither an upgrade nor a downgrade. I'd treat it like a downgrade: deferred to period end, nothing billed now. Rejecting it with `InvalidPlanChange` is the other option.\n\n2. **An upgrade whose invoice would go negative.** The monthly price decides that it's an upgrade, but proration uses the current interval's prices. If the customer is on annual and the \"more expensive\" plan has a *lower* annual price, the upgrade invoice comes out negative. I'd reject it with `InvalidPlanChange`, since the non-goals say we never issue refunds. Alternatively we accept the negative invoice. A third option is to defer it like a downgrade, which I'd choose if you'd rather not expose an error that only bad pricing data can trigger.\n\n3. **Target plan retired after a change was scheduled but before the renewal.** I'd honour the scheduled change, because the customer committed to it while the plan was still sellable. This matches \"existing customers keep renewing on retired plans\". The alternative is to drop the change at renewal.\n\nFor the overdue renewal I'll use my recommendation (`InvalidPlanChange`). The spec will allow either behaviour for a zero-net upgrade.",
+ "is_error": false,
+ "num_turns": 1,
+ "total_cost_usd": 0.2807536,
+ "usage": {
+  "input_tokens": 2,
+  "cache_creation_input_tokens": 3824,
+  "cache_read_input_tokens": 28003,
+  "output_tokens": 2236,
+  "output_tokens_details": {
+   "thinking_tokens": 1779
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 3824,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 4967,
+   "thinkingTokens": 2763,
+   "cacheReadInputTokens": 79148,
+   "cacheCreationInputTokens": 20694,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 20694,
+   "webSearchRequests": 0,
+   "costUSD": 0.2807536,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 25222,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "7e9caaed-7cfd-4782-b3e5-ed67838e7e72"
+}

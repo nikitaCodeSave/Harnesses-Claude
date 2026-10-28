@@ -1,0 +1,84 @@
+{
+ "n": 3,
+ "label": "spec+build",
+ "role": "dev",
+ "session": "b53a734f-b75c-45cc-a885-0dfe84fd5ba4",
+ "resume": true,
+ "prompt": "Overrides:\n\n1. The hold lasts 20 minutes, not 15 (most payments finish within 18). A constructor option is fine.\n\nMissing from your list: reserve is partial, not all-or-nothing. Each line holds as many units as are available right now, up to what was asked. A line with nothing available is left out of `items` entirely (not even with 0). `reserve` fails with `InsufficientStock` only when no line can hold anything, and then nothing is created. This changes item 12 (\"nothing is held for any line\") for the not-enough-stock case only. A rejected request, such as an unknown SKU or a bad quantity, still holds nothing at all, not even for its valid lines. `place_order` stays all-or-nothing, but it can only take available stock (net of holds).\n\n7. Confirming again returns the same order, even after the 20 minutes have passed. Confirm creates a PLACED order for exactly the units held (after a partial hold, only those). `available` doesn't change at confirm, because the hold becomes the order's allocation.\n\nAlso: reserve, release, expire and confirm never write to the ledger or change on-hand. `receive` and `adjust` are never blocked by holds. If a write-off drops on-hand below what is held, `available` shows 0 and the reservations stay as they are.\n\nDefaults OK on 2-6, 8, 9 (expired release returns it unchanged), 10, 11, 13, and 12 apart from the change above. Empty items raising `InvalidOrder` is fine.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:25:37 socat[690131] W exiting on signal 15\n",
+ "wall_s": 157.8,
+ "result": "Stock reservations are built and the full test suite passes: 20 existing tests plus 40 new ones in `tests/test_reservations.py`. Each new test is named after the spec criterion it covers (`test_01_…` through `test_25_…`), so every one of the 25 criteria has at least one test.\n\n```\n$ python3 -m pytest -q\n............................................................             [100%]\n60 passed in 0.04s\n```\n\n**Spec.** `SPEC.md` has the interface copied verbatim from your request, the lifecycle, the 25 acceptance criteria and the non-goals. Your overrides are in it: the 20-minute hold, partial reserve, confirm-again returning the same order, and the rules on the ledger and write-offs.\n\n**Two decisions I made myself (noted in the spec):**\n- **Retries are matched on the request as sent**, not on the units actually held. If a retry comes in after a restock, it still gets back the original partial hold rather than a new, larger one.\n- **When nothing can be held**, `InsufficientStock` names the first requested line, with `available == 0`.\n\n**How expiry works without a background job.** Whenever a reservation is read — through `get_reservation`, confirm, release, an idempotent retry or the `available` calculation — it is checked against the injected clock. If `now >= expires_at`, it is marked `EXPIRED` and its units are free again. No sweep call is needed.\n\n**What changed:**\n- `models.py`: the `Reservation` dataclass and the `ReservationStatus` enum, both also exported from the `inventory` package.\n- `errors.py`: the four new errors, all subclasses of `InventoryError`.\n- `repository.py`: storage for reservations, `RES-0001`-style IDs, and the idempotency-key index. A key is only recorded once a reserve succeeds, so a failed reserve doesn't use it up.\n- `service.py`:\n  - `reserve`, `confirm_reservation`, `release_reservation` and `get_reservation`.\n  - `available` now subtracts active holds, so `place_order` and `stock_report` take holds into account without any change of their own.\n  - The hold length can be set with `InventoryService(repo, ledger, clock, reservation_ttl=timedelta(...))`; it defaults to 20 minutes, and the 3-argument constructor still works.\n- `README.md`: describes held stock and the reservation lifecycle.\n\nI haven't committed anything.",
+ "is_error": false,
+ "num_turns": 11,
+ "total_cost_usd": 0.8161182,
+ "usage": {
+  "input_tokens": 18,
+  "cache_creation_input_tokens": 23637,
+  "cache_read_input_tokens": 352921,
+  "output_tokens": 17599,
+  "output_tokens_details": {
+   "thinking_tokens": 2447
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 23637,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 26,
+   "outputTokens": 20435,
+   "thinkingTokens": 3732,
+   "cacheReadInputTokens": 427811,
+   "cacheCreationInputTokens": 40219,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 40219,
+   "webSearchRequests": 0,
+   "costUSD": 0.8161182,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 157288,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "b53a734f-b75c-45cc-a885-0dfe84fd5ba4"
+}

@@ -1,0 +1,93 @@
+{
+ "n": 1,
+ "label": "spec",
+ "role": "dev",
+ "session": "9c767ece-1a8f-47ff-a8a0-345ef2acdb3c",
+ "resume": false,
+ "prompt": "Customers can't change plan right now: support has to cancel and resubscribe them by hand.\nAdd mid-cycle plan changes to the billing package: upgrades and downgrades, optionally\nswitching between monthly and annual billing, prorated so nobody pays twice for the same days.\n\nInterface (other code will call exactly this):\n- `BillingService.change_plan(subscription_id: str, new_plan_code: str, new_interval: Interval | None = None) -> Invoice | None`\n  in `src/billing/service.py`. `new_interval=None` keeps the subscription's current interval.\n- Return the invoice issued for the change (recorded in the store like every other invoice),\n  or `None` when nothing is billed at the moment of the request.\n- Add `InvalidPlanChange(BillingError)` to `src/billing/errors.py` for change requests that\n  can't be honoured; keep using the existing error classes where they already fit.\n\nInterview me until you could write the spec, then write it to SPEC.md. The spec says what and why (acceptance criteria as checkable statements, non-goals), not how. Copy any interface my request fixes (module paths, signatures, error classes) into it verbatim.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 10:29:42 socat[941484] W exiting on signal 15\n",
+ "wall_s": 34.5,
+ "result": "I've read the package. Some facts that shape the questions:\n\n- An invoice counts as the charge. There's no payment status, no customer credit balance, and no refund path (`cancel` says \"No refund\").\n- `LineItem` doesn't reject negative amounts, so an invoice could technically total less than zero.\n- Subscriptions can be `TRIALING`, `ACTIVE` or `CANCELED`. Plans can be retired or free (price 0). `renew_due` catches up overdue periods.\n\n**Round 1: the core money policy**\n\n1. **Downgrades: immediate or at period end?** When the customer moves to something cheaper, their unused credit is bigger than the new charge. With no credit balance or refunds today, the leftover has to go somewhere. Options:\n   - (a) **Schedule downgrades for the end of the current period.** Nothing is billed now, so we return `None`. The next renewal bills the new plan and interval at full price. Nobody overpays and no credit mechanism is needed. *(My recommendation. It also explains why the interface allows `None`.)*\n   - (b) Apply immediately and issue a negative-total invoice, i.e. a credit note.\n   - (c) Apply immediately and add a stored credit balance that later invoices consume. This is much bigger scope.\n   \n2. **What counts as an upgrade?** I'd define it by money: a change is an upgrade if the new plan/interval's prorated charge for the time left is greater than the credit for the unused current period. Switching to a more expensive plan at the same interval is the obvious case. Is a monthly→annual switch on the *same* plan an upgrade, billed now? Is annual→monthly a downgrade, scheduled?\n\n3. **Upgrade mechanics.** For a same-interval upgrade, I assume the period dates stay the same and we charge the price difference prorated over the remaining days. When the interval changes (e.g. monthly basic → annual pro), I assume a **new period starts today**: credit the unused part of the current period, charge the full new annual price, one invoice with both lines. OK?\n\n4. **Proration unit:** I propose calendar days. Remaining days = `period_end − today`, divided by the total days in the current period, each line rounded half-up to cents. The day of the request counts as unused, so a change on `period_start` gives a full credit. Agree, or do you want the request day charged at the old plan?",
+ "is_error": false,
+ "num_turns": 12,
+ "total_cost_usd": 0.1949758,
+ "usage": {
+  "input_tokens": 8,
+  "cache_creation_input_tokens": 15760,
+  "cache_read_input_tokens": 71019,
+  "output_tokens": 2733,
+  "output_tokens_details": {
+   "thinking_tokens": 938
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 15760,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 2733,
+   "cacheReadInputTokens": 71019,
+   "cacheCreationInputTokens": 15760,
+   "webSearchRequests": 0,
+   "costUSD": 0.1949758,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 938,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 15760,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 33933,
+ "permission_denials": [
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01EQ4nZvfMASAuR4WUAJM31a",
+   "tool_input": {
+    "command": "cd src/billing && for f in *.py; do echo \"=== $f\"; cat $f; done",
+    "description": "Read all billing source files"
+   }
+  }
+ ],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "9c767ece-1a8f-47ff-a8a0-345ef2acdb3c"
+}

@@ -43,9 +43,11 @@ last-updated: 2026-09-19
 
 | Trigger                          | Пример                                  | Wall-clock cut?      | Token cost |
 | -------------------------------- | --------------------------------------- | -------------------- | ---------- |
-| (а) Изоляция контекста           | broad codebase scan, 50+ files, log dive | нет                  | 4-15×      |
+| (а) Изоляция шумного вывода      | broad codebase scan, 50+ files, log dive | нет                  | 4-15×      |
 | (б) Параллельность               | N независимых verifications/researches  | да: max(N) vs sum    | 4-15×      |
-| (в) Auto-compact rescue          | редко при 1M context                    | n/a                  | 4-15×      |
+| (в) Независимое ревью            | ревью ветки против `SPEC.md`, рефьютер §8, приёмочные тесты из спеки | нет | 4-15× |
+
+Защита контекстного окна сама по себе — не триггер: *«Running out of context is rarely the problem anymore»* ([best-practices](https://code.claude.com/docs/en/best-practices), «What you can stop doing»). Делегирование той же задачи ответ не улучшает; помогает свежий ревьюер, потому что не видел рассуждений автора.
 
 ### 2.2 Bad fit (Anthropic explicit)
 
@@ -53,6 +55,7 @@ last-updated: 2026-09-19
 - Tasks где **все agents требуют full context** — изоляция бесполезна.
 - **Single dependency chain** (A → B → C) — sequential calls = N× tokens, 0 выигрыша.
 - **Trivial task** — main thread с полным контекстом проекта быстрее.
+- **Параллельные исполнители на ограниченной задаче.** Контролируемый замер (arXiv 2610.10263, 354 задачи, 2 124 прогона): параллельные субагенты в Claude Code на SWE-bench Verified — 59% против 83% последовательно (p≈5·10⁻⁷), токенов ×1.4–3.3, время не сократилось в 14 из 15 комбинаций; крупнейший класс сбоев — общее состояние и слияние. Польза — только на длинных задачах с независимыми кусками.
 
 ---
 
@@ -102,7 +105,7 @@ skills:
 
 ## 4. Built-ins-first
 
-Перед созданием custom subagent — сверка с инвентарём built-in'ов (`native-capabilities.md` кита; `claude agents` типы не перечисляет — это менеджер фоновых сессий):
+Перед созданием custom subagent — сверка с инвентарём built-in'ов (`native-capabilities.md`; `claude agents` типы не перечисляет — это менеджер фоновых сессий):
 
 | Built-in            | Покрывает                                      | Заменяет custom-агентов |
 | ------------------- | ---------------------------------------------- | ----------------------- |
@@ -166,9 +169,9 @@ Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents =
 
 **Pattern 1 — Planner → Generator → Evaluator** (Anthropic canonical для long tasks; [Rajasekaran Mar 2026](https://www.anthropic.com/engineering/harness-design-long-running-apps), validated via leaked Claude Code internals: [generativeprogrammer.com](https://generativeprogrammer.com/p/12-agentic-harness-patterns-from)): Planner expand 1-4 sentence prompt → spec; Generator implement + self-eval; Evaluator independent QA, 5-15 critique-refine cycles. **Negotiated sprint contracts** — Generator+Evaluator agree on «done» (deliverables + success metrics) before code. **Evaluator взаимодействует с живым приложением как пользователь** (Playwright MCP) *перед* оценкой, calibrated few-shot + weighted criteria, explicitly skeptical против self-preference — это и есть judge≠author из §8 на практике. Cost-justified когда «task sits beyond what current model does reliably solo» (Rajasekaran). Anthropic **убрала из этого паттерна ручные context-resets / sprint-decomposition** («context anxiety» исчезла, automatic compaction достаточно) — не вводи их в harness обратно.
 
-**Pattern 2 — TDD triad** (test-writer / impl / refactorer): community evidence (AgentCoder 87.8% accuracy vs 61% single-agent — [alexop.dev](https://alexop.dev/posts/custom-tdd-workflow-claude-code-vue/); AgentShield Anthropic Hackathon winner — red/blue/auditor pipeline на 3 Opus агентах). **Banned в нашем harness'е per ADR-002** (см. §8) — single context + `rules/testing.md` invariants заменяют. Documented здесь только для cross-reference на community claims.
+**Pattern 2 — TDD triad** (test-writer / impl / refactorer): community evidence (AgentCoder 87.8% accuracy vs 61% single-agent — [alexop.dev](https://alexop.dev/posts/custom-tdd-workflow-claude-code-vue/); AgentShield Anthropic Hackathon winner — red/blue/auditor pipeline на 3 Opus агентах). **Banned в нашем harness'е per ADR-002** (см. §8), а с 2026-10-27 снят и сам TDD (`rules/testing.md`). Documented здесь только для cross-reference на community claims.
 
-**Pattern 3 — Driver-Navigator** (Opus+Sonnet pair): Navigator (топовая Opus, strategic) — PLAN/RED/REVIEW, никогда impl; Driver (Sonnet-тир, tactical) — GREEN/REFACTOR, никогда не пишет/модифицирует тесты. Source: [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009).
+**Pattern 3 — Driver-Navigator** (Opus+Sonnet pair): Navigator (топовая Opus, strategic) — PLAN/RED/REVIEW, никогда impl; Driver (Sonnet-тир, tactical) — GREEN/REFACTOR, никогда не пишет/модифицирует тесты. Source: [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009). Не применяется: построен на RED/GREEN-ролях. Переносимое ядро — исполнитель не пишет и не правит приёмочные тесты — живёт в `workflow.md` § Check.
 
 Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Chachamaru127/claude-code-harness) — formal Plan→Work→Review с worker/reviewer/scaffolder + Go-native guardrails + breezing mode для parallel + опциональная harness-mem.
 
@@ -186,6 +189,7 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 - **Промпт на опровержение**, не на подтверждение, и `--sandbox read-only` для ревью — ревьюеру запись не нужна по определению.
 - **Вывод — сырьё для триажа, не список задач.** Реальные находки идут вперемешку с уже задокументированными резидуалами и с adversarial-обфускацией, защищаться от которой бессмысленно. Ретрансляция as-is даёт 16 «багов» вместо 5.
 - **Каждую находку воспроизводить самому** — падающим тестом до фикса. Агент другого вендора ошибается так же, как свой.
+- **Направление ревью решает.** В контролируемом замере (arXiv 2607.21656, 116 задач, статический ревьюер) ревью Codex по решениям Claude снизило результат на 8.6 п.п. (13 регрессий против 3 исправлений), а ревью Claude по решениям Codex подняло на 18.1. Более слабый ревьюер, чьи находки применяются как есть, ухудшает сильного автора — поэтому предыдущий пункт обязателен, а не желателен.
 - **Цикл find→fix→refute не сходится сам.** Каждый следующий раунд находит новое, включая регрессии от предыдущих фиксов. Сигнал остановки — не «ничего не нашёл», а «находки перестали быть регрессиями и зависаниями»; плюс объективный слой рядом (дифференциальный прогон старой и новой версии на реальном корпусе команд).
 - **Модерация OpenAI отклоняет security-формулировки** («обходы», «разрушительные команды» → *flagged for possible cybersecurity risk*). Нейтральная формулировка того же запроса («ошибки разбора», «расхождения вердиктов») проходит.
 
@@ -197,7 +201,7 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 
 | Anti-pattern                                 | ADR / источник                  | Замена                                                    |
 | -------------------------------------------- | ------------------------------- | --------------------------------------------------------- |
-| TDD-тройка test-writer / impl / refactor     | ADR-002                         | Single context, фазы внутри одного прохода + `rules/testing.md` |
+| TDD-тройка test-writer / impl / refactor     | ADR-002; TDD снят 2026-10-27    | Приёмочные тесты из `SPEC.md` отдельным контекстом + `rules/testing.md` |
 | PM → Architect → Dev → QA pipeline           | meta-CLAUDE.md                  | Main thread + built-in `Plan` для design                  |
 | Generator/Evaluator контракт каждый sprint   | meta-CLAUDE.md                  | модель сама «devises ways to verify own outputs»; high-stakes — dynamic workflow opt-in |
 | Custom subagent дублирующий built-in         | ADR-007                         | сверка с инвентарём built-in'ов **до** создания           |

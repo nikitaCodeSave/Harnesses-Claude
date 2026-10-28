@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# pipeline-ab multi-session: S / K / PL on tasks-long/*, each run = F1 -> F2 -> F3 in new sessions.
+#   ./run_long.sh calibrate | full [N] | score | summary
+# PAB_JOBS parallel runs (default 4); results-long/, workspaces /tmp/pab-work-long; user mode busy.
+set -uo pipefail
+R="$(cd "$(dirname "$0")" && pwd)"
+export PAB_RESULTS="${PAB_RESULTS:-$R/results-long}" PAB_WORK="${PAB_WORK:-/tmp/pab-work-long}" PAB_USER_MODE="${PAB_USER_MODE:-busy}"
+JOBS="${PAB_JOBS:-4}"
+TASKS=$(cd "$R/tasks-long" && ls -d L*/ | tr -d /)
+one() {
+  if [ -f "$PAB_RESULTS/$1/$2-$3/score.json" ]; then echo "skip  $1 $2-$3"; return; fi
+  echo "[$(date +%H:%M:%S)] start $1 $2-$3"
+  python3 "$R/drive_long.py" --task "$1" --arm "$2" --rep "$3" && python3 "$R/score_long.py" run "$1" "$2-$3"
+  echo "[$(date +%H:%M:%S)] end   $1 $2-$3"
+}
+export -f one; export R
+case "${1:-}" in
+  calibrate) for t in $TASKS; do python3 "$R/score_long.py" calibrate "$t"; done ;;
+  full) for a in PL K S; do for i in $(seq 1 "${2:-3}"); do for t in $TASKS; do echo "$t $a $i"; done; done; done \
+          | xargs -P "$JOBS" -L1 bash -c 'one "$0" "$1" "$2"' ;;
+  score) for m in "$PAB_RESULTS"/*/*/meta.json; do d=$(dirname "$m"); python3 "$R/score_long.py" run "$(basename "$(dirname "$d")")" "$(basename "$d")"; done ;;
+  summary) python3 "$R/score_long.py" summary ;;
+  *) sed -n '2,4p' "$0"; exit 2 ;;
+esac

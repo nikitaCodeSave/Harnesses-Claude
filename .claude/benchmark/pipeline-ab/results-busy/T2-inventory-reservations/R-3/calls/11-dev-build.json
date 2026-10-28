@@ -1,0 +1,84 @@
+{
+ "n": 11,
+ "label": "build",
+ "role": "dev",
+ "session": "7dcfb6b8-faa5-47ef-8196-e12149fc436c",
+ "resume": false,
+ "prompt": "Build what SPEC.md describes. tests/acceptance/ is the agreed check and is read-only for you. Done means tests/acceptance/ and the existing test suite pass; report the command and its output.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:56:48 socat[818854] W exiting on signal 15\n",
+ "wall_s": 85.4,
+ "result": "Stock reservations are built as SPEC.md describes, and all tests pass: the 93 acceptance tests and the 20 existing ones. I didn't edit anything under `tests/`.\n\n**Command:**\n```\npython3 -m pytest -q -p no:cacheprovider tests\n```\n**Output:**\n```\n........................................................................ [ 63%]\n.........................................                                [100%]\n113 passed in 0.15s\n```\nRun separately, `tests/acceptance` gives `93 passed in 0.14s` and the existing suite (`--ignore tests/acceptance`) gives `20 passed in 0.01s`.\n\n**What changed**\n- **`models.py`**: adds the `ReservationStatus` enum (`ACTIVE`, `CONFIRMED`, `RELEASED`, `EXPIRED`) and a `Reservation` dataclass with the fields in the spec. Both are exported from `inventory`.\n- **`errors.py`**: adds `ReservationNotFound`, `ReservationExpired`, `InvalidReservationState` and `IdempotencyConflict`, all subclasses of `InventoryError`.\n- **`repository.py`**: stores reservations in memory with `RES-0001`-style ids. It also maps each idempotency key to the warehouse and items originally requested, plus the reservation id. A key is only recorded after a reservation is successfully created, so a failed call leaves nothing behind.\n- **`service.py`**:\n  - **Constructor:** gains a keyword-only `hold_duration=timedelta(minutes=20)`, so the three-argument form still works.\n  - **`reserve`:** checks the input first, then the idempotency key. A repeat call with the same warehouse and items returns the existing reservation as it is now; a different request raises `IdempotencyConflict`. Otherwise it holds `min(requested, available)` for each line and leaves out lines with nothing available.\n  - **`available`:** now subtracts units held by active reservations.\n\n**Behaviour where I made a choice**\n- **Expiry:** an `ACTIVE` reservation is switched to `EXPIRED` the next time anything reads it (`get_reservation`, `available`, `confirm`, `release` or a repeat `reserve`), once `clock.now() >= expires_at`. There is no background job, and the status change is saved.\n- **Confirm after a write-off (R30):** I chose outcome (a). Confirming always creates the order for the held items, even if on-hand has fallen below them, so `available` shows 0 in that case.\n- **Conflicting key plus invalid input:** the validation error is raised before `IdempotencyConflict`. The spec allows either.\n\nRunning the tests created an untracked `src/inventory/__pycache__/`. Nothing is committed.",
+ "is_error": false,
+ "num_turns": 22,
+ "total_cost_usd": 0.617052,
+ "usage": {
+  "input_tokens": 26,
+  "cache_creation_input_tokens": 38779,
+  "cache_read_input_tokens": 466880,
+  "output_tokens": 10667,
+  "output_tokens_details": {
+   "thinking_tokens": 1078
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 38779,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 26,
+   "outputTokens": 10667,
+   "cacheReadInputTokens": 466880,
+   "cacheCreationInputTokens": 38779,
+   "webSearchRequests": 0,
+   "costUSD": 0.617052,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1078,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 38779,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 84902,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "7dcfb6b8-faa5-47ef-8196-e12149fc436c"
+}

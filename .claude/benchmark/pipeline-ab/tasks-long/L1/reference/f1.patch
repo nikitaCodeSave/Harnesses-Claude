@@ -1,0 +1,322 @@
+diff -ruN base/src/lending/errors.py f1/src/lending/errors.py
+--- base/src/lending/errors.py	2026-10-28 11:18:58.160830024 +0300
++++ f1/src/lending/errors.py	2026-10-28 11:19:26.003541229 +0300
+@@ -69,3 +69,20 @@
+     def __init__(self, copy_id: str) -> None:
+         super().__init__(f"copy {copy_id!r} is not on loan")
+         self.copy_id = copy_id
++
++
++class AccountBlocked(LendingError):
++    """The member owes too much for what they are asking to do."""
++
++    def __init__(self, member_id: str, balance: object) -> None:
++        super().__init__(f"member {member_id!r} owes {balance}")
++        self.member_id = member_id
++        self.balance = balance
++
++
++class InvalidAmount(LendingError):
++    """A payment or charge amount the account can't accept."""
++
++    def __init__(self, amount: object, why: str) -> None:
++        super().__init__(f"invalid amount {amount}: {why}")
++        self.amount = amount
+diff -ruN base/src/lending/fines.py f1/src/lending/fines.py
+--- base/src/lending/fines.py	1970-01-01 03:00:00.000000000 +0300
++++ f1/src/lending/fines.py	2026-10-28 11:19:26.029392987 +0300
+@@ -0,0 +1,47 @@
++"""Overdue fines and money helpers."""
++
++from __future__ import annotations
++
++from datetime import date, timedelta
++from decimal import Decimal
++
++from . import policy
++from .errors import InvalidAmount
++from .models import Member, MemberCategory, Title
++
++CENT = Decimal("0.01")
++ZERO = Decimal("0.00")
++
++
++def late_days(due_on: date, on: date) -> int:
++    """Open days after ``due_on`` up to and including ``on``.
++
++    Closed days (Sundays) are not counted: nobody could have returned the copy.
++    """
++    days = 0
++    day = due_on + timedelta(days=1)
++    while day <= on:
++        if policy.is_open_day(day):
++            days += 1
++        day += timedelta(days=1)
++    return days
++
++
++def overdue_fine(title: Title, member: Member, due_on: date, on: date) -> Decimal:
++    """Fine for a copy of ``title`` due on ``due_on`` and handed back on ``on``."""
++    if member.category is MemberCategory.CHILD:
++        return ZERO
++    fine = policy.DAILY_FINE[title.material] * late_days(due_on, on)
++    return min(fine, title.replacement_cost).quantize(CENT)
++
++
++def money(amount: object) -> Decimal:
++    """Validate an amount handed in by staff: positive, whole cents."""
++    if isinstance(amount, bool) or not isinstance(amount, (Decimal, int)):
++        raise InvalidAmount(amount, "must be a Decimal")
++    value = Decimal(amount)
++    if not value.is_finite() or value <= 0:
++        raise InvalidAmount(amount, "must be positive")
++    if value != value.quantize(CENT):
++        raise InvalidAmount(amount, "must be in whole cents")
++    return value.quantize(CENT)
+diff -ruN base/src/lending/models.py f1/src/lending/models.py
+--- base/src/lending/models.py	2026-10-28 11:18:58.160838274 +0300
++++ f1/src/lending/models.py	2026-10-28 11:19:26.003609229 +0300
+@@ -63,3 +63,23 @@
+ 
+     def is_overdue(self, on: date) -> bool:
+         return self.is_open and on > self.due_on
++
++
++@dataclass(frozen=True)
++class Charge:
++    """Something the member owes: an overdue fine or a manual staff charge."""
++
++    charge_id: str
++    member_id: str
++    amount: Decimal
++    reason: str
++    charged_on: date
++    loan_id: str | None = None
++
++
++@dataclass(frozen=True)
++class Payment:
++    payment_id: str
++    member_id: str
++    amount: Decimal
++    paid_on: date
+diff -ruN base/src/lending/policy.py f1/src/lending/policy.py
+--- base/src/lending/policy.py	2026-10-28 11:18:58.160847324 +0300
++++ f1/src/lending/policy.py	2026-10-28 11:19:26.040502406 +0300
+@@ -6,6 +6,7 @@
+ from __future__ import annotations
+ 
+ from datetime import date, timedelta
++from decimal import Decimal
+ 
+ from .models import Material, MemberCategory
+ 
+@@ -19,6 +20,15 @@
+     MemberCategory.CHILD: 4,
+ }
+ 
++# Overdue fine per late day, by material.
++DAILY_FINE: dict[Material, Decimal] = {
++    Material.BOOK: Decimal("0.25"),
++    Material.DVD: Decimal("1.00"),
++}
++
++# A member owing this much or more can't borrow.
++BORROWING_BLOCK = Decimal("10.00")
++
+ # date.weekday(): Monday is 0, Sunday is 6. The library is closed on Sundays.
+ CLOSED_WEEKDAYS: frozenset[int] = frozenset({6})
+ 
+diff -ruN base/src/lending/repository.py f1/src/lending/repository.py
+--- base/src/lending/repository.py	2026-10-28 11:18:58.160857454 +0300
++++ f1/src/lending/repository.py	2026-10-28 11:19:26.026138553 +0300
+@@ -3,7 +3,7 @@
+ from __future__ import annotations
+ 
+ from .errors import CopyNotFound, LoanNotFound, MemberNotFound, TitleNotFound
+-from .models import Copy, Loan, Member, Title
++from .models import Charge, Copy, Loan, Member, Payment, Title
+ 
+ 
+ class InMemoryRepository:
+@@ -12,6 +12,8 @@
+         self._titles: dict[str, Title] = {}
+         self._copies: dict[str, Copy] = {}
+         self._loans: dict[str, Loan] = {}
++        self._charges: list[Charge] = []
++        self._payments: list[Payment] = []
+         self._sequences: dict[str, int] = {}
+ 
+     # identifiers -------------------------------------------------------
+@@ -87,3 +89,17 @@
+ 
+     def all_loans(self) -> list[Loan]:
+         return list(self._loans.values())
++
++    # accounts ----------------------------------------------------------
++
++    def add_charge(self, charge: Charge) -> None:
++        self._charges.append(charge)
++
++    def charges_of(self, member_id: str) -> list[Charge]:
++        return [c for c in self._charges if c.member_id == member_id]
++
++    def add_payment(self, payment: Payment) -> None:
++        self._payments.append(payment)
++
++    def payments_of(self, member_id: str) -> list[Payment]:
++        return [p for p in self._payments if p.member_id == member_id]
+diff -ruN base/src/lending/service.py f1/src/lending/service.py
+--- base/src/lending/service.py	2026-10-28 11:18:58.160792855 +0300
++++ f1/src/lending/service.py	2026-10-28 11:19:26.040730254 +0300
+@@ -6,22 +6,27 @@
+ from decimal import Decimal
+ 
+ from . import policy
++from .fines import ZERO, money, overdue_fine
+ from .clock import Clock
+ from .errors import (
++    AccountBlocked,
+     CopyNotAvailable,
+     DuplicateCopy,
+     DuplicateMember,
+     DuplicateTitle,
++    InvalidAmount,
+     LoanLimitReached,
+     NoOpenLoan,
+ )
+ from .models import (
++    Charge,
+     Copy,
+     CopyStatus,
+     Loan,
+     Material,
+     Member,
+     MemberCategory,
++    Payment,
+     Title,
+ )
+ from .repository import InMemoryRepository
+@@ -92,6 +97,9 @@
+         copy = self._repo.get_copy(copy_id)
+         if copy.status is not CopyStatus.AVAILABLE:
+             raise CopyNotAvailable(copy_id, copy.status.value)
++        owed = self.balance(member_id)
++        if owed >= policy.BORROWING_BLOCK:
++            raise AccountBlocked(member_id, owed)
+         limit = policy.loan_limit(member.category)
+         if len(self.open_loans(member_id)) >= limit:
+             raise LoanLimitReached(member_id, limit)
+@@ -116,6 +124,14 @@
+             raise NoOpenLoan(copy_id)
+         loan.returned_on = self._clock.today()
+         copy.status = CopyStatus.AVAILABLE
++        fine = overdue_fine(
++            self._repo.get_title(copy.isbn),
++            self._repo.get_member(loan.member_id),
++            loan.due_on,
++            loan.returned_on,
++        )
++        if fine > ZERO:
++            self._charge(loan.member_id, fine, "overdue fine", loan.loan_id)
+         return loan
+ 
+     def get_loan(self, loan_id: str) -> Loan:
+@@ -134,3 +150,41 @@
+         """Open loans past their due date on ``as_of`` (default: today)."""
+         day = as_of or self._clock.today()
+         return [l for l in self._repo.all_loans() if l.is_overdue(day)]
++
++    # accounts ----------------------------------------------------------
++
++    def balance(self, member_id: str) -> Decimal:
++        """What the member owes right now: charges minus payments."""
++        self._repo.get_member(member_id)
++        charged = sum((c.amount for c in self._repo.charges_of(member_id)), ZERO)
++        paid = sum((p.amount for p in self._repo.payments_of(member_id)), ZERO)
++        return charged - paid
++
++    def add_charge(self, member_id: str, amount: Decimal, reason: str) -> Decimal:
++        self._repo.get_member(member_id)
++        self._charge(member_id, money(amount), reason)
++        return self.balance(member_id)
++
++    def pay(self, member_id: str, amount: Decimal) -> Decimal:
++        owed = self.balance(member_id)
++        value = money(amount)
++        if value > owed:
++            raise InvalidAmount(amount, f"more than the {owed} owed")
++        self._repo.add_payment(
++            Payment(self._repo.next_id("P"), member_id, value, self._clock.today())
++        )
++        return self.balance(member_id)
++
++    def _charge(
++        self, member_id: str, amount: Decimal, reason: str, loan_id: str | None = None
++    ) -> None:
++        self._repo.add_charge(
++            Charge(
++                charge_id=self._repo.next_id("C"),
++                member_id=member_id,
++                amount=amount,
++                reason=reason,
++                charged_on=self._clock.today(),
++                loan_id=loan_id,
++            )
++        )
+diff -ruN base/tests/test_fines.py f1/tests/test_fines.py
+--- base/tests/test_fines.py	1970-01-01 03:00:00.000000000 +0300
++++ f1/tests/test_fines.py	2026-10-28 11:19:26.041983763 +0300
+@@ -0,0 +1,52 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++
++from lending.errors import AccountBlocked, InvalidAmount
++
++
++def test_late_book_is_fined_per_open_day(service, clock):
++    service.checkout("ann", "B1")  # due Mon 23 March
++    clock.set(date(2026, 3, 30))  # 6 open days late, Sunday 29th not counted
++    service.return_copy("B1")
++    assert service.balance("ann") == Decimal("1.50")
++
++
++def test_on_time_return_costs_nothing(service, clock):
++    service.checkout("ann", "B1")
++    clock.set(date(2026, 3, 23))
++    service.return_copy("B1")
++    assert service.balance("ann") == Decimal("0")
++
++
++def test_fine_is_capped_at_replacement_cost(service, clock):
++    service.checkout("ann", "D1")  # due 9 March, replacement 12.00
++    clock.set(date(2026, 4, 30))
++    service.return_copy("D1")
++    assert service.balance("ann") == Decimal("12.00")
++
++
++def test_children_are_not_fined(service, clock):
++    service.checkout("kid", "D1")
++    clock.set(date(2026, 3, 20))
++    service.return_copy("D1")
++    assert service.balance("kid") == Decimal("0")
++
++
++def test_member_owing_ten_cannot_borrow(service):
++    service.add_charge("ann", Decimal("10.00"), "damaged case")
++    with pytest.raises(AccountBlocked):
++        service.checkout("ann", "B1")
++
++
++def test_partial_payment_lowers_balance(service):
++    service.add_charge("ann", Decimal("4.00"), "lost card")
++    assert service.pay("ann", Decimal("1.50")) == Decimal("2.50")
++
++
++def test_overpayment_is_refused(service):
++    service.add_charge("ann", Decimal("1.00"), "lost card")
++    with pytest.raises(InvalidAmount):
++        service.pay("ann", Decimal("1.01"))
++    assert service.balance("ann") == Decimal("1.00")

@@ -92,7 +92,7 @@ Portable **principles**:
 - **Protected-files guard** — recursive modifications routed через proposal-only mode (avoid recursive failure)
 - **Smoke validation** (per Bug 3 fix) pending — external fixtures + worktrees
 
-Reference impl: `/ralph-loop` plugin in [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official). Не enabled by default — see `native-capabilities.md` (kit).
+Reference impl: `/ralph-loop` plugin in [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official). Не enabled by default — see `native-capabilities.md`.
 
 ## Hermes-DIY cleavage
 

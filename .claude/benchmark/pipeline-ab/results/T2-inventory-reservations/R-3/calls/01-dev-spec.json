@@ -1,0 +1,84 @@
+{
+ "n": 1,
+ "label": "spec",
+ "role": "dev",
+ "session": "b47f5088-554e-4938-9081-cb1e8c578a25",
+ "resume": false,
+ "prompt": "Add stock reservations to the `inventory` package. Checkout must be able to hold stock for a cart before payment, then either confirm the hold into an order or release it. Holds nobody confirms must lapse on their own after a while, and retries from the cart service must be safe (idempotency key).\n\nInterface — hidden tests call exactly this; `InventoryService(repository, ledger, clock)` keeps working as is:\n- `InventoryService.reserve(warehouse: str, items: dict[str, int], idempotency_key: str) -> Reservation`\n- `InventoryService.confirm_reservation(reservation_id: str) -> Order`\n- `InventoryService.release_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.get_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.available(sku, warehouse)` must take holds into account.\n- `inventory.models`: dataclass `Reservation` with `reservation_id: str`, `warehouse: str`, `items: dict[str, int]` (units held per SKU), `status: ReservationStatus`, `expires_at: datetime`, `order_id: str | None`; enum `ReservationStatus` with members `ACTIVE`, `CONFIRMED`, `RELEASED`, `EXPIRED`.\n- `inventory.errors`: new `ReservationNotFound`, `ReservationExpired`, `InvalidReservationState`, `IdempotencyConflict` (all subclass `InventoryError`); reuse the existing errors where they fit.\n- Time comes only from the injected clock. There is no background job: expiry must take effect without anyone calling a sweep.\n\nI own the business rules — ask me if something is unclear.\n\nInterview me until you could write the spec, then write it to SPEC.md. The spec says what and why (acceptance criteria as checkable statements, non-goals), not how. Copy any interface my request fixes (module paths, signatures, error classes) into it verbatim.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 02:26:45 socat[3397270] W exiting on signal 15\n",
+ "wall_s": 36.4,
+ "result": "I've read the package (`service.py`, `models.py`, `errors.py`, `reports.py`, the tests). Before writing anything, here are the business-rule questions. Each one has my proposed default, so you can answer \"ok\" or override.\n\n**Hold lifetime**\n1. **How long does a hold last?** I'd make it a fixed TTL measured from `reserve`, defaulting to **15 minutes**, with an optional keyword argument on the constructor so `InventoryService(repository, ledger, clock)` still works. Should it be configurable per call or per service, or fixed?\n2. **Boundary.** I'd treat a hold as expired once `clock.now() >= expires_at`, so at exactly `expires_at` it's already gone. OK?\n3. **Extending a hold.** Can a hold be extended or refreshed (e.g. a new `reserve` with the same key pushes `expires_at` out)? I'd make this a **non-goal**.\n\n**Effect on stock figures**\n4. `available` = on-hand − allocated − units in ACTIVE, unexpired holds. Should **`allocated()` include held units**, or stay \"PLACED orders only\"? I'd keep it orders-only and not add a \"held\" column to `stock_report`, because `StockRow` is built positionally in existing tests. Is it acceptable that the back-office report won't show holds directly?\n5. **Write-offs under a hold.** `adjust` only refuses to take on-hand below zero, so a write-off can still leave on-hand below allocated + held. Should `adjust` also refuse to eat into held stock? I'd leave `adjust` unchanged.\n\n**Reserve**\n6. **All or nothing,** same as `place_order`: if any line is short, raise `InsufficientStock` and create nothing. Validation reuses the existing errors: `UnknownWarehouse`, `UnknownSku`, `InvalidQuantity`, and `InvalidOrder` for empty items. OK?\n7. **Reservation IDs.** I'd use their own sequence, `RES-0001`, `RES-0002`, … Fine?\n\n**Idempotency** (the trickiest part)\n8. **Retry with the same key and the same request** (same warehouse, same items in any order) returns the **existing reservation unchanged**, whatever its status. That means a retry after the hold lapsed returns the EXPIRED reservation and doesn't create a new hold. The alternative is that a key is \"spent\" only while its reservation is ACTIVE or CONFIRMED, so after a release or expiry the same key creates a fresh hold. Which do you want?\n9. **Same key, different request** (other warehouse or other items) raises `IdempotencyConflict`. Does that check happen before validation and stock checks? I'd say yes.\n10. **Failed reserves.** If `reserve` fails (e.g. `InsufficientStock`), the key is **not** consumed, and a later retry with it can succeed. OK?\n11. **Key scope.** Keys are global, not per warehouse, and live forever (no key expiry). OK?\n\n**Confirm and release**\n12. **Confirming an ACTIVE, unexpired hold** creates a PLACED `Order` (normal `ORD-` sequence, `placed_at` = confirm time). The held units become allocated, with no new availability check. The reservation becomes CONFIRMED with `order_id` set. Should confirm also re-check physical stock, in case a write-off happened in between? I'd say no: a hold is a promise.\n13. **Confirming a hold that has already been confirmed:** return the **same order** again (safe retry), or raise `InvalidReservationState`? I lean towards returning the same order, for the same retry-safety reason as `reserve`.\n14. **Confirming an expired hold** raises `ReservationExpired`. Confirming a RELEASED one raises `InvalidReservationState`.\n15. **Releasing an ACTIVE hold** makes it RELEASED and frees the stock immediately. On a RELEASED hold, release returns it unchanged (idempotent). On a CONFIRMED hold it raises `InvalidReservationState`. On an expired hold, should it raise `ReservationExpired`, or just return the EXPIRED reservation as a no-op? I'd go with the no-op, since the caller's goal (stock freed) is already met.\n16. **Status after expiry.** Once a hold has lapsed, `get_reservation` reports `status == EXPIRED`, even though nothing swept it. An unknown ID raises `ReservationNotFound` on get, confirm and release.\n17. **Releasing after confirmation.** If the resulting order is later cancelled through `cancel_order`, the reservation stays CONFIRMED. No link back. OK?\n\nAnswer whichever ones you want to change. Anything you don't mention I'll take as agreeing with my proposal.",
+ "is_error": false,
+ "num_turns": 2,
+ "total_cost_usd": 0.2045136,
+ "usage": {
+  "input_tokens": 4,
+  "cache_creation_input_tokens": 17256,
+  "cache_read_input_tokens": 28348,
+  "output_tokens": 3039,
+  "output_tokens_details": {
+   "thinking_tokens": 1268
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 17256,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 4,
+   "outputTokens": 3039,
+   "cacheReadInputTokens": 28348,
+   "cacheCreationInputTokens": 17256,
+   "webSearchRequests": 0,
+   "costUSD": 0.2045136,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1268,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 17256,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 35868,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "b47f5088-554e-4938-9081-cb1e8c578a25"
+}

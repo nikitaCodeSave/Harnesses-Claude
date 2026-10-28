@@ -8,6 +8,96 @@ Derived view — генерируется `rebuild-index.py` из `entries/*.md`
 
 ---
 
+## #149 · 2026-10-28 · Kit v2 переписан под большие проекты: один скилл и три шаблона
+
+**Tags:** kit, release, large-projects, templates, review
+
+Оператор поставил задачу: harness под большие многосоставные проекты, с лёгким стартом и для новых, и для текущих проектов, — и разрешил переписать кит целиком или удалить его. Кит v1 (скилл с четырьмя режимами, ~3 000 строк справочников, свод правил, копируемый в .claude/docs/…
+
+[→ entries/0149-kit-v2-perepisan-pod-bolshie-proekty-odin-skill-i-tri-shablo.md](entries/0149-kit-v2-perepisan-pod-bolshie-proekty-odin-skill-i-tri-shablo.md)
+
+---
+
+## #148 · 2026-10-28 · Долгий проект: знания переживают сессии без пайплайна Pocock
+
+**Tags:** benchmark, workflow, memory, pocock, continuity
+
+Оператор уточнил после #147: разработка идёт месяцами, агенту нужен контекст проекта, а не первичное обсуждение задачи, и подход Pocock ценен именно этим — несмотря на цену. Основные матрицы мерили задачи в одну сессию, где слою знаний окупиться негде, так что вывод «Pocock не…
+
+[→ entries/0148-dolgiy-proekt-znaniya-perezhivayut-sessii-bez-payplayna-poco.md](entries/0148-dolgiy-proekt-znaniya-perezhivayut-sessii-bez-payplayna-poco.md)
+
+---
+
+## #147 · 2026-10-28 · Поток по умолчанию: спека и сборка в одной сессии
+
+**Tags:** benchmark, workflow, testing, review, subagents
+
+приёмочные тесты отдельной сессией → свежая сборка → ревью) лишняя. В основной матрице ваниль добирала скрытые правила, потому что симулятор правил её итоговый отчёт. Оператор поручил решать дальнейшие шаги самостоятельно и доводить до принятия лучшего подхода. Добивающий тест…
+
+[→ entries/0147-potok-po-umolchaniyu-speka-i-sborka-v-odnoy-sessii.md](entries/0147-potok-po-umolchaniyu-speka-i-sborka-v-odnoy-sessii.md)
+
+---
+
+## #146 · 2026-10-28 · pipeline-ab: Pocock дороже в четыре раза при равном качестве
+
+**Tags:** benchmark, workflow, testing, pocock, subagents
+
+Оператор попросил сравнить поток, собранный по срезу #144, с актуальным пайплайном Pocock в полноценном тесте. Стенд — .claude/benchmark/pipeline-ab/: три brownfield-задачи на Python со скрытыми правилами владельца продукта (NOTES) и скрытым оракулом; каждый человеческий ход…
+
+[→ entries/0146-pipeline-ab-pocock-dorozhe-v-chetyre-raza-pri-ravnom-kachest.md](entries/0146-pipeline-ab-pocock-dorozhe-v-chetyre-raza-pri-ravnom-kachest.md)
+
+---
+
+## #145 · 2026-10-27 · Второй проход по первоисточникам: поправки и новые замеры
+
+**Tags:** research, external-sources, workflow, subagents, verification
+
+После #144 оператор попросил продолжить исследование параллельно со стендом pipeline-ab, с упором на первоисточники. Три агента: сверка всего, что в каталоге стояло «по пересказу» или «прочитано агентом»; новые замеры по пробелам (свежий контекст, test-first, спека человека…
+
+[→ entries/0145-vtoroy-prokhod-po-pervoistochnikam-popravki-i-novye-zamery.md](entries/0145-vtoroy-prokhod-po-pervoistochnikam-popravki-i-novye-zamery.md)
+
+---
+
+## #144 · 2026-10-27 · TDD снят, поток перестроен по внешнему срезу октября
+
+**Tags:** research, external-sources, workflow, testing, review, subagents
+
+Через три недели после #141 оператор попросил свежий срез практик полного цикла разработки с агентами: что нового, что работает, есть ли что-то кроме Pocock. Три параллельных research-агента: first-party вендоры, практики и методологии, измеренная эмпирика. Ключевые утверждения…
+
+[→ entries/0144-tdd-snyat-potok-perestroen-po-vneshnemu-srezu-oktyabrya.md](entries/0144-tdd-snyat-potok-perestroen-po-vneshnemu-srezu-oktyabrya.md)
+
+---
+
+## #143 · 2026-10-05 · Пробы заменены оригиналами Pocock
+
+**Tags:** harness, global, skills, research, claude-md
+
+Самописные /grill /slice /retro из #142 пересказывали mattpocock/skills со слов research-агента и расходились с его же механикой: у user-invoked skill'а описание — строка для человека, а не список триггеров; grilling задаёт весь frontier за раунд, а не 3–5 вопросов; дисциплина…
+
+[→ entries/0143-proby-zameneny-originalami-pocock.md](entries/0143-proby-zameneny-originalami-pocock.md)
+
+---
+
+## #142 · 2026-10-05 · Глобальный слой пересобран абляцией с нуля
+
+**Tags:** harness, global, ablation, probe
+
+~/.claude/ голый (#141). Оператор выбрал абляцию по методу Boris Cherny: старт с почти ванили, каждый прежний компонент (кит, плагин devlog, скилл codex-mcp) возвращается по одному — только когда его отсутствие реально мешает. Кит и его репозиторий не тронуты.
+
+[→ entries/0142-globalnyy-sloy-peresobran-ablyatsiey-s-nulya.md](entries/0142-globalnyy-sloy-peresobran-ablyatsiey-s-nulya.md)
+
+---
+
+## #141 · 2026-10-05 · Внешний ресёрч перед чистой пересборкой harness
+
+**Tags:** research, external-sources, drift
+
+Глобальный ~/.claude/ оказался голым: нет CLAUDE.md, skills/, plugins/, то есть ни кит, ни плагин devlog, ни скилл codex-mcp не установлены. Живой слой лабы при этом ссылается на ~/.claude/skills/claude-code-harness/ как на канон — путь не существует, фактический источник —…
+
+[→ entries/0141-vneshniy-reserch-pered-chistoy-peresborkoy-harness.md](entries/0141-vneshniy-reserch-pered-chistoy-peresborkoy-harness.md)
+
+---
+
 ## #140 · 2026-09-19 · Вызов Codex в документации переведён на CLI
 
 **Tags:** bugfix, docs, cross-vendor-review

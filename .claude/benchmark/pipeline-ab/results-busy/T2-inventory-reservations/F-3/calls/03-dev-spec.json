@@ -1,0 +1,84 @@
+{
+ "n": 3,
+ "label": "spec",
+ "role": "dev",
+ "session": "ade50cf5-fe8e-4e4e-b5c3-047e1f6e83b3",
+ "resume": true,
+ "prompt": "Corrections first:\n\n1. Not 15 — the default is 20 minutes from creation (`expires_at` = creation + 20 min). A configurable option is fine as long as the default is 20.\n5. Wrong. No all-or-nothing for reservations. Each line holds as many units as are available right now, up to what was asked. A line with nothing available is left out of `items` entirely (not even with 0). Only if no line can hold anything does `reserve` fail with `InsufficientStock`, and then nothing is created. Direct `place_order` stays all-or-nothing.\n9. Your suggestion is right: same key + same request returns the existing reservation in its current state, whatever that state, with no new hold and no change to `expires_at`. One detail: \"same request\" means the same warehouse and the same *requested* items (what was asked for, not what ended up held). A different warehouse or items raises `IdempotencyConflict`, even if the original reservation is finished.\n12. Agree, with an addition: a repeated confirm on a CONFIRMED reservation returns the same order and creates nothing, at any time, even after 20 minutes have passed.\n\nAgree: 2, 3, 4, 6, 7, 8, 10, 11, 13, 16, 17, 19.\n\n14. Either is fine with me.\n15. Fine. Add that confirming turns the hold into the order's allocation, so available doesn't change at confirm. After a partial hold, the order covers only the units actually held.\n18. Fine on keeping the report as you describe. But `available` = on-hand − units allocated to PLACED orders − units held by ACTIVE reservations, per SKU per warehouse, never below 0. A hold in one warehouse never affects another.\n\nOne more point: reserve, release, expire and confirm never write to the ledger and never change on-hand. On-hand moves only through receipts, adjustments and shipments. `receive` and `adjust` are never blocked by holds.\n\nNo caps on active holds. Anything else not covered is your call.",
+ "exit": 0,
+ "stderr_tail": "2026/10/28 09:46:55 socat[781541] W exiting on signal 15\n",
+ "wall_s": 56.5,
+ "result": "I've written `SPEC.md` at the repo root. Its interface section copies the signatures, model fields and error classes from your request word for word. Below that are 33 acceptance criteria you can check one by one, plus a list of non-goals. Your corrections are all in it: the 20-minute default, holds that take whatever is available per line, idempotency matched on the *requested* items, repeat confirms that are safe at any time, confirm turning the hold into the order's allocation, and holds never touching the ledger or on-hand.\n\nThese are the points you left to me; each is easy to flip if you disagree:\n\n- **Item 14:** confirm doesn't re-check stock. It succeeds even if a write-off happened during the hold, the same way `adjust` already treats orders.\n- **When nothing can be held:** `InsufficientStock` names the first SKU in the request, with `available=0`.\n- **Input checks:** empty items, bad quantities and unknown SKUs or warehouses are rejected before stock is looked at. These failures don't use up the idempotency key.\n- **Order of checks for a reused key:** a key that was used before is matched against the original request before anything else. So a retry with the same request gets the existing reservation back without any stock check.\n- **Hold duration:** set by an optional keyword argument to the constructor, defaulting to 20 minutes. `Reservation` and `ReservationStatus` are also exported from `inventory`, and the new errors carry the reservation ID or key as an attribute, like `OrderNotFound` does.\n- **Cancelling a confirmed order:** the reservation stays `CONFIRMED`.\n- **Two extra requirements:** all existing tests must still pass, and the README's Concepts section must describe holds and the new definition of available.\n- **Non-goals:** extending holds, caps on active holds, a sweep job, a separate \"held\" figure in the stock report, keys that expire, concurrency, and keeping earlier-returned `Reservation` objects up to date when a hold expires (`get_reservation` is the source of truth).\n\nI haven't written any code or committed anything.",
+ "is_error": false,
+ "num_turns": 2,
+ "total_cost_usd": 0.4100908,
+ "usage": {
+  "input_tokens": 4,
+  "cache_creation_input_tokens": 10092,
+  "cache_read_input_tokens": 61044,
+  "output_tokens": 5522,
+  "output_tokens_details": {
+   "thinking_tokens": 1501
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 10092,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 8669,
+   "thinkingTokens": 2776,
+   "cacheReadInputTokens": 89394,
+   "cacheCreationInputTokens": 27350,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 27350,
+   "webSearchRequests": 0,
+   "costUSD": 0.4100908,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 55998,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "ade50cf5-fe8e-4e4e-b5c3-047e1f6e83b3"
+}
