@@ -6,6 +6,8 @@ Arms (see README.md):
   R  research flow  — interview -> SPEC.md -> acceptance tests by a separate session
                       -> fresh build session (tests read-only) -> fresh review vs SPEC.md, <=3 rounds
   P  Pocock         — /grill-with-docs -> /to-spec -> /to-tickets (one context) -> fresh /implement-spec
+  N  kit CLAUDE.md  — the kit's root CLAUDE.md (How we work + Project knowledge) in the repo; the brief, nothing else
+  C  kit commands   — the same CLAUDE.md plus the harness plugin; the brief typed as /harness:task <brief>
 
 Every human turn is played by a user simulator that holds the task's private NOTES.md.
 Workspaces live outside the repo; only logs, the final patch and meta land in results/.
@@ -34,6 +36,8 @@ USER_MODEL = os.environ.get("PAB_USER_MODEL", "claude-sonnet-5-5")
 USER_EFFORT = os.environ.get("PAB_USER_EFFORT", "medium")
 POCOCK_REPO = pathlib.Path(os.environ.get("PAB_POCOCK_REPO", "~/.local/share/mattpocock-skills")).expanduser()
 POCOCK_COMMIT = os.environ.get("PAB_POCOCK_COMMIT", "59db609")
+KIT_REPO = pathlib.Path(os.environ.get("PAB_KIT_REPO", "~/PROJECTS/claude-code-harness")).expanduser()
+KIT_COMMIT = os.environ.get("PAB_KIT_COMMIT", "ff79e91")
 CALL_TIMEOUT = int(os.environ.get("PAB_CALL_TIMEOUT", "5400"))
 MAX_USER_TURNS = int(os.environ.get("PAB_MAX_USER_TURNS", "20"))
 MAX_REVIEW_ROUNDS = 3
@@ -104,6 +108,7 @@ class Run:
         self.transcript = []
         self.meta = {"task": task, "arm": arm, "rep": rep, "model": MODEL, "effort": EFFORT, "user_mode": USER_MODE,
                      "user_model": USER_MODEL, "pocock_commit": POCOCK_COMMIT if arm == "P" else None,
+                     "kit_commit": KIT_COMMIT if arm in ("N", "C") else None,
                      "stages": [], "errors": []}
         self.user_session = None
 
@@ -128,6 +133,21 @@ class Run:
                 except OSError:
                     shutil.rmtree(tmp, ignore_errors=True)
             self.apply_pocock_setup()
+        if self.arm in ("N", "C"):
+            kit = WORK / f"harness-{KIT_COMMIT}"
+            if not kit.exists():
+                tmp = WORK / f"harness-{KIT_COMMIT}.tmp-{os.getpid()}"
+                tmp.mkdir(parents=True)
+                tar = subprocess.run(["git", "-C", str(KIT_REPO), "archive", KIT_COMMIT, "plugins/harness"],
+                                     capture_output=True, check=True).stdout
+                subprocess.run(["tar", "-x", "-C", str(tmp)], input=tar, check=True)
+                try:
+                    tmp.rename(kit)
+                except OSError:
+                    shutil.rmtree(tmp, ignore_errors=True)
+            self.write_kit_claude_md(kit / "plugins/harness/skills/harness/templates/CLAUDE.md")
+            if self.arm == "C":
+                self.plugin = kit / "plugins/harness"
         git(self.ws, "init", "-q", "-b", "main")
         git(self.ws, "add", "-A")
         git(self.ws, "commit", "-q", "-m", "base")
@@ -161,6 +181,32 @@ class Run:
             "### Triage labels\n\nThe five default triage labels. See `docs/agents/triage-labels.md`.\n\n"
             "### Domain docs\n\nSingle-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. "
             "See `docs/agents/domain.md`.\n")
+
+    def write_kit_claude_md(self, template):
+        """What the kit's setup skill writes for these single-package repos: the template, filled."""
+        t = template.read_text()
+        name = re.search(r'^name = "([^"]+)"', (self.ws / "pyproject.toml").read_text(), re.M).group(1)
+        readme = (self.ws / "README.md").read_text().split("\n\n")[1].strip()
+        fills = [
+            ("# <project>", f"# {name}"),
+            ("<2–4 lines: what this is, who uses it, what \"done\" usually means here. No marketing.>", readme),
+            ("<install>\n<test>                 # and the single-test form, e.g. pytest tests/test_x.py::test_y\n"
+             "<lint / format / typecheck>\n<run, if there is one>",
+             "python3 -m pytest -q        # single test: python3 -m pytest tests/test_x.py::test_y"),
+            ("Done = these exit 0. <Multi-component: this is the whole-repo check; each component's own\n"
+             "commands are in its CLAUDE.md, loaded when you work there.> <CI-only or service-dependent suites:\n"
+             "name them here with what they need.>", "Done = this exits 0."),
+            ("<update the test or schema a change touches>", "update the tests a change touches"),
+            ("<migrations · new dependencies · anything under infra/>", "new dependencies"),
+            ("<commit secrets · edit vendor/ · force-push>", "commit secrets · force-push"),
+            (" <multi-context: `GLOSSARY-MAP.md` points to each context>", ""),
+            (" <or the decision log this project already keeps>", ""),
+        ]
+        for a, b in fills:
+            assert a in t, a[:50]
+            t = t.replace(a, b)
+        assert "<" not in re.sub(r"<slug>|<ref>", "", t.split("## How we work")[0]), "unfilled placeholder"
+        (self.ws / "CLAUDE.md").write_text(t)
 
     # ---------- claude calls ----------
     def claude(self, prompt, *, session, resume, settings, label, model=MODEL, effort=EFFORT, role="dev"):
@@ -276,6 +322,18 @@ class Run:
         self.transcript.append(f"### [{label}] {who}\n\n{text}\n")
 
     # ---------- arms ----------
+    def arm_N(self):
+        """The kit's CLAUDE.md in the repo; the operator types the brief and nothing else."""
+        s = str(uuid.uuid4())
+        self.stage("build", self.brief, session=s, resume=False, settings=self.s_dev,
+                   user_desc=deliver("Scope: the whole feature. You typed your request. When the developer reports the feature as built, answer done."))
+
+    def arm_C(self):
+        """The same CLAUDE.md plus the harness plugin; the operator types /harness:task with the brief."""
+        s = str(uuid.uuid4())
+        self.stage("build", f"/harness:task {self.brief}", session=s, resume=False, settings=self.s_dev,
+                   user_desc=deliver("Scope: the whole feature. You typed your request. When the developer reports the feature as built, answer done."))
+
     def arm_V(self):
         s = str(uuid.uuid4())
         self.stage("build", self.brief, session=s, resume=False, settings=self.s_dev,
@@ -419,7 +477,7 @@ class Run:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--task", required=True)
-    ap.add_argument("--arm", required=True, choices=["V", "R", "P", "S", "F"])
+    ap.add_argument("--arm", required=True, choices=["V", "R", "P", "S", "F", "N", "C"])
     ap.add_argument("--rep", required=True, type=int)
     a = ap.parse_args()
     Run(a.task, a.arm, a.rep).go()

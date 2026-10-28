@@ -313,7 +313,7 @@ def summary():
     rows = ["| task | arm | n | acceptance % | regression % | mutation score | dev cost $ | wall min | user turns | agent chars |",
             "|---|---|---|---|---|---|---|---|---|---|"]
     for tdir in sorted(p for p in RESULTS.iterdir() if p.is_dir()):
-        for arm in "VSFRP":
+        for arm in "VSFRPNC":
             sc = [json.loads(f.read_text()) for f in sorted(tdir.glob(f"{arm}-*/score.json"))]
             if not sc:
                 continue
