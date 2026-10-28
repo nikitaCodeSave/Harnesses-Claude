@@ -30,12 +30,8 @@ Harness работает строго на подписке Claude Code в CLI. 
 - slash commands (`.claude/commands/`)
 - `claude --print --add-dir --agents` для headless CI на OAuth-подписке
 
-**Watch (re-checked 2026-06-17, first-party):** анонсированный на 15.06.2026 перевод
-subscription-`claude -p`/Agent SDK на отдельный месячный Agent SDK credit **поставлен на паузу
-в день вступления** («nothing changes for now» — Anthropic Help Center; это была 3-я попытка
-сплита). На сегодня headless `claude --print` на OAuth-подписке (CI, benchmark-раннеры,
-verify-фазы) **полностью цел** — тянет из обычных subscription-лимитов, отдельного credit нет.
-`--bare` остаётся future-дефолтом для `-p` (пока opt-in; единственный режим, пропускающий OAuth →
-требует API key). Перепроверить на следующем advance-notice Anthropic — watch-item открыт, не закрыт.
+Headless `claude --print` на OAuth-подписке (CI, раннеры стендов, verify-фазы) расходует обычные
+лимиты подписки. `--bare` — opt-in режим, пропускающий OAuth (нужен API key), поэтому вне scope.
+Объявленный перевод `-p` / Agent SDK на отдельный кредит приостановлен; если он возобновится или `--bare` станет дефолтом для `-p` — пересмотреть этот абзац.
 
 См. также `.claude/docs/principles.md` (active) — расширяет invariants.

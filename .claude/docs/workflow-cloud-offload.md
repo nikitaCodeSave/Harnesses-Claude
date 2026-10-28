@@ -1,6 +1,5 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-08-07
 status: active
 ---
 
@@ -16,14 +15,14 @@ status: active
 Heavy review и long-running автоматизация уезжают в Anthropic's CCR (Cloud Container Runtime).
 Terminal остаётся free для координации.
 
-Cherny (Code w/ Claude 2026 keynote, 2026-05-06): *«Routines = higher-order prompts — setup async automations и wake up to PRs that are ready to merge.»*
+Cherny (Code w/ Claude 2026 keynote): *«Routines = higher-order prompts — setup async automations и wake up to PRs that are ready to merge.»*
 
 3 surfaces:
 - **`/code-review ultra`** (алиас `/ultrareview`) — cloud bug-hunting fleet (multi-agent, ~$5-20/run via usage credits, ~5-10min)
 - **`Routines`** — cron- / GitHub-event- / API-triggered cloud agents
 - **Claude Code on the web** — полноценная cloud-сессия (в т.ч. plan mode); результат забирается локально через `claude --teleport <session id>`
 
-**Reframe meta-orchestrator role**: ты больше не «configures inner executor» — ты **picks which executor (local CLI или cloud fleet)** для каждой phase.
+**Meta-orchestrator role в cloud-offload**: не только «configures inner executor», но и **picks which executor (local CLI или cloud fleet)** для каждой phase.
 
 ## API constraint check
 
@@ -166,8 +165,8 @@ State runs in CCR; results land as PRs / Slack messages / API responses.
 
 ## Re-evaluation triggers
 
-Cloud-offload landscape moves быстро (research-preview features живут и умирают — `/ultraplan`
-был удалён из CLI). Re-check этот doc когда:
+Cloud-offload landscape moves быстро (research-preview features живут и умирают). Re-check этот doc
+когда:
 
 - New cloud feature releases (new Routines triggers, изменения teleport-канала)
 - Pricing changes (`/ultrareview` cost shifts)
@@ -180,7 +179,7 @@ Cloud-offload landscape moves быстро (research-preview features живут
 
 - [Boris Cherny — Code w/ Claude 2026 keynote (Simon Willison live-blog)](https://simonwillison.net/2026/May/6/code-w-claude-2026/) — Routines paradigm, planning-as-printing-press
 - [TechCrunch — Cat Wu interview](https://techcrunch.com/2026/05/13/anthropics-cat-wu-says-that-in-the-future-ai-will-anticipate-your-needs-before-you-know-what-they-are/) — proactivity thesis, Routines as on-ramp
-- [code.claude.com/docs/en/ultraplan](https://code.claude.com/docs/en/ultraplan) (first-party) — фиксирует удаление `/ultraplan` и рекомендованные замены (plan mode + Claude Code on the web)
+- [code.claude.com/docs/en/ultraplan](https://code.claude.com/docs/en/ultraplan) (first-party) — облачное планирование: plan mode + Claude Code on the web
 - [code.claude.com/docs/en/ultrareview](https://code.claude.com/docs/en/ultrareview) (first-party) — timing / cost / free-run economics
 - [code.claude.com/docs/en/code-review](https://code.claude.com/docs/en/code-review) — `/code-review` surfaces, severity tags + REVIEW.md customization
 - [api-constraint.md](../rules/api-constraint.md) — what's in/out of scope on subscription

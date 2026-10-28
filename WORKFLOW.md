@@ -13,14 +13,14 @@ Workflow для разработчика высокого класса на те
 ## 0. Установка, на которой стоит всё остальное
 
 - **Harness важнее модели — и его надо переучивать.** «Review your configuration every 3-6 months because instructions tuned for older models constrain newer ones» [[1]]. Под способной моделью **минимум обвязки = максимум продуктивности**: каждый компонент кодирует assumption «модель не умеет X»; умеет нативно → компонент вреден.
-- **Не микроменеджь модель:** `effort=high` (дефолт 4.8 — не понижай на `medium` для нетривиалки), adaptive thinking ON (не управляй thinking-бюджетом вручную), sampling-параметры (`temperature`/`top_p`/`top_k`) на 4.8 убрать совсем (HTTP 400). [[2]]
-- **Модель:** дефолт зависит от плана — топовая Opus на Max / Team Premium / Enterprise PAYG, **Sonnet-тир** на Pro / Team Standard; **Fable** — peer-модель поколения (`/model fable`, ~2× цена, thinking всегда ON, `/fast` неприменим, авто-fallback на Opus при safety-классификаторе). Blanket-switch не делать без доказанного лифта (lab A/B: ничья на bounded-задачах). [[2]]
+- **Не микроменеджь модель:** effort — стартуй с дефолта модели (какой он — `.claude/docs/native-capabilities.md`), для трудной и длинной работы поднимай; где остановиться, решает свип по своим задачам, а не ощущение, adaptive thinking ON (не управляй thinking-бюджетом вручную), sampling-параметры (`temperature`/`top_p`/`top_k`) на текущих Opus/Sonnet убрать совсем (HTTP 400). [[2]]
+- **Модель:** дефолт зависит от плана и провайдера, `/model` переключает; состав линейки, цены и дефолты — `.claude/docs/native-capabilities.md`. Blanket-switch не делать без доказанного лифта (lab A/B: ничья на bounded-задачах). [[2]]
 
 ---
 
 ## 1. Старт проекта — первая сессия
 
-Цель первой сессии — **не код, а конфигурация окружения + контракт**, собранный из разговора (не upfront-анкетой — под 4.8 контракт всплывает органически).
+Цель первой сессии — **не код, а конфигурация окружения + контракт**, собранный из разговора (не upfront-анкетой — под способной моделью контракт всплывает органически).
 
 - **`/init`** — Claude читает репо → стартовый `CLAUDE.md` (≤200 строк, **indexer, не store**: ссылается на `docs/`, не дублирует). Greenfield (нет кода / нет `.git`) → можно opinionated стек с rationale; existing → уважай конвенции **verbatim**.
 - **Зафиксируй 5 пунктов контракта** по мере появления: стек (без молчаливых дефолтов) · project mode (new/mature) · acceptance criteria первого deliverable · механизм верификации (test cmd / lint / screenshot / manual) · sensitive paths → DENY.
@@ -45,7 +45,7 @@ Workflow для разработчика высокого класса на те
 
   *NON-GOALS — не опускай эту строку: пусто = «не подумал», не «нет ограничений». Это гигиена scope, а не гейт, который что-то останавливает.*
 
-- **Фиксируй *что* и *зачем*; *как* — не фиксируй.** Детектор: деталь влияет на бизнес-риск или архитектуру → пиши явно; чистая реализация (имена классов и функций, пути к файлам, схема таблиц, выбор библиотеки) → не пиши, это решение исполнителя. Разговор, из которого растёт спека, всегда содержит реализационные реплики — без детектора они оседают в *обязывающих* разделах и начинают подменять требование (A/B 2026-07-22, N=3×2: без правила 6/6 приманок в 3/3 прогонов, в одном реализационный ключ подменил acceptance-критерий; с правилом 0/6 без потери бизнес-фактов — `.claude/benchmark/spec-upstream-ab/`).
+- **Фиксируй *что* и *зачем*; *как* — не фиксируй.** Детектор: деталь влияет на бизнес-риск или архитектуру → пиши явно; чистая реализация (имена классов и функций, пути к файлам, схема таблиц, выбор библиотеки) → не пиши, это решение исполнителя. Разговор, из которого растёт спека, всегда содержит реализационные реплики — без детектора они оседают в *обязывающих* разделах и начинают подменять требование (A/B N=3×2, не перемерен на текущем поколении моделей: без правила 6/6 приманок в 3/3 прогонов, в одном реализационный ключ подменил acceptance-критерий; с правилом 0/6 без потери бизнес-фактов — `.claude/benchmark/spec-upstream-ab/RESULTS.md`).
 - **Ограничения — инварианты, не шаги.** «Операция идемпотентна», а не «сделай таблицу дедупа». `[hard]` — недоговороспособно; `[soft]` — можно пожертвовать ради простоты (это явное разрешение упрощать, а не украшение).
 
 - **Acceptance criteria = наблюдаемое поведение через публичный интерфейс** («пользователь оформляет заказ с валидной корзиной»), не «сделать хорошо». Это **оракул, пронизывающий весь пайплайн**.
@@ -59,8 +59,8 @@ Workflow для разработчика высокого класса на те
 
 - Архитектурные развилки — built-in **`Plan`-агент** / Plan mode с `xhigh` + `ultrathink`; облако — обычная сессия Claude Code on the web в plan mode, план забирается `claude --teleport <session id>`. [[3]]
 - **Каждое нетривиальное решение → ADR** (Context / Decision / Consequences / Alternatives). Порог простой: *объяснение заняло бы >5 мин → ADR*.
-- **Brownfield + трогаешь инварианты** → сначала read-only разведка built-in **`Explore`** (карта затронутых модулей · инварианты, которые нельзя сломать · blast-radius). Вывод **остаётся в контексте** — отдельный `docs/context/*.md` НЕ заводим (Explore перезапускаем по требованию под 1M-окном). Если fresh-context критику нужно прочитать карту через compaction — пришпиль её в context-секцию ADR или progress-журнал, не в новый формат.
-- **Design-lite → (large only) грилл → ADR, в этом порядке.** Нетривиальное решение сначала живёт как *мутабельный* набросок (модель данных · ≥2 РЕАЛЬНЫЕ альтернативы · acceptance). На **medium** это абзац в плане — без spawn'а. На **large ∧ необратимо ∧ трогает инвариант** — прогони по нему тот же fresh-context рефутер, что в REVIEW/§8, с фальсифицируемым мандатом: «убей ≥1 альтернативу конкретным failure-сценарием или цифрой стоимости» (у прозы нет исполняемого оракула — грилл дизайна ловит меньше, чем грилл кода; это опция для дорогого-необратимого, не станция funnel'а). Победившее решение застывает в ADR; альтернативы не дублируй в обоих.
+- **Brownfield + трогаешь инварианты** → сначала read-only разведка built-in **`Explore`** (карта затронутых модулей · инварианты, которые нельзя сломать · blast-radius). Вывод **остаётся в контексте** — отдельный `docs/context/*.md` НЕ заводим (Explore перезапускаем по требованию под 1M-окном). Если fresh-context критику нужно прочитать карту через compaction — пришпиль её в context-секцию ADR или в открытую спеку, не в новый формат.
+- **Design-lite → (large only) грилл → ADR, в этом порядке.** Нетривиальное решение сначала живёт как *мутабельный* набросок (модель данных · ≥2 РЕАЛЬНЫЕ альтернативы · acceptance). На **medium** это абзац в плане — без spawn'а. На **large ∧ необратимо ∧ трогает инвариант** — прогони по нему тот же fresh-context рефутер, что в REVIEW, с фальсифицируемым мандатом: «убей ≥1 альтернативу конкретным failure-сценарием или цифрой стоимости» (у прозы нет исполняемого оракула — грилл дизайна ловит меньше, чем грилл кода; это опция для дорогого-необратимого, не станция funnel'а). Победившее решение застывает в ADR; альтернативы не дублируй в обоих.
 - Нетривиальный кодбейз → bootstrap проектных доков (`ARCHITECTURE` / `CODE-MAP` / `GLOSSARY` / `CONVENTIONS` / `ADR/` / `RUNBOOKS/`), **read-before-write** — реальное содержимое, не boilerplate.
 - **Built-ins first:** не плоди кастомных `PM→Architect→Dev→QA` субагентов — оркестратор это **ты** (main thread). [[4]]
 
@@ -141,7 +141,7 @@ DENY-правила     ограничения scope,    «готово» = ко
 
 Параллельный журнал не заводится. Где проект уже ведёт свой — описательные коммиты,
 трекер, ADR, workspace-конвенция — встречай его там; носитель, который проект ещё
-не ведёт, не появляется «на будущее». Эмпирика (devlog #115, re-audit 2026-07-15):
+не ведёт, не появляется «на будущее». Эмпирика ([аудит harness'а на восьми реальных проектах](.claude/devlog/entries/0115-empiricheskiy-audit-harness-po-8-realnym-proektam-uzkie-mest.md)):
 прескриптивные форматы приживались в меньшинстве проектов, а где непрерывность
 реально ценили — её переизобретали дешевле. Здесь же измерено предельно наглядно:
 каталог in-flight-журнала, заведённый «на будущее», простоял четыре месяца и не
@@ -166,22 +166,22 @@ Scope **превышает один контекст** (codebase-sweep, мигр
 
 ## Ритуал поверх всего
 
-Раз в 3-6 мес (или на мажорном апгрейде модели, или на дельте `claude --version` против зафиксированной baseline) — **аудит harness'а на staleness**: что модель теперь делает нативно → выкинуть. Сверяй **дельту от refresh-ledger** (последняя точка заземления: CC-версия / модель / проверенные источники), не «всё с нуля»; два прохода — external-intake (что сдвинулось снаружи: changelog, first-party docs, essays) и re-test (что из обвязки устарело). Быстрый тест «модель или обвязка» — `--safe-mode` (старт с отключёнными CLAUDE.md/skills/hooks/MCP): если без harness'а не хуже — компонент устарел. Под текущим поколением Anthropic сама убрала ручные context-resets и sprint-decomposition («context anxiety» ушла). [[1]][[3]]
+Раз в 3-6 мес (или на мажорном апгрейде модели, или на дельте `claude --version` против зафиксированной baseline) — **аудит harness'а на staleness**: что модель теперь делает нативно → выкинуть. Сверяй **дельту от refresh-ledger** (последняя точка заземления: CC-версия / модель / проверенные источники), не «всё с нуля»; два прохода — external-intake (что сдвинулось снаружи: changelog, first-party docs, essays) и re-test (что из обвязки устарело). Быстрый тест «модель или обвязка» — `--safe-mode` (старт с отключёнными CLAUDE.md/skills/hooks/MCP): если без harness'а не хуже — компонент устарел. Ручные context-resets и sprint-decomposition текущему поколению не нужны: «context anxiety» у него нет. [[1]][[3]]
 
 ---
 
 ## Источники (first-party)
 
-- [1] [How Claude Code works in large codebases](https://www.claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start) (2026-05-14) — harness-matters-more-than-model
+- [1] [How Claude Code works in large codebases](https://www.claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start) — harness-matters-more-than-model
 - [2] [Claude Code best practices](https://code.claude.com/docs/en/best-practices) — verification loop, effort, thinking
-- [3] [Harness Design for Long-Running Application Development](https://www.anthropic.com/engineering/harness-design-long-running-apps) (2026-03) — P→G→E, sprint-contracts, evaluator с live-app
+- [3] [Harness Design for Long-Running Application Development](https://www.anthropic.com/engineering/harness-design-long-running-apps) — P→G→E, sprint-contracts, evaluator с live-app
 - [4] [Sub-agents](https://code.claude.com/docs/en/sub-agents) — single-agent default, subagent discipline
 - [5] [/goal](https://code.claude.com/docs/en/goal) — completion conditions, re-check каждый ход
 - [6] [Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) + [Effective context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
-- [7] [A harness for every task: dynamic workflows in Claude Code](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code) (2026-06-02, Shihipar & Bidasaria) — Claude пишет свой `.js`-harness; 3 failure-mode (laziness / self-preferential bias / goal drift); quarantine pattern; `ultracode` = trigger word
+- [7] [A harness for every task: dynamic workflows in Claude Code](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code) (Shihipar & Bidasaria) — Claude пишет свой `.js`-harness; 3 failure-mode (laziness / self-preferential bias / goal drift); quarantine pattern; `ultracode` = trigger word
 - [8] [Claude Code Sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing) + [Settings](https://code.claude.com/docs/en/settings) — permissions (deny/ask/allow), guardrails, OS-level sandbox
 - [9] [Onboarding Claude Code like a new developer](https://claude.com/blog/onboarding-claude-code-like-a-new-developer-lessons-from-17-years-of-development) (MacLean) — контекст-слой как версионируемый артефакт; «record context, version it, grow it»
 - [10] [Code review](https://code.claude.com/docs/en/code-review) + [ultrareview](https://code.claude.com/docs/en/ultrareview) — `/code-review` как дефолтная ступень, `REVIEW.md`, экономика cloud-прогона
-- [11] [How the Claude Code team does code review](https://claude.dev/blog/solving-code-review-at-anthropic/) (2026-10-15, Osmani / Lunt / Wang) — ревью по уровню риска, `REVIEW.md` от владельцев кода, лимит раундов
+- [11] [How the Claude Code team does code review](https://claude.dev/blog/solving-code-review-at-anthropic/) (Osmani / Lunt / Wang) — ревью по уровню риска, `REVIEW.md` от владельцев кода, лимит раундов
 
-<!-- last-updated: 2026-10-27 · version-free by design: версионные факты — только в native-capabilities.md -->
+<!-- version-free by design: версионные факты — только в native-capabilities.md -->

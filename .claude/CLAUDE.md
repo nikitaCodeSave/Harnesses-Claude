@@ -18,8 +18,7 @@
 ## Foundational principle
 
 **Под способной моделью минимум обвязки даёт максимум продуктивности**
-(model-agnostic; провенанс последнего re-grounding — refresh-ledger в
-`harness-evolution.md`). Компонент не добавляется, если кодирует
+(model-agnostic). Компонент не добавляется, если кодирует
 assumption «модель не умеет X», а модель уже умеет X нативно. Порог появления
 — повторяющаяся эмпирика или multi-source: **single-incident в invariant не
 превращается**.
@@ -48,10 +47,9 @@ executor напишет код. Skill / agent / hook как environment configur
   Scope больше одного контекста → built-in dynamic workflow (`ultracode`), НЕ
   кастомный pipeline. Дисциплина и цифры: [multi-agent.md](docs/multi-agent.md).
 - **Независимый judge для silent-wrong класса** (парсеры, guards, инвариантные
-  рефакторы). Что измерено (devlog #130, Opus 5): окупается сам **независимый
-  свежий контекст** — вендор в том замере не варьировался, оба плеча свои.
-  Кросс-вендорный ревьюер (Codex CLI через Bash, скилл `~/.claude/skills/codex-mcp/`) —
-  отдельное усиление на другой эмпирике (#127), не подпёртое #130. Не subagent
+  рефакторы): окупается сам **независимый свежий контекст** (замер —
+  `benchmark/guard-ab/RESULTS.md`). Кросс-вендорный ревьюер (Codex CLI через Bash) —
+  отдельное усиление; его находки воспроизводятся тестом до фикса. Не subagent
   и не нарушение api-constraint: сторонний CLI на своей подписке.
 
 ## Anti-patterns
@@ -107,12 +105,10 @@ paths для DENY. Сохранить в проектном CLAUDE.md (в кор
 **Инварианты** (загружены всегда): [testing](rules/testing.md) ·
 [docs-discipline](rules/docs-discipline.md) · [api-constraint](rules/api-constraint.md).
 
-**История и провенанс:** git · `docs/adr/` (действующие решения) ·
-`.claude/devlog/` (frozen: журнал до 2026-10-28) ·
-`docs/archive/` (frozen: ADR-лог, pre-split workflow) · `.claude/audits/` ·
-`.claude/benchmark/` (в т.ч. `guard-ab/` — A/B ваниль vs harness vs §8).
+**Записи, не инструкции** (история и провенанс): git · `docs/adr/` (действующие решения) ·
+`.claude/benchmark/*/RESULTS.md` (замеры) · `docs/native-capabilities.md` (единственный файл с
+версиями) · аудиты `.claude/audits/<slug>/` (записанные не правятся) · архивы `.claude/devlog/`, `docs/archive/` (frozen).
 
-Каталогов `.claude/agents/` и `.claude/hooks/` нет: custom-агентов harness не
-держит (audit-роли едут плагином), проектных хуков тоже. Глобального `system-guard` больше нет —
-ретайрен 2026-08-29 в пользу нативного слоя (auto-mode классификатор + встроенный блок
-деструктивных git/IaC); devlog #134.
+Каталогов `.claude/agents/` и `.claude/hooks/` нет: ни custom-агентов, ни своих хуков — ни в
+проекте, ни глобально. Опасные команды закрывает нативный слой: auto-mode классификатор и
+встроенный блок деструктивных git/IaC.

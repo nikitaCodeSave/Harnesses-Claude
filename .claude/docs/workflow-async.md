@@ -1,6 +1,5 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-08-07
 status: active
 ---
 
@@ -42,7 +41,7 @@ Anti-pattern: `bash sleep` loops для wait. Monitor; там, где он в п
   └─ Yes → /loop self-pacing
 
 Нужен handoff между сессиями?
-  └─ Yes → progress.md (L3) + --resume / --continue
+  └─ Yes → открытая спека (L3) + --resume / --continue
 ```
 
 ## When async needed
@@ -55,7 +54,7 @@ Anti-pattern: `bash sleep` loops для wait. Monitor; там, где он в п
 | Recurring task («каждые 10мин check PR status») | `/loop` self-pacing | Adaptive interval |
 | Inter-agent коммуникация мид-task | `SendMessage(to: agentId)` | Mid-flight handoff |
 | CI auto-fix loop | `/autofix-pr` toggle | Cloud-side, см. [workflow-cloud-offload.md](workflow-cloud-offload.md) |
-| Cross-session continuation | `progress.md` (L3) + `--resume` | State on disk, не in context |
+| Cross-session continuation | открытая спека (L3) + `--resume` | State on disk, не in context |
 
 ---
 
@@ -82,7 +81,7 @@ Anti-pattern: `bash sleep` loops для wait. Monitor; там, где он в п
 
 ### Community convergence
 
-Hermes Agent v0.9 (2026-04-13) шипанул near-identical `watch_patterns` — convergence community → first-party как validation of pattern. Не «another framework idea» — это **canonical primitive**.
+Hermes Agent держит near-identical `watch_patterns` — convergence community и first-party как validation of pattern. Не «another framework idea» — это **canonical primitive**.
 
 ### Anti-pattern: bash sleep
 
@@ -113,7 +112,7 @@ L0 in-session scratchpad — **session-scoped**, not persisted между сес
 | `TaskOutput({taskId})` | Read sub-agent task output |
 | `TaskStop({taskId})` | Stop running task |
 
-### Triggers (per CLAUDE.md)
+### Triggers
 
 - Multi-step task (>3 substantive steps)
 - Сложная задача с distinct decision points
@@ -212,11 +211,11 @@ Full details — [workflow-cloud-offload.md](workflow-cloud-offload.md).
 | Anti-pattern | Source | Replacement |
 |--------------|--------|-------------|
 | `sleep 30 && check_status` Bash polling | Anthropic docs (tools-reference) | `Monitor` tool |
-| Manual `while true; do ... done` for watching | community 2026 explicit | `Monitor` + `persistent: true` |
+| Manual `while true; do ... done` for watching | community explicit | `Monitor` + `persistent: true` |
 | Sleep-based delay для CI status poll | Anthropic | `/autofix-pr` + Monitor |
 | `Agent` spawn для one-shot tool call | Anthropic Multi-Agent Research | Direct tool call в main thread |
-| `Task*` персистится между сессиями | L0 by design | `progress.md` (L3) для cross-session |
-| Fixed cron когда cadence data-dependent | community 2026 | `/loop` self-pacing |
+| `Task*` персистится между сессиями | L0 by design | открытая спека (L3) для cross-session |
+| Fixed cron когда cadence data-dependent | community | `/loop` self-pacing |
 | `SendMessage` спам без mid-flight need | spawn overhead | Single Agent fire-and-forget |
 
 ---
@@ -226,7 +225,7 @@ Full details — [workflow-cloud-offload.md](workflow-cloud-offload.md).
 - [code.claude.com/docs/en/tools-reference](https://code.claude.com/docs/en/tools-reference) — Monitor tool, availability-гейтинг, sleep-loop anti-pattern
 - [Monitor tool deep-dive (MindStudio)](https://www.mindstudio.ai/blog/claude-code-monitor-tool-background-processes)
 - [Boris Cherny — Code w/ Claude 2026 keynote (Simon Willison live-blog)](https://simonwillison.net/2026/May/6/code-w-claude-2026/) — Routines paradigm, «wake up to merged PRs»
-- [TechCrunch — Cat Wu interview (2026-05-13)](https://techcrunch.com/2026/05/13/anthropics-cat-wu-says-that-in-the-future-ai-will-anticipate-your-needs-before-you-know-what-they-are/) — proactivity thesis
-- [Hermes Agent v0.9 — watch_patterns convergence (Apr 13)](https://github.com/NousResearch/hermes-agent/releases) — community parallel validating pattern
+- [TechCrunch — Cat Wu interview](https://techcrunch.com/2026/05/13/anthropics-cat-wu-says-that-in-the-future-ai-will-anticipate-your-needs-before-you-know-what-they-are/) — proactivity thesis
+- [Hermes Agent v0.9 — watch_patterns convergence](https://github.com/NousResearch/hermes-agent/releases) — community parallel validating pattern
 - arXiv [2604.20133 EvoAgent](https://arxiv.org/abs/2604.20133) — skill triggering metadata pattern (multi-stage matching)
 - [memory-layers.md](memory-layers.md) — L0/L3 reference для task lifecycle decisions

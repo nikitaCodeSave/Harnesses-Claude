@@ -1,13 +1,11 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-10-27
 status: active
-supersedes: archive/workflow-2026-05-10.md
 ---
 
 # Development workflow (frontier-model baseline)
 
-> **«Harness matters more than the model — review your configuration every 3-6 months because instructions tuned for older models constrain newer ones.»** — [claude.com/blog/how-claude-code-works-in-large-codebases](https://www.claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start) (2026-05-14, first-party).
+> **«Harness matters more than the model — review your configuration every 3-6 months because instructions tuned for older models constrain newer ones.»** — [claude.com/blog/how-claude-code-works-in-large-codebases](https://www.claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start) (first-party).
 >
 > Этот doc — **тонкий spine**: decision tree поверх built-ins, не дублирующий их описание. Slice-docs см. в [§ Routing](#routing).
 >
@@ -43,7 +41,7 @@ Default для **нетривиальной** задачи, которая по�
 
 ### Spec
 - *«Interview me until you could write the spec, then write it to SPEC.md»* — модель расспрашивает, пока не сможет написать спеку; факты о коде ищет сама, а не спрашивает у человека.
-- Спека фиксирует *что* и *зачем*: критерии приёмки как проверяемые утверждения, non-goals, ограничения `[hard]`/`[soft]` — [WORKFLOW.md](../../WORKFLOW.md) §2. Чистая реализация (имена, пути, схема таблиц, библиотека) — не фиксируется, это решение исполнителя. **Но интерфейс, который зафиксировал запрос** (пути модулей, сигнатуры, классы ошибок, которые вызывает чужой код), — это требование, и он переносится в `SPEC.md` дословно: свежая сессия видит только файл, и выпавшая из спеки строка интерфейса ломает всё, что на неё опирается (`benchmark/pipeline-ab`, дымовой прогон 2026-10-27).
+- Спека фиксирует *что* и *зачем*: критерии приёмки как проверяемые утверждения, non-goals, ограничения `[hard]`/`[soft]` — [WORKFLOW.md](../../WORKFLOW.md) §2. Чистая реализация (имена, пути, схема таблиц, библиотека) — не фиксируется, это решение исполнителя. **Но интерфейс, который зафиксировал запрос** (пути модулей, сигнатуры, классы ошибок, которые вызывает чужой код), — это требование, и он переносится в `SPEC.md` дословно: свежая сессия видит только файл, и выпавшая из спеки строка интерфейса ломает всё, что на неё опирается (`benchmark/pipeline-ab`, дымовой прогон).
 - Где поведение выражается кодом — код, а не проза: сигнатуры, пример входа/выхода, HTML-мокап.
 - ADR если объяснение решения >5 мин ([docs-discipline](../rules/docs-discipline.md) rule 6). Работа больше одной сессии — сначала карта решений, потом спека.
 - Ограничения процесса и scope («не трогать X», «без новых зависимостей») — в `SPEC.md`, а не только в разговоре: компакция теряет ~36% процессных инструкций и исключений scope против 6% требований к фиче (arXiv 2610.31778).
@@ -142,27 +140,27 @@ Default для **нетривиальной** задачи, которая по�
 
 ## Default effort
 
-- **`high`** — Anthropic default на agentic coding для текущего поколения. Стартуй отсюда.
-- **Свипай вниз, а не только вверх.** На новых моделях `low`/`medium` заметно сильнее, чем на прежних, — прогоняй свип по своим задачам вместо того, чтобы держать высокий effort «на всякий случай». Понижение оправдывается замером, а не ощущением.
-- **`xhigh`** — для трудных и long-running async задач; **`ultracode`** — **trigger word, не отдельный режим/tier** (per [«A harness for every task»](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code)): shorthand-сигнал «напиши dynamic workflow», поднимает orchestration к xhigh-уровню. Голое «workflow» не триггерит.
-- Adaptive thinking ON by default; фиксированные thinking-бюджеты ретайрены — не пытайся управлять ими из харнеса. Thinking выключать не стоит: при выключенном thinking effort выше `high` недостижим — клиент молча шлёт `high` вместо запрошенного уровня, а сам effort и есть рычаг глубины.
+- **Старт — дефолт effort модели** (какой он у какой модели — `native-capabilities.md`); где остановиться, решает свип по своим задачам.
+- **Свипай вниз, а не только вверх.** `low`/`medium` у текущих моделей сильные — прогоняй свип по своим задачам вместо того, чтобы держать высокий effort «на всякий случай». Понижение оправдывается замером, а не ощущением.
+- **`xhigh`** — для трудных и long-running async задач; **`ultracode`** — **trigger word, не отдельный режим/tier** (per [«A harness for every task»](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code)): shorthand-сигнал «напиши dynamic workflow», к уровню effort не привязан. Голое «workflow» не триггерит.
+- Adaptive thinking включён по умолчанию; не управляй thinking-бюджетами и не выключай thinking из харнеса — рычаг глубины здесь effort.
 
 ## Anti-patterns (cite-anchored)
 
 | Anti-pattern | Evidence | Replacement |
 |--------------|----------|-------------|
 | Bash `sleep` loops для wait | Anthropic docs (tools-reference) | `Monitor` tool (event-driven) либо background Bash, если `Monitor` в профиле отсутствует — см. [workflow-async.md](workflow-async.md) |
-| Polling для CI/PR status | community 2026 | `/autofix-pr` + `Monitor` |
+| Polling для CI/PR status | community | `/autofix-pr` + `Monitor` |
 | Vibe coding (one-shot без интервью и спеки) | SonarSource 16.4% conceptual-bug rate; `pipeline-ab`: без интервью 3/9 прогонов со 100% скрытой приёмки, медиана 63.9% на T1 | Интервью → `SPEC.md` → сборка в той же сессии |
-| Спека фиксирует реализацию (имена/пути/схема/библиотека) | A/B `spec-upstream-ab` 2026-07-22: 6/6 утечек в 3/3, одна подменила acceptance-критерий | детектор «что/зачем — явно, как — не пиши» (WORKFLOW.md §2) |
+| Спека фиксирует реализацию (имена/пути/схема/библиотека) | A/B `spec-upstream-ab/RESULTS.md` (не перемерен на текущем поколении моделей): 6/6 утечек в 3/3, одна подменила acceptance-критерий | детектор «что/зачем — явно, как — не пиши» (WORKFLOW.md §2) |
 | Single end-session validation | blakecrosley 35% → 4% false-completion | task-gate + session-gate (two-gate) |
 | Multi-agent для *most* coding | Anthropic explicit "ill-suited" (single-agent default) | Main thread; для scope>1 контекста — built-in dynamic workflow, не кастомный pipeline |
 | Кастомная оркестрация там, где есть built-in dynamic workflow | built-ins-first | keyword `ultracode` |
 | Sampling params (`top_p`/`temperature`/`top_k`) на текущих Opus/Sonnet | HTTP 400 from Anthropic | Omit entirely |
-| Effort выставлен «на глаз» и не пересматривается | дефолт = `high`; на новых моделях `low`/`medium` сильнее прежнего | свип по своим задачам в обе стороны, а не фиксированный высокий |
-| Инструкции самопроверки в промпте/CLAUDE.md («double-check», «add a final verification step», «use a subagent to verify») | [Prompting Claude Opus 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5): модель верифицирует себя сама, инструкция складывается с этим и даёт over-verification | Убрать из промпта; verification держать как *внешний* оракул (тесты, `/code-review`, независимый ревьюер) — [multi-agent.md](multi-agent.md) §7.3 |
+| Effort выставлен «на глаз» и не пересматривается | дефолт effort зависит от модели; `low`/`medium` у текущих моделей сильные | свип по своим задачам в обе стороны, а не фиксированный высокий |
+| Инструкции самопроверки в промпте/CLAUDE.md («double-check», «add a final verification step», «use a subagent to verify») | [Anthropic prompting guide](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5): модель верифицирует себя сама, инструкция складывается с этим и даёт over-verification | Убрать из промпта; verification держать как *внешний* оракул (тесты, `/code-review`, независимый ревьюер) — [multi-agent.md](multi-agent.md) §7.3 |
 | Спека как markdown-описание там, где есть исполнимый артефакт | [new rules of context engineering](https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models): *«prefer files that are in code as it provides clear, high-fidelity instructions»* | Код, HTML-мокап, тест-сьют вместо пересказа |
-| TDD / test-first как инструкция агенту | Böckeler (2026-08): нет разницы в качестве и mutation score, ×3–8.5 токенов, red-шаг пропускают или подделывают; `pipeline-ab` H2: без TDD mutation score в пределах 0.05 от пайплайна с `/tdd` | Проверка pass/fail с доказательством; mutation testing как сенсор |
+| TDD / test-first как инструкция агенту | Böckeler: нет разницы в качестве и mutation score, ×3–8.5 токенов, red-шаг пропускают или подделывают; `pipeline-ab` H2: без TDD mutation score в пределах 0.05 от пайплайна с `/tdd` | Проверка pass/fail с доказательством; mutation testing как сенсор |
 | Свежая сессия собирает по спеке без независимого оракула (работа на несколько сессий, silent-wrong) | `pipeline-ab`: свежая сборка только по файлу — 7/9, медиана 92.1 на T3; с приёмочными тестами отдельным контекстом — 9/9; конвергенция Jain / Böckeler / Hammant / StrongDM; arXiv 2608.17177 | Оракул из `SPEC.md` отдельным контекстом, read-only для исполнителя deny-правилом (§ Check) |
 | Ревью «найди проблемы» без фильтра, фикс каждой находки | [best-practices](https://code.claude.com/docs/en/best-practices): *«will always find something»* → лишние абстракции и тесты невозможных случаев | Против `SPEC.md`, только корректность, `skip style` |
 | Раунды ревью до «чисто» | Anthropic: PR с 50+ раундами за ночь | ≤3 раундов, дальше — пересмотр подхода |
@@ -174,10 +172,10 @@ Default для **нетривиальной** задачи, которая по�
 
 ## Sources
 
-Primary first-party (retrieval **2026-10-27**):
-- [claude.com/blog — large-codebases best practices](https://www.claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start) (2026-05-14) — harness-matters-more-than-model doctrine
-- [code.claude.com/docs/en/best-practices](https://code.claude.com/docs/en/best-practices) — редакция конца октября 2026: интервью → `SPEC.md`, «What you can stop doing»
-- [How the Claude Code team does code review](https://claude.dev/blog/solving-code-review-at-anthropic/) (2026-10-15) — ревью по уровню риска, `REVIEW.md`, лимит раундов
+Primary first-party:
+- [claude.com/blog — large-codebases best practices](https://www.claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start) — harness-matters-more-than-model doctrine
+- [code.claude.com/docs/en/best-practices](https://code.claude.com/docs/en/best-practices) — интервью → `SPEC.md`, «What you can stop doing»
+- [How the Claude Code team does code review](https://claude.dev/blog/solving-code-review-at-anthropic/) — ревью по уровню риска, `REVIEW.md`, лимит раундов
 - [Boris Cherny — Code w/ Claude 2026 keynote](https://simonwillison.net/2026/May/6/code-w-claude-2026/) — Routines paradigm
 
-Full source catalog: [external-sources.md](external-sources.md). Empirical foundation: [archive/workflow-2026-05-10.md](archive/workflow-2026-05-10.md) (frozen baseline) + [principles.md](principles.md).
+Full source catalog: [external-sources.md](external-sources.md). Empirical foundation: [principles.md](principles.md).

@@ -1,19 +1,18 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-09-19
 ---
 
 # Multi-agent baseline (frontier-модель + наш harness)
 
 > Baseline для построения multi-agent workflows **в проектах**, использующих этот harness. **Не** про baseline самого harness'а — это `principles.md` (active) + `.claude/docs/archive/decisions-2026Q2.md` (frozen). Evidence-based: цифры и паттерны взяты из canonical Anthropic статей + наших ADR'ов.
 >
-> Источники: archive/practices-from-projects.md §12.1 (Anthropic official) и §12.7-12.8 (community 2026 essays). Re-evaluate при major-релизе модели или N≥3 промахах в одном classes-of-tasks (см. meta-CLAUDE.md «Re-evaluation triggers»).
+> Источники: archive/practices-from-projects.md §12.1 (Anthropic official) и §12.7-12.8 (community essays). Re-evaluate при major-релизе модели или N≥3 промахах в одном classes-of-tasks (см. §12 «Re-evaluation triggers»).
 
 ## TL;DR
 
 1. **Default to single-agent main thread**. Multi-agent оправдан только при breadth-first parallelism или context isolation. **Высоко-зависимые задачи (most coding) — ill-suited** (Anthropic). Для bounded fan-out (codebase-scale / миграция / trust-critical verification) есть first-party примитив **dynamic workflows** (keyword `ultracode`) — роутим к нему по built-ins-first, не строим кастомный pipeline.
 2. **Token overhead**: single-agent = ~4× обычного chat'а; multi-agent = ~15×. **80% variance производительности объясняется token usage** (Anthropic BrowseComp eval). Dynamic workflows кэпят fan-out: 16 concurrent / 1000 total agents.
-3. **Lead — топовая Opus, субагенты — Sonnet-тир**: +90.2% — Anthropic eval **прошлого поколения моделей, не перемеренный**. Haiku-тир — для grunt subagents (file scans, log filtering, API pulls).
+3. **Lead — топовая Opus, субагенты — Sonnet-тир**: +90.2% — Anthropic eval, **на текущем поколении моделей не перемерен**. Haiku-тир — для grunt subagents (file scans, log filtering, API pulls).
 4. **Brief subagent как нового коллегу**: цель + формат вывода + границы + tool preferences. Короткий brief → spawn-spam, дублирование, gaps.
 5. **Effort scaling**: 1 agent для facts → 2-4 для сравнений → 10+ для multi-aspect research.
 6. **Built-ins-first** (Explore / Plan / general-purpose) до создания custom `.claude/agents/`.
@@ -28,9 +27,9 @@ last-updated: 2026-09-19
 | Main agent  | session main thread                    | session                | reasoning, integration, delivery |
 | Skills      | `Skill` tool, `.claude/skills/`        | per-call в same window | reusable workflows               |
 | Subagents   | `Agent` tool, `.claude/agents/`        | one-way return         | isolated / parallel work         |
-| Teams       | попросить teammate'ов (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, off by default; tool'ов `TeamCreate`/`TeamDelete` больше нет) | separate processes | bidirectional cross-agent |
+| Teams       | попросить teammate'ов (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, off by default; отдельного tool'а создания команды нет) | separate processes | bidirectional cross-agent |
 
-**Главный failure mode** (Anthropic 2026): «using the right tool in the wrong layer».
+**Главный failure mode** (Anthropic): «using the right tool in the wrong layer».
 - Behavioural constraint → **hook** (deterministic), не system prompt (interpretive).
 - Reusable instruction → **skill**, не copy-paste в каждый turn.
 - Isolated search-heavy task → **subagent**, не main thread с verbose dump'ом.
@@ -39,13 +38,13 @@ last-updated: 2026-09-19
 
 ## 2. Когда spawn'ить subagent
 
-### 2.1 Legitimate triggers (из meta-CLAUDE.md `Sub-agent spawn policy`)
+### 2.1 Legitimate triggers (из `.claude/CLAUDE.md` § Жёсткие рамки)
 
 | Trigger                          | Пример                                  | Wall-clock cut?      | Token cost |
 | -------------------------------- | --------------------------------------- | -------------------- | ---------- |
 | (а) Изоляция шумного вывода      | broad codebase scan, 50+ files, log dive | нет                  | 4-15×      |
 | (б) Параллельность               | N независимых verifications/researches  | да: max(N) vs sum    | 4-15×      |
-| (в) Независимое ревью            | ревью ветки против `SPEC.md`, рефьютер §8, приёмочные тесты из спеки | нет | 4-15× |
+| (в) Независимое ревью            | ревью ветки против `SPEC.md`, рефьютер свежим контекстом, приёмочные тесты из спеки | нет | 4-15× |
 
 Защита контекстного окна сама по себе — не триггер: *«Running out of context is rarely the problem anymore»* ([best-practices](https://code.claude.com/docs/en/best-practices), «What you can stop doing»). Делегирование той же задачи ответ не улучшает; помогает свежий ревьюер, потому что не видел рассуждений автора.
 
@@ -83,7 +82,7 @@ last-updated: 2026-09-19
 
 ### 3.3 Skill preloading
 
-Subagents **не наследуют parent skills** (Anthropic 2026 change). Если нужен — explicit в frontmatter:
+Subagents **не наследуют parent skills**. Если нужен — explicit в frontmatter:
 
 ```yaml
 ---
@@ -128,7 +127,7 @@ skills:
 | Variance объяснитель #2 | tool call count    | BrowseComp eval     |
 | Variance объяснитель #3 | model choice       | BrowseComp eval     |
 
-**Implication**: token throw **не заменяет** model upgrade. «Sonnet 4 upgrade > doubling Sonnet 3.7 budget» (Anthropic). На frontier-модели прирост от лишних субагентов без isolation/parallelism gain — чистый overhead.
+**Implication**: token throw **не заменяет** model upgrade. Апгрейд модели на следующее поколение дал больше, чем удвоение токен-бюджета на предыдущем (Anthropic). На frontier-модели прирост от лишних субагентов без isolation/parallelism gain — чистый overhead.
 
 ---
 
@@ -137,10 +136,10 @@ skills:
 | Role               | Model       | Зачем                                       |
 | ------------------ | ----------- | ------------------------------------------- |
 | Main agent (lead)  | топовая Opus | Reasoning, planning, integration           |
-| Reasoning subagent | Sonnet 5    | Quality reasoning at lower cost             |
-| Grunt subagent     | Haiku 4.5   | File scans, log filtering, API pulls        |
+| Reasoning subagent | Sonnet-тир  | Quality reasoning at lower cost             |
+| Grunt subagent     | Haiku-тир   | File scans, log filtering, API pulls        |
 
-Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents = +90.2%** к single-Opus baseline (Anthropic eval прошлого поколения, не перемеренный). Haiku для grunt — без quality loss на грубой работе.
+Текущие версии тиров — `native-capabilities.md`. Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents = +90.2%** к single-Opus baseline (Anthropic eval; на текущем поколении моделей не перемерен). Haiku для grunt — без quality loss на грубой работе.
 
 ---
 
@@ -163,29 +162,29 @@ Override: `Agent({model: "haiku"})`. Empirical: **Opus lead + Sonnet subagents =
 - ✅ **Quarantine (triage / untrusted-content fan-out)**: субагенты, читающие untrusted public content (web / issues / email), отделены от субагентов с high-privilege действиями — acting делают только последние. Privilege-separation против prompt-injection ([«A harness for every task»](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code)).
 - ❌ **Workflow-phase split** (Plan→Code→Test→Review) — anti-pattern (см. §8).
 
-### 7.2 Opt-in subagent isolation для high-stakes coding (D-022)
+### 7.2 Opt-in subagent isolation для high-stakes coding
 
-`.claude/docs/principles.md` D-022 разрешает opt-in subagent-isolation patterns когда измеримо повышает quality. Default остаётся single-thread main (см. §2 + §10). **Применять когда**: production-critical / public API / data migration / payment flow; security-sensitive PR; multi-day autonomous work с tricky invariants; previous single-thread attempt empirically failed quality criteria.
+`.claude/docs/principles.md` (§ Subagents) разрешает opt-in subagent-isolation patterns когда измеримо повышает quality. Default остаётся single-thread main (см. §2 + §10). **Применять когда**: production-critical / public API / data migration / payment flow; security-sensitive PR; multi-day autonomous work с tricky invariants; previous single-thread attempt empirically failed quality criteria.
 
-**Pattern 1 — Planner → Generator → Evaluator** (Anthropic canonical для long tasks; [Rajasekaran Mar 2026](https://www.anthropic.com/engineering/harness-design-long-running-apps), validated via leaked Claude Code internals: [generativeprogrammer.com](https://generativeprogrammer.com/p/12-agentic-harness-patterns-from)): Planner expand 1-4 sentence prompt → spec; Generator implement + self-eval; Evaluator independent QA, 5-15 critique-refine cycles. **Negotiated sprint contracts** — Generator+Evaluator agree on «done» (deliverables + success metrics) before code. **Evaluator взаимодействует с живым приложением как пользователь** (Playwright MCP) *перед* оценкой, calibrated few-shot + weighted criteria, explicitly skeptical против self-preference — это и есть judge≠author из §8 на практике. Cost-justified когда «task sits beyond what current model does reliably solo» (Rajasekaran). Anthropic **убрала из этого паттерна ручные context-resets / sprint-decomposition** («context anxiety» исчезла, automatic compaction достаточно) — не вводи их в harness обратно.
+**Pattern 1 — Planner → Generator → Evaluator** (Anthropic canonical для long tasks; [Rajasekaran](https://www.anthropic.com/engineering/harness-design-long-running-apps), validated via leaked Claude Code internals: [generativeprogrammer.com](https://generativeprogrammer.com/p/12-agentic-harness-patterns-from)): Planner expand 1-4 sentence prompt → spec; Generator implement + self-eval; Evaluator independent QA, 5-15 critique-refine cycles. **Negotiated sprint contracts** — Generator+Evaluator agree on «done» (deliverables + success metrics) before code. **Evaluator взаимодействует с живым приложением как пользователь** (Playwright MCP) *перед* оценкой, calibrated few-shot + weighted criteria, explicitly skeptical против self-preference — это и есть judge≠author на практике. Cost-justified когда «task sits beyond what current model does reliably solo» (Rajasekaran). **Ручные context-resets / sprint-decomposition в паттерн не входят**: «context anxiety» у текущих моделей нет, automatic compaction достаточно (Rajasekaran) — не вводи их в harness.
 
-**Pattern 2 — TDD triad** (test-writer / impl / refactorer): community evidence (AgentCoder 87.8% accuracy vs 61% single-agent — [alexop.dev](https://alexop.dev/posts/custom-tdd-workflow-claude-code-vue/); AgentShield Anthropic Hackathon winner — red/blue/auditor pipeline на 3 Opus агентах). **Banned в нашем harness'е per ADR-002** (см. §8), а с 2026-10-27 снят и сам TDD (`rules/testing.md`). Documented здесь только для cross-reference на community claims.
+**Pattern 2 — TDD triad** (test-writer / impl / refactorer): community evidence (AgentCoder 87.8% accuracy vs 61% single-agent — [alexop.dev](https://alexop.dev/posts/custom-tdd-workflow-claude-code-vue/); AgentShield Anthropic Hackathon winner — red/blue/auditor pipeline на 3 Opus агентах). **Banned в нашем harness'е per ADR-002** (см. §8); сам TDD тоже не предписывается (`rules/testing.md`). Documented здесь только для cross-reference на community claims.
 
 **Pattern 3 — Driver-Navigator** (Opus+Sonnet pair): Navigator (топовая Opus, strategic) — PLAN/RED/REVIEW, никогда impl; Driver (Sonnet-тир, tactical) — GREEN/REFACTOR, никогда не пишет/модифицирует тесты. Source: [shivamagarwal7.medium.com](https://shivamagarwal7.medium.com/claude-code-pair-programming-sub-agents-that-tdd-with-minimal-supervision-904e586ed009). Не применяется: построен на RED/GREEN-ролях. Переносимое ядро — исполнитель не пишет и не правит приёмочные тесты — живёт в `workflow.md` § Check.
 
 Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Chachamaru127/claude-code-harness) — formal Plan→Work→Review с worker/reviewer/scaffolder + Go-native guardrails + breezing mode для parallel + опциональная harness-mem.
 
-**P/G/E нативно на CLI-подписке**: паттерн Planner→Generator→Evaluator и adversarial-convergence (find→refute→converge) доступны через built-in **dynamic workflows** (keyword `ultracode`, или просто попроси) — **без** API/managed-agents. First-party источник — [«A harness for every task» (Shihipar & Bidasaria, 2 июня 2026)](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code): Claude читает задачу, пишет собственный `.js`-harness (spawn субагентов, назначение моделей, worktree-изоляция, resume после прерывания), и harness становится **output задачи, не предусловием**. Обоснование изоляции — три failure-mode длинных/параллельных прогонов, которые отдельные context-окна лечат структурно: **agentic laziness** (бросает сложную задачу, объявив done), **self-preferential bias** (подтверждает собственный вывод при self-verify — ровно §8 fresh-context ≠ self-recheck), **goal drift** (констрейнты теряются через turns/compaction). `ultracode` = trigger word, не отдельный режим. [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) (API-only beta) остаются out of scope; концепт больше не нужно вручную портировать на CLI-примитивы — он встроен.
+**P/G/E нативно на CLI-подписке**: паттерн Planner→Generator→Evaluator и adversarial-convergence (find→refute→converge) доступны через built-in **dynamic workflows** (keyword `ultracode`, или просто попроси) — **без** API/managed-agents. First-party источник — [«A harness for every task» (Shihipar & Bidasaria)](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code): Claude читает задачу, пишет собственный `.js`-harness (spawn субагентов, назначение моделей, worktree-изоляция, resume после прерывания), и harness становится **output задачи, не предусловием**. Обоснование изоляции — три failure-mode длинных/параллельных прогонов, которые отдельные context-окна лечат структурно: **agentic laziness** (бросает сложную задачу, объявив done), **self-preferential bias** (подтверждает собственный вывод при self-verify — ровно поэтому независимый judge — свежий контекст, а не self-recheck), **goal drift** (констрейнты теряются через turns/compaction). `ultracode` = trigger word, не отдельный режим. [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) (API-only beta) остаются out of scope; концепт не нужно вручную портировать на CLI-примитивы — он встроен.
 
 ### 7.3 Cross-vendor fresh-context ревьюер (Codex CLI через Bash)
 
-§8 личного baseline требует, чтобы high-stakes deliverable судил **независимый свежий контекст**. Обычный subagent даёт свежий контекст, но остаётся тем же семейством моделей и разделяет наши же слепые пятна. Claude Code вызывает Codex CLI через Bash: получается ревьюер **другого вендора**, который не якорится на решении, построенном нами.
+`.claude/CLAUDE.md` («Независимый judge для silent-wrong класса») требует, чтобы high-stakes deliverable судил **независимый свежий контекст**; что это окупается, измерено в `benchmark/guard-ab/RESULTS.md`. Обычный subagent даёт свежий контекст, но остаётся тем же семейством моделей и разделяет наши же слепые пятна. Claude Code вызывает Codex CLI через Bash: получается ревьюер **другого вендора**, который не якорится на решении, построенном нами.
 
-**Как вызывать**: user-scope скилл `/codex-mcp` в **`~/.claude/skills/codex-mcp/SKILL.md`** задаёт вызов `codex exec --json` через Bash и продолжение через `codex exec resume <SESSION_ID>` по точному ID из результата первого вызова. Новый независимый ревьюер получает новую сессию; resume сохраняет контекст выбранного ревьюера для уточнений. Команды, параметры и проверка готовности живут в скилле; подключение MCP не требуется.
+**Как вызывать**: `codex exec --json` через Bash; продолжение — `codex exec resume <SESSION_ID>` по точному ID из результата первого вызова. Новый независимый ревьюер получает новую сессию; resume сохраняет контекст выбранного ревьюера для уточнений. Подключение MCP не требуется.
 
-**Когда применять**: тот же триггер, что и §8 per-change — silent-wrong класс (парсеры/переписчики недоверенного ввода, guards/валидаторы, инвариант-сохраняющие рефакторы). Плюс тупик в реализации: второй вендор вместо повторных попыток в том же контексте.
+**Когда применять**: тот же триггер, что и у независимого judge'а на изменение — silent-wrong класс (парсеры/переписчики недоверенного ввода, guards/валидаторы, инвариант-сохраняющие рефакторы). Плюс тупик в реализации: второй вендор вместо повторных попыток в том же контексте.
 
-**Дисциплина применения** (эмпирика devlog #127 — 7 раундов на `system-guard.sh`):
+**Дисциплина применения** (эмпирика одного прогона — 7 раундов ревью guard-скрипта против опасных команд; не перемерена; [запись](../devlog/entries/0127-cross-vendor-kritik-codex-perepisal-parser-system-guard-7-ra.md)):
 - **Промпт на опровержение**, не на подтверждение, и `--sandbox read-only` для ревью — ревьюеру запись не нужна по определению.
 - **Вывод — сырьё для триажа, не список задач.** Реальные находки идут вперемешку с уже задокументированными резидуалами и с adversarial-обфускацией, защищаться от которой бессмысленно. Ретрансляция as-is даёт 16 «багов» вместо 5.
 - **Каждую находку воспроизводить самому** — падающим тестом до фикса. Агент другого вендора ошибается так же, как свой.
@@ -201,7 +200,7 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 
 | Anti-pattern                                 | ADR / источник                  | Замена                                                    |
 | -------------------------------------------- | ------------------------------- | --------------------------------------------------------- |
-| TDD-тройка test-writer / impl / refactor     | ADR-002; TDD снят 2026-10-27    | Приёмочные тесты из `SPEC.md` отдельным контекстом + `rules/testing.md` |
+| TDD-тройка test-writer / impl / refactor     | ADR-002; `rules/testing.md`     | Приёмочные тесты из `SPEC.md` отдельным контекстом + `rules/testing.md` |
 | PM → Architect → Dev → QA pipeline           | meta-CLAUDE.md                  | Main thread + built-in `Plan` для design                  |
 | Generator/Evaluator контракт каждый sprint   | meta-CLAUDE.md                  | модель сама «devises ways to verify own outputs»; high-stakes — dynamic workflow opt-in |
 | Custom subagent дублирующий built-in         | ADR-007                         | сверка с инвентарём built-in'ов **до** создания           |
@@ -239,7 +238,7 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 
 «Нет» на любой вопрос → spawn не оправдан, main thread выполняет.
 
-**Про пятый пункт, эмпирика 2026-08-29 (devlog #136).** Возвращаемый текст делегата обрезается по
+**Про пятый пункт (эмпирика одного прогона, [запись](../devlog/entries/0136-zhivoy-sloy-predpisyval-instrumenty-kotorykh-v-sessii-net.md)).** Возвращаемый текст делегата обрезается по
 потолку размера, причём в том месте, до которого дошёл, — родитель получает начало анализа и не
 знает, что отрезано. Четыре отчёта из пяти в одном прогоне оборвались, и восстановление хвостов
 стоило восьми дозапросов. Теряется при этом систематически последнее: покрытие и список
@@ -260,7 +259,7 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 
 ## 12. Re-evaluation triggers
 
-Этот baseline **не invariant** — frozen on date 2026-05-10. Re-evaluate когда:
+Этот baseline **не invariant**. Re-evaluate когда:
 
 - **Major-релиз модели**: прогон проектных multi-agent workflows на классах задач, где они критичны.
 - **N≥3 эмпирических промаха** одного типа (наблюдаемый telephone-game / token-overhead inefficiency / failure mode не в §9).
@@ -275,13 +274,13 @@ Reference impl opt-in: [Chachamaru127/claude-code-harness](https://github.com/Ch
 - [Anthropic — Multi-Agent Research System](https://www.anthropic.com/engineering/multi-agent-research-system) — canonical: 90.2%, 4×/15× tokens, 80% variance, failure modes
 - [Anthropic — Common workflow patterns](https://claude.com/blog/common-workflow-patterns-for-ai-agents-and-when-to-use-them) — sequential / parallel / evaluator-optimizer taxonomy
 - [Anthropic — The new rules of context engineering](https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models) — over-constraining как механизм вреда; progressive disclosure
-- [Anthropic — Prompting Claude Opus 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5) — «use a subagent to verify» как источник over-verification
+- [Anthropic — Prompting Claude Opus (prompt-engineering guide)](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5) — «use a subagent to verify» как источник over-verification
 - [Anthropic — Effective harnesses](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
 - [Anthropic — Harness design](https://www.anthropic.com/engineering/harness-design-long-running-apps)
-- [Anthropic — A harness for every task: dynamic workflows in Claude Code](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code) — Shihipar & Bidasaria, 2 июня 2026; canonical для dynamic workflows, 3 failure-mode (laziness / self-preferential bias / goal drift), quarantine pattern, `ultracode` = trigger word
-- [ofox.ai 2026 guide](https://ofox.ai/blog/claude-code-hooks-subagents-skills-complete-guide-2026/) — 4-layer mental model
+- [Anthropic — A harness for every task: dynamic workflows in Claude Code](https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code) — Shihipar & Bidasaria; canonical для dynamic workflows, 3 failure-mode (laziness / self-preferential bias / goal drift), quarantine pattern, `ultracode` = trigger word
+- [ofox.ai guide](https://ofox.ai/blog/claude-code-hooks-subagents-skills-complete-guide-2026/) — 4-layer mental model
 - [boringbot.substack — Skills, Subagents, Hooks, Plugins, and Harnesses](https://boringbot.substack.com/p/claude-code-skills-subagents-hooks)
 - [blakecrosley.com — Agent Architecture](https://blakecrosley.com/guides/agent-architecture)
-- [mcp.directory — Best Practices 2026](https://mcp.directory/blog/claude-code-best-practices)
-- [developersdigest 2026 playbook](https://www.developersdigest.tech/blog/claude-code-agent-teams-subagents-2026)
+- [mcp.directory — Best Practices](https://mcp.directory/blog/claude-code-best-practices)
+- [developersdigest playbook](https://www.developersdigest.tech/blog/claude-code-agent-teams-subagents-2026)
 - Полный список — `archive/practices-from-projects.md` §12.1, §12.7-12.8

@@ -1,13 +1,12 @@
 ---
 owner: @harness
-last-updated: 2026-10-28
 ---
 
 # Memory layers (harness reference)
 
 Канонические слои памяти AI-агента и где они находятся в harness'е. Reference doc, не описание роли main thread'а (последнее — CLAUDE.md).
 
-Источники (полный каталог — `external-sources.md` Блоки 1, 5): Anthropic context-engineering + harnesses-for-long-running-agents + multi-agent-research; Externalization (arXiv 2604.08224) — unifying frame. Empirical context — devlog #38.
+Источники (полный каталог — `external-sources.md` Блоки 1, 5): Anthropic context-engineering + harnesses-for-long-running-agents + multi-agent-research; Externalization (arXiv 2604.08224) — unifying frame.
 
 **Рамка** (Externalization): capability мигрирует **Weights → Context → Harness**. Ключевое для памяти — **state ≠ context** и **файловая система = единственный authoritative state-record** (агент читает курированные снапшоты, не историю; «файл durable, контекст эфемерен»), а storage / state-transitions держи **детерминированными** — вероятностной оставляй только ingestion/interpretation (LLM-судья принимает ~63% неверных ответов, arXiv 2604.11364). Наши memory-файлы это уже кодируют: frontmatter `description` = retrieval-key, body = факт (*source-backed / verbatim*, не перефраз), `[[links]]` = update-metadata. Learned-pipeline не строим (out of scope).
 
@@ -18,13 +17,13 @@ last-updated: 2026-10-28
 | L0 in-session scratchpad | runtime task list | **на текущем поколении моделей пуст**: task-list тулы и `TodoWrite` не выдаются без явного opt-in (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`) — модель ведёт многошаговую работу без письменного чеклиста; версии и точные условия — `native-capabilities.md` | session | session |
 | L1 procedural | как работать, инварианты, action-skills | `.claude/CLAUDE.md`, `.claude/rules/` (проектных skills нет) | cross-session, в git | repo |
 | L2 episodic | session summaries, recurring patterns | `~/.claude/projects/<hash>/memory/MEMORY.md` + per-topic `.md` | cross-session, user-scoped | user |
-| L3 durable artifacts | what happened, why | сообщения коммитов (что изменилось), `.claude/benchmark/*/RESULTS.md` (замеры); `.claude/devlog/` — замороженный журнал до 2026-10-28 | cross-session, в git | repo |
+| L3 durable artifacts | what happened, why | сообщения коммитов (что изменилось), `.claude/benchmark/*/RESULTS.md` (замеры); `.claude/devlog/` — закрытый замороженный журнал ([ADR 0001](adr/0001-devlog-zakryt-resheniya-v-adr.md)) | cross-session, в git | repo |
 | L4 semantic / decisions | architectural rationale | `.claude/docs/adr/` (действующие решения), `.claude/docs/principles.md` (active), `.claude/docs/archive/` (frozen) | cross-session, в git | repo |
 | inter-agent | filesystem blackboard | `.claude/audits/<slug>/*.json` — вердикт свежей сессии; внутри dynamic workflow состояние несут сами агент-узлы | per-deliverable, transient | repo |
 
 ## Curation rituals
 
-- **L2 → L1 promotion**: `/remember` skill после сессий с ≥3 memory writes или ≥2 корректирующими feedback'ами — чтобы recurring patterns переходили в CLAUDE.md / rules, а не оставались user-scoped только. Каждое promotion требует явного user-confirmation.
+- **L2 → L1 promotion** (делает main thread; built-in `/remember` нет — `native-capabilities.md`): после сессий с ≥3 memory writes или ≥2 корректирующими feedback'ами — чтобы recurring patterns переходили в CLAUDE.md / rules, а не оставались user-scoped только. Каждое promotion требует явного user-confirmation.
 - **L0 → L3 promotion**: после значимого изменения — описательный коммит; замер — в `RESULTS.md` своего стенда. Журнала сессий нет ([ADR 0001](adr/0001-devlog-zakryt-resheniya-v-adr.md)).
 - **Работа в полёте → L3**: носитель — открытая спека: она говорит, что должно стать правдой и чего ещё нет. Отдельный progress-журнал не заводится; где проект уже ведёт журнал — встречать его там.
 - **L4 capture**: ADR в `.claude/docs/adr/` в той же сессии, где принято решение, которому должна следовать будущая работа (порог — docs-discipline rule 6). Отменяется новым ADR, не правкой.
@@ -35,7 +34,7 @@ last-updated: 2026-10-28
 - **Shared blackboard для inter-agent внутри одной сессии** — Cognition explicit против; subagents read/investigation only, main thread owns writes.
 - **Self-описывающие skills/agents/docs** (повторяют CLAUDE.md о роли main thread'а) — anti-pattern из ADR-017.
 - **Multi-step memory pipeline** (write → embed → retrieve → synthesise) — premature; structured notes per Anthropic достаточны.
-- **Авто-хуки на progress.md** (PreToolUse / PostToolUse, которые форсят запись) — decision point должен оставаться у разработчика и main thread'а; single-incident в invariant не превращается.
+- **Авто-хуки, форсящие запись прогресса** (PreToolUse / PostToolUse) — decision point должен оставаться у разработчика и main thread'а; single-incident в invariant не превращается.
 
 ## Inter-agent communication — наш filesystem-blackboard паттерн
 

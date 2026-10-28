@@ -1,6 +1,5 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-10-27
 ---
 
 # External sources — research index для Claude Code harness'а
@@ -33,7 +32,7 @@ truth для harness-philosophy.**
 **Авторы:** Thariq Shihipar & Sid Bidasaria (Claude Code MTS), 2 июня 2026. **Canonical для dynamic workflows** — the first-party post behind the `ultracode` / Workflow feature этого harness'а.
 **Главные тезисы:**
 - Claude читает задачу → пишет собственный `.js`-harness (native-функции для spawn субагентов, назначения моделей, worktree-изоляции) → runtime исполняет. **Harness = output задачи, не предусловие.** First-class artifact: читаемый/перезапускаемый/правимый скрипт; resume после прерывания.
-- **Три failure-mode**, которые изолированные субагенты лечат структурно: *agentic laziness* (бросает сложную задачу, объявив done), *self-preferential bias* (подтверждает собственный вывод при self-verify), *goal drift* (констрейнты теряются через turns/compaction). Прямое first-party обоснование §8 (fresh-context ≠ self-recheck) и sub-agent isolation policy.
+- **Три failure-mode**, которые изолированные субагенты лечат структурно: *agentic laziness* (бросает сложную задачу, объявив done), *self-preferential bias* (подтверждает собственный вывод при self-verify), *goal drift* (констрейнты теряются через turns/compaction). Прямое first-party обоснование независимого judge (fresh-context ≠ self-recheck) и sub-agent isolation policy.
 - **`ultracode` = trigger word, не отдельный режим** — shorthand «напиши dynamic workflow». Голое «workflow» не триггерит. Use-cases выходят за код: sales/data-eng post-mortem, triage backlog.
 - **Quarantine pattern**: в triage-workflow'ах агенты, читающие untrusted public content, лишаются high-privilege действий — acting делают отдельные субагенты (privilege-separation против prompt-injection).
 **Применяется:** multi-agent.md §7.2 + §7.1 (quarantine), principles.md §permissions (quarantine) + §subagents (3 failure-mode), workflow.md (ultracode framing). Tier T1.
@@ -161,7 +160,7 @@ Live ground-truth по фичам Claude Code CLI. **Источник для «�
 
 ### [platform.claude.com — Prompting Claude Opus 5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5)
 **Тезисы:** не над-инструктировать верификацию — модель ловит и чинит свои ошибки сама, а унаследованные «double-check», «add a final verification step», **«use a subagent to verify»** дают over-verification; давать полную спеку сразу (модель доводит задачу, а не оставляет заглушки); в код-ревью не просить «только high-severity» — отфильтруешь отдельным проходом; thinking включён по умолчанию, глубиной управляет **effort** (при выключенном thinking `xhigh`/`max` API отвергает — в CLI это теперь не долетает до API: клиент подставляет `high`, так что связка даёт не ошибку, а тихий потолок).
-**Применяется:** workflow.md anti-patterns (инструкции самопроверки в промпте), § Default effort. **Watch-item закрыт замером** (devlog #130, `benchmark/guard-ab/`): на Opus 5 независимый рефьютер свежим контекстом дал +24 / +12 / +3 кейса из 239 на одной и той же реализации, 3 прогона из 3, без роста ложных срабатываний. Предупреждение поста метит в *инструкцию самопроверки внутри промпта*, §8 — в *отдельный проход другим контекстом*; это разные вещи, и второе продолжает окупаться.
+**Применяется:** workflow.md anti-patterns (инструкции самопроверки в промпте), § Default effort. **Watch-item закрыт замером** (devlog #130, `benchmark/guard-ab/`): на Opus 5 независимый рефьютер свежим контекстом дал +24 / +12 / +3 кейса из 239 на одной и той же реализации, 3 прогона из 3, без роста ложных срабатываний. Предупреждение поста метит в *инструкцию самопроверки внутри промпта*, независимый judge — в *отдельный проход другим контекстом*; это разные вещи, и второе продолжает окупаться.
 
 ### [claude.com/blog/onboarding-claude-code-like-a-new-developer](https://claude.com/blog/onboarding-claude-code-like-a-new-developer-lessons-from-17-years-of-development)
 **Автор:** Brendan MacLean (Skyline, 700K+ LoC C#, 17 лет dev).

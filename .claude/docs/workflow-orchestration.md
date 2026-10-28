@@ -1,6 +1,5 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-08-07
 status: active
 ---
 
@@ -115,7 +114,7 @@ claude agents \
 - **`claude agents --json`** отдаёт по сессии `pid`, `cwd`, `kind`, `startedAt`, `sessionId`, `name`, `status`; `--all` добавляет завершённые
 - **Background-сессии сами сохраняют работу**: коммитят и пушат, открывают draft PR только когда задача этого требует, следуют git-инструкциям из CLAUDE.md и в финале сообщают, где лежит результат
 - **Background sessions заранее знают про shared-checkout block** — до `EnterWorktree` edits в shared checkout заблокированы, и сессии об этом сообщается заранее (нет впустую отклонённого первого edit). Усиливает worktree-isolation-first discipline выше.
-- **Лимита в 200 субагентов на сессию нет** — долгие сессии не упираются в отказ спавна (concurrency и depth-лимиты остаются)
+- **Лимита на общее число субагентов за сессию нет** — долгие сессии не упираются в отказ спавна; лимитированы concurrency и depth
 
 ### When to dispatch vs single CLI
 
@@ -180,7 +179,7 @@ Enables `SendUserMessage` tool — agent can ping user mid-flight. Use cases:
 Сессии Claude Code переписываются между собой — в том числе на разных твоих машинах;
 `ListAgents` показывает доступных адресатов (macOS/Linux). Настройки: `crossSessionInbound`
 (сообщения в сессию с обойдёнными permissions придерживаются на подтверждение; в остальные
-доставляются сами) и `dialogExpiry`. Провал доставки теперь рапортуется ошибкой, а не «Message sent».
+доставляются сами) и `dialogExpiry`. Провал доставки рапортуется ошибкой.
 
 **Security-инварианты этого канала** (соблюдать при любом multi-session fan-out):
 - relay **не несёт user-authority** — receiver отклоняет проброшенные permission requests, auto mode их блокирует;
@@ -239,7 +238,7 @@ Emit hook lifecycle events for observability tooling. Use for:
 
 ## Empirical positioning
 
-70-project agent harness survey (arXiv [2604.18071](https://arxiv.org/abs/2604.18071), Hu Wei, 2026-04-20):
+70-project agent harness survey (arXiv [2604.18071](https://arxiv.org/abs/2604.18071), Hu Wei):
 
 | Pattern | % of corpus |
 |---------|-------------|
@@ -249,7 +248,7 @@ Emit hook lifecycle events for observability tooling. Use for:
 
 «Deeper coordination pairs with more explicit context services»; «stronger execution environments with more structured governance.»
 
-**Implication для нашего harness'а**: main-thread orchestration policy (subagent spawn only при isolation/parallelism/independent review) — deliberate position, не default. Multi-level recursive ≠ universally bad; для production-critical / multi-day autonomous работы opt-in допустим (D-022 в [principles.md](principles.md)).
+**Implication для нашего harness'а**: main-thread orchestration policy (subagent spawn only при isolation/parallelism/independent review) — deliberate position, не default. Multi-level recursive ≠ universally bad; для production-critical / multi-day autonomous работы opt-in допустим ([principles.md](principles.md) — subagent isolation для high-stakes; [multi-agent.md](multi-agent.md) §7.2).
 
 ---
 
@@ -262,5 +261,5 @@ Emit hook lifecycle events for observability tooling. Use for:
 - arXiv [2604.18071 — Architectural Design Decisions in AI Agent Harnesses](https://arxiv.org/abs/2604.18071) (Hu Wei, 70-project survey)
 - arXiv [2604.14228 — Dive into Claude Code](https://arxiv.org/abs/2604.14228) — subagent isolation pattern via worktree
 - [multi-agent.md](multi-agent.md) — full subagent discipline (§7 patterns, §10 verification checklist)
-- [principles.md](principles.md) — D-022 opt-in subagent isolation rationale
+- [principles.md](principles.md) — opt-in subagent isolation rationale
 - Live evidence: `claude agents --help`, `claude --help` (flags inventory)

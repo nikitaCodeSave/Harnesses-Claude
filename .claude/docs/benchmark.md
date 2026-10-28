@@ -1,6 +1,5 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-08-07
 ---
 
 # Harness Benchmark Methodology
@@ -9,17 +8,17 @@ last-updated: 2026-08-07
 
 ## Почему именно так измеряем
 
-Anthropic SWE-bench-Verified отделяет вклад модели от вклада scaffold'а: минимальный bash+edit harness, real-world Python tasks, fail-to-pass / pass-to-pass criteria. Addy Osmani (Agent Harness Engineering, 2026): «the gap between what today's models can do and what you see them doing is largely a harness gap» — но конкретной методики не предлагает; пробел закрываем сами. Boris Cherny (howborisusesclaudecode.com): «give Claude a way to verify its work» → 2-3× качество, plus CLAUDE.md как живой регрессионный артефакт. Skill Creator eval (март 2026): blind A/B между skill-версиями, 50k+ installs валидируют подход.
+Anthropic SWE-bench-Verified отделяет вклад модели от вклада scaffold'а: минимальный bash+edit harness, real-world Python tasks, fail-to-pass / pass-to-pass criteria. Addy Osmani (Agent Harness Engineering): «the gap between what today's models can do and what you see them doing is largely a harness gap» — но конкретной методики не предлагает; пробел закрываем сами. Boris Cherny (howborisusesclaudecode.com): «give Claude a way to verify its work» → 2-3× качество, plus CLAUDE.md как живой регрессионный артефакт. Skill Creator eval: blind A/B между skill-версиями, 50k+ installs валидируют подход.
 
-Empirical insight (own data, 22 runs × 5 tasks, devlog #24-25): **harness ROI ∝ ambient exploration cost** = (fixture navigation depth) × (spec ambiguity). Toy + explicit → overhead. Realistic + navigation-required → win. Этот axis бенчмарк должен сэмплить систематически.
+Empirical insight (own data, 22 runs × 5 tasks — `.claude/benchmark/reports/CROSS-HARNESS-COMPARISON.md`; на текущем поколении моделей не перемерялось): **harness ROI ∝ ambient exploration cost** = (fixture navigation depth) × (spec ambiguity). Toy + explicit → overhead. Realistic + navigation-required → win. Этот axis бенчмарк должен сэмплить систематически.
 
-### External corroboration — Harness-Bench (arXiv 2605.27922, 2026-05-27)
+### External corroboration — Harness-Bench (arXiv 2605.27922)
 
 5,194 trajectories × 106 tasks × 6 harness configs × 8 model backends. Подтверждает методологию:
 
 - **Harness качает aggregate score на 23.8 пункта** (76.2% vs 52.4%) при идентичных условиях — сопоставимо/выше различий между моделями. → capability надо репортить на уровне **model × harness configuration**, не модели в одиночку (усиливает Layer D).
-- **«Сильнее модель → ниже cross-harness variance»** (более терпима к качеству обвязки). Это эмпирика foundational-принципа «минимум обвязки под способной моделью» — и **caution**: single-shot A/B на сильной модели систематически **недомеряет** ценность обвязки, действующей между сессиями (ровно то, что лаб увидел в devlog #61/#63).
-- **Failure-symptom taxonomy** (reusable axes для Layer C, лучше ad-hoc Q1–Q9): contract/format violations 36.4% · tool-failure-without-recovery 24.6% · incomplete evidence grounding 14.6% · uncommitted outputs 11.1% · state-preservation failures 9.3%. Маппинг на наши «invariant pings» / trajectory-метрики — кандидат на P-итерацию.
+- **«Сильнее модель → ниже cross-harness variance»** (более терпима к качеству обвязки). Это эмпирика foundational-принципа «минимум обвязки под способной моделью» — и **caution**: single-shot A/B на сильной модели систематически **недомеряет** ценность обвязки, действующей между сессиями (ровно это лаб видел на своих single-build и multi-session A/B — отчёты в `.claude/benchmark/reports/`).
+- **Failure-symptom taxonomy** (reusable axes для Layer C, лучше ad-hoc Q1–Q9): contract/format violations 36.4% · tool-failure-without-recovery 24.6% · incomplete evidence grounding 14.6% · uncommitted outputs 11.1% · state-preservation failures 9.3%. Маппинг на наши «invariant pings» / trajectory-метрики — открытый кандидат.
 
 Концептуально это open-challenge #1 из survey [«Code as Agent Harness» (arXiv 2605.18747)](https://arxiv.org/abs/2605.18747) — *harness-level evaluation / oracle adequacy: «beyond final-task success»*. Тот же сигнал: Layer C (как Claude дошёл) нельзя свести к Layer B (прошёл/нет) — symptom-taxonomy и есть oracle поверх траектории, а не итога.
 
@@ -38,17 +37,17 @@ Empirical insight (own data, 22 runs × 5 tasks, devlog #24-25): **harness ROI �
 
 ## Layer A — Static checks
 
-`.claude/benchmark/static-checks.sh` — 14 checks, ~44ms. Pre-commit blocker.
+`.claude/benchmark/static-checks.sh` — 10 checks, доли секунды. Запускается вручную перед коммитом (git-хука нет).
 
-Покрытие: CLAUDE.md ≤200, SKILL.md ≤500/каждый, principles.md ≤200, ADR format, skill/rules frontmatter, skill discovery runtime, agent inventory, hook smoke, retired-component grep, active+archive paths.
+Покрытие: CLAUDE.md ≤200, SKILL.md ≤500/каждый, principles.md ≤200, ADR format, skill frontmatter, guard от повторного ввода снятых skills/agents, active+archive paths, hooks present + executable, rule files non-empty, tool-gating ≤20 (extension surface). Skill discovery runtime (`claude --print`) и agent inventory (`claude agents`) — ручные проверки.
 
-Когда ослаблять: false-positive rate >20% — пересмотр constraints (counter-evidence per ADR-019).
+Когда ослаблять: false-positive rate >20% — пересмотр constraints (counter-evidence per ADR-019, `archive/decisions-2026Q2.md`).
 
 ---
 
 ## Layer B — Behavioral matrix (fixture × task)
 
-Replaces narrow Tier-1 suite. Matrix sparse: не cross-product, а selected cells покрывающие axis exploration cost.
+Matrix sparse: не cross-product, а selected cells покрывающие axis exploration cost.
 
 ### Fixture legends (Python-проекты, разная топология)
 
@@ -57,7 +56,7 @@ Replaces narrow Tier-1 suite. Matrix sparse: не cross-product, а selected cel
 | `toy-users-svc` (`sample-py-app`) | ~50 | 1-file service | trivial | ✓ live |
 | `fastapi-domain` (external `FastApi-Base`) | ~1000 | domain-layered web | medium-high | ✓ live |
 | `express-node` (external `ExpressApi-Base`) | ~300 | Express + Jest (polyglot control) | low | ✓ live |
-| `legacy-no-tests` | ~600 | Py2-style mix, no tests, mixed indents | high (modernization) | planned (P3) |
+| `legacy-no-tests` | ~600 | Py2-style mix, no tests, mixed indents | high (modernization) | backlog |
 | `partial-migration` | ~900 | Flask→FastAPI mid-migration | high (ambiguous) | future |
 | `cli-click-multicmd` | ~300 | Click + plugin system | medium | future |
 | `monorepo-uv` | ~1500 | UV workspace 3 packages | high | future |
@@ -77,7 +76,7 @@ Fixture spec: README с known issues, git initialised (≥1 commit), tests direc
 | `D-docs` | generate/update docs | docs files exist + content non-trivial |
 | `Neg-invariant` | trip-wire prompt толкает к нарушению инварианта | Claude отказался или трансформировал |
 
-Текущие задачи в `tier1/tasks/`: T01 (F-easy/toy), T02 (B-repro/toy), T03 (F-explore/fastapi), T03e (F-explore/express), T04 (M-migration/fastapi). Расширение — P3+.
+Текущие задачи в `tier1/tasks/`: T01 (F-easy/toy), T02 (B-repro/toy), T03 (F-explore/fastapi), T03e (F-explore/express), T04 (M-migration/fastapi); Neg-invariant — TW-01…TW-08 в `tier1/tasks/trip-wire/`. Расширение — по доказанной потребности (Roadmap).
 
 ---
 
@@ -102,7 +101,7 @@ Trajectory metrics — additive к существующим (tokens / turns / wa
 - **Sign-inversion gate** (для claims вроде «harness ускорил»): median delta вне baseline IQR + ≥2/3 runs same side.
 - **Within-noise honesty**: ±5% при CV ≥10% — нельзя называть улучшением.
 
-Эмпирика, на которой стоит протокол: T03 4×4 runs показал CV=20.8% на our harness vs 8.7% на no-harness baseline. Single-run claims на этом variance — лотерея.
+Эмпирика, на которой стоит протокол: T03 4×4 runs показал CV=20.8% на our harness vs 8.7% на no-harness baseline (`reports/CROSS-HARNESS-COMPARISON.md`; на текущем поколении моделей не перемерялось). Single-run claims на этом variance — лотерея.
 
 ---
 
@@ -136,15 +135,14 @@ Aggregate summary обязан включать:
 
 ## Current implementation state
 
-- **Layer A**: fully automated (`static-checks.sh`, 14 checks, 44ms).
-- **Layer B**: operational на 3 fixture × 5 tasks. `headless-runner.sh` clone→inject→`claude --print`→JSON→pytest judge→report. Cross-harness comparison validated (`reports/CROSS-HARNESS-COMPARISON.md`).
-- **Layer C**: partial — token/turn/cost захвачены, trajectory parsing — work-in-progress (P2 этой итерации).
-- **Layer D**: applied ad-hoc на T03 (4×4 confirmed −24% median), не protocol-default yet.
+- **Layer A**: fully automated (`static-checks.sh`, 10 checks).
+- **Layer B**: operational на 3 fixture × 5 tasks + 8 trip-wire tasks. `headless-runner.sh` clone→inject→`claude --print`→JSON→pytest judge→report. Cross-harness comparison validated (`reports/CROSS-HARNESS-COMPARISON.md`).
+- **Layer C**: `headless-runner.sh` пишет token/turn/cost и trajectory-метрики из stream-json: `skills_triggered` / `subagent_dispatches` / `invariant_pings` / `workflow_markers`.
+- **Layer D**: applied ad-hoc на T03 (4×4 confirmed −24% median), не protocol-default.
 
 ## Roadmap
 
-- **Active (P1+P2, 2026-05-11)**: trajectory parsing в `headless-runner.sh`, доки aligned, T01–T04 re-prog.
-- **Backlog (aspirational, не реализовано)**: `legacy-no-tests` legend, trip-wire/honeypot tasks, enforced stat-protocol (n=3 bracket reporting), F-ambiguous criteria-judge tasks. Реализуется по доказанной потребности — не default roadmap.
+- **Backlog (aspirational, не реализовано)**: `legacy-no-tests` legend, enforced stat-protocol (n=3 bracket reporting), F-ambiguous criteria-judge tasks. Реализуется по доказанной потребности — не default roadmap.
 
 ---
 
@@ -152,7 +150,7 @@ Aggregate summary обязан включать:
 
 - `.claude/benchmark/static-checks.sh` — Layer A implementation.
 - `.claude/benchmark/headless-runner.sh` — Layer B+C runner.
-- `.claude/skills/skill-creator:skill-creator` (marketplace) — Layer B+C для skills (eval + Comparator).
+- плагин `skill-creator` (marketplace) — Layer B+C для skills (eval + Comparator).
 
 ---
 
@@ -165,8 +163,6 @@ Claude Code (актуальный срез built-ins — `native-capabilities.md
 - Уместно: усилить acceptance в `prompt.txt` (`/goal The deliverable invokes without ImportError and pytest exits 0`). Это prompt-engineering, не структурное изменение.
 - Не уместно: оборачивать сам `claude --print` в bash-loop вокруг `/goal` — это попытка дублировать встроенный механизм извне.
 
-**Cost watch**: тривиальный `/goal` (одна Edit, 4 turn'а, 14s) — ≈$0.11 в гибриде «топовая модель + Haiku» (замер прошлого поколения, порядок величины). Для долгих goals предсказуемо $1+. Безопасность — в `prompt.txt` явное «stop after N turns regardless» либо внешний `timeout`.
+**Cost watch**: тривиальный `/goal` (одна Edit, 4 turn'а, 14s) — ≈$0.11 в гибриде «топовая модель + Haiku» (порядок величины; на текущем поколении моделей не перемерялось). Для долгих goals предсказуемо $1+. Безопасность — в `prompt.txt` явное «stop after N turns regardless» либо внешний `timeout`.
 
-**`claude agents` (TUI) — параллельные independent-сессии с автоматической worktree-isolation**. Кандидат на замену последовательного multi-run в Layer D protocol (n=3..5 на cell). Не верифицировано эмпирически в нашем контексте на момент 2026-05-12; перед адопцией нужен test-run: запустить 3 одинаковых benchmark cell'а через agent view и подтвердить (а) корректную worktree-изоляцию между ними, (б) отсутствие гонок при записи `reports/`, (в) что permission-context из `.claude/settings.json` применяется per-process.
-
-**Empirical reference**: `~/.claude/projects/-home-nikita-PROJECTS-Harnesses-Claude/memory/reference_goal_agentview_empirical.md` — что подтверждено бинарём и live-тестом, что осталось гипотезой.
+**`claude agents` (TUI) — параллельные independent-сессии с автоматической worktree-isolation**. Кандидат на замену последовательного multi-run в Layer D protocol (n=3..5 на cell). Не верифицировано эмпирически в нашем контексте; перед адопцией нужен test-run: запустить 3 одинаковых benchmark cell'а через agent view и подтвердить (а) корректную worktree-изоляцию между ними, (б) отсутствие гонок при записи `reports/`, (в) что permission-context из `.claude/settings.json` применяется per-process.

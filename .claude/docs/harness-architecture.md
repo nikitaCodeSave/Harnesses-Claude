@@ -1,6 +1,5 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-10-28
 ---
 
 # Harness architecture (evergreen reference)
@@ -16,8 +15,8 @@ Reference doc: что этот проект производит, где как�
 | Артефакт | Где | Что | Роль |
 |---|---|---|---|
 | **Плагин `harness`** | marketplace `claude-code-harness` → `~/.claude/skills/harness` | один скилл (новый / существующий / уже с harness'ом проект) и три шаблона: корневой `CLAUDE.md`, `CLAUDE.md` компонента, `settings.json`. Ни агентов, ни команд, ни хуков | **канон**: как поставить harness в любой проект |
-| **Глобальная обвязка** | `~/.claude/` | `CLAUDE.md` нет (решение 2026-10-05, devlog #142); `settings.json` — приватность и прокси, запрет `/tdd`, автообновление `mattpocock-skills`; скилл `harness` (симлинк на рабочую копию кита), плагин `mattpocock-skills`. Своих хуков нет: `system-guard` ретайрен 2026-08-29 | **окружение**, действующее во всех проектах без копирования |
-| **Лаборатория** (этот репо) | `.claude/` | R&D: эволюция канона через benchmark и ADR; архив ретайренных экспериментов | питает первые два, сам не отгружается |
+| **Глобальная обвязка** | `~/.claude/` | `CLAUDE.md` нет — строка появляется в глобальном слое, только когда её отсутствие навредило в проекте, где у неё нет другого носителя; `settings.json` — приватность и прокси, запрет `/tdd`, автообновление `mattpocock-skills`; скилл `harness` (симлинк на рабочую копию кита), плагин `mattpocock-skills`. Своих хуков нет | **окружение**, действующее во всех проектах без копирования |
+| **Лаборатория** (этот репо) | `.claude/` | R&D: эволюция канона через benchmark и ADR; архив завершённых экспериментов | питает первые два, сам не отгружается |
 
 Следствие для этого репо: hooks/commands harness **не держит** ни проектных, ни своих глобальных —
 safety закрыт нативным слоем (auto-mode классификатор + встроенный блок деструктивных git/IaC),
@@ -27,10 +26,10 @@ continuity — открытой спекой и ADR, verify — блоком *Ho
 ## Foundational principle
 
 **Минимум обвязки → максимум продуктивности под способной моделью.** (Model-agnostic; провенанс
-последнего re-grounding — refresh-ledger в `harness-evolution.md`.)
+последнего re-grounding — refresh ledger в `native-capabilities.md`.)
 
 > «As models improve, developers should strip away unnecessary scaffolding rather than accumulate
-> complexity» — Rajasekaran, Anthropic (March 2026)
+> complexity» — Rajasekaran, Anthropic
 
 Каждое расширение кодирует assumption «модель не умеет X». Если модель делает X нативно, или X
 покрывается project CLAUDE.md / built-in'ами — компонент **не добавляется**. Single-incident в
@@ -38,9 +37,7 @@ invariant не превращается (нужно multi-source или N≥3 э
 
 **Симметричное правило: `retire_bias ≥ add_bias`.** Harness, который только растёт, деградирует
 (stale-assumptions копятся, доки устаревают). Активно удалять устаревшее — сильнее, чем «не добавлять
-лишнего». Прецедент — ретайр `loop/` (devlog #117): measurement-driven self-improvement звучал
-правильно, но под способной моделью single-shot micro-A/B недомерен, а oracle без запуска тестов =
-rubber-stamp.
+лишнего».
 
 ## Виды компонентов (six loading layers)
 
@@ -109,8 +106,7 @@ ops-сложности: больше компонентов → больше con
 4. **Boundary** — какие из trust/info/containment закрывает? Указать.
 5. **Budget** — какие из token/time/ops тратит и сколько?
 6. **Retire trigger** — что *наблюдаемое* отметит, что компонент перестал окупаться? Без trigger'а
-   компонент паразитный по умолчанию («если за N сессий ни один advisory не сработал → retire» —
-   ровно урок `loop/` и `stop-validation`).
+   компонент паразитный по умолчанию («если за N сессий ни один advisory не сработал → retire»).
 
 ## Память — ортогональная ось
 
@@ -123,7 +119,7 @@ ops-сложности: больше компонентов → больше con
 | **L2 episodic** | `~/.claude/projects/<hash>/memory/MEMORY.md` + topic files | cross-session, user-scoped |
 | **L3 durable artifacts** | коммиты, `benchmark/*/RESULTS.md`; `.claude/devlog/` — замороженный архив | cross-session, в git |
 | **L4 semantic** | `.claude/docs/adr/`, `.claude/docs/principles.md`, archive | cross-session, в git |
-| **inter-agent** | filesystem blackboard (PREMORTEM/EVIDENCE/CRITIC) | per-deliverable, transient |
+| **inter-agent** | filesystem blackboard (JSON-вердикт свежей сессии в `.claude/audits/<slug>/`) | per-deliverable, transient |
 
 ### Actor views — кто что видит
 
@@ -150,9 +146,9 @@ decision в L0 scratchpad — компонент сломан.
 
 ## Sources
 
-Retrieval date: **2026-05-14** (foundational). Полный research-индекс — `external-sources.md`.
+Полный research-индекс — `external-sources.md`.
 
 - [Claude Code docs: Best Practices](https://docs.claude.com/en/docs/claude-code/best-practices) · [Hooks](https://docs.claude.com/en/docs/claude-code/hooks) · [Skills](https://docs.claude.com/en/docs/claude-code/skills) · [Sub-agents](https://docs.claude.com/en/docs/claude-code/sub-agents) · [Memory](https://docs.claude.com/en/docs/claude-code/memory) · [Settings](https://docs.claude.com/en/docs/claude-code/settings)
-- [Anthropic: Harness Design for Long-Running Apps](https://www.anthropic.com/engineering/harness-design-long-running-apps) — Rajasekaran, Mar 2026
+- [Anthropic: Harness Design for Long-Running Apps](https://www.anthropic.com/engineering/harness-design-long-running-apps) — Rajasekaran
 - [Anthropic: Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents) · [Multi-Agent Research System](https://www.anthropic.com/engineering/multi-agent-research-system)
 - [Chroma Research: Context Rot](https://research.trychroma.com/context-rot) · [Phil Schmid: Context Engineering Part 2](https://philschmid.de/context-engineering-part-2) (Manus operational data)
