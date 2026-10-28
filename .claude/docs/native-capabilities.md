@@ -711,6 +711,12 @@ correctly refuses injection-shaped instructions found in a working directory.
   marketplace catalog and retries before reporting "not found", and plugins installed via
   `/plugin` **activate immediately when it is safe** instead of always demanding
   `/reload-plugins`. A plugin may declare `"."` as its `skills` path (root-level `SKILL.md`).
+  **Auto-update** [FP, `/en/plugins/loading#when-auto-update-runs`, verified 2026-10-28]: on by
+  default only for Anthropic's official marketplaces; for any other, `autoUpdate: true` on its
+  `extraKnownMarketplaces` entry (wins) or the `/plugin` → Marketplaces toggle. Any of
+  `DISABLE_UPDATES`, `DISABLE_AUTOUPDATER`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` switches the
+  whole pass off and hides the toggle unless `FORCE_AUTOUPDATE_PLUGINS=1`. The pass runs in an
+  interactive session after the first message (random delay ≤10 min); new versions load next session.
 
 ## Output styles [FP] (`code.claude.com/docs/en/output-styles`)
 
