@@ -1,0 +1,135 @@
+{
+ "n": 3,
+ "label": "build",
+ "role": "dev",
+ "session": "2df05b07-d9b3-4f6b-a2a4-7be5c2d1f3b7",
+ "resume": true,
+ "prompt": "Several of your recommendations contradict how we want this to work, so here are my answers by number.\n\n1. Downgrades take effect at the end of the period. Nothing is billed, refunded or credited at the request, and `change_plan` returns `None`. I agree with (a). The renewal then moves the customer to the cheaper plan and bills its full price.\n\n2. Your net-price rule is wrong. Upgrade or downgrade is decided only by comparing the plans' monthly list prices, whatever interval the customer is on or moving to. A more expensive plan is an upgrade and a cheaper one is a downgrade. Switching interval on the same plan is neither.\n\n3. Your pricing is wrong in two ways.\n   - An interval switch never starts a new period now, and we never refund unused annual time. Monthly -> annual and annual -> monthly both wait for the period end. The renewal then starts a period of the new interval and bills that interval's full price.\n   - An upgrade that comes together with an interval switch is split in two. The upgrade happens now, prorated at the prices of the current interval. The interval switch happens at the period end.\n   - An upgrade applies immediately and the period does not move: same start, same end. The next renewal bills the new plan at its full price.\n   - Proration is by calendar days in the period. The fraction is remaining days / days in the period. Remaining days count from the change date inclusive to the period end exclusive.\n   - The upgrade invoice is issued on the change date and has exactly two lines: a negative credit for the unused part of the current plan and a positive charge for the same days on the new plan.\n   - Each line is price x remaining days / period days, computed exactly, then rounded half-up on its own. The total is the sum of the two rounded lines.\n   - Example: Pro -> Premium on Mar 11 in a Mar 1-Apr 1 period gives -20.32 and +50.81, total 30.49.\n\n4. Only one change can be scheduled at a time.\n   - Each request states the full target (plan and interval) and replaces whatever was scheduled before.\n   - An upgrade that applies now also discards anything scheduled, unless that same request schedules an interval switch.\n   - A scheduled change has not happened yet. An upgrade requested while a downgrade is pending is prorated from the current plan, not the scheduled one.\n   - Requesting the current plan and interval cancels anything scheduled and returns `None`. If nothing is scheduled, raise `InvalidPlanChange`.\n   - I have no view on what happens to a scheduled change when its target plan is later retired.\n\n5. Free trials: there is no proration at all. Any change during a trial applies immediately in full, whether it's an upgrade, a downgrade or an interval change. It returns `None` and no invoice is issued. The trial end date doesn't move. At trial end the customer is billed the full price of the plan and interval they're on by then.\n\n6. Rejections:\n   - A canceled subscription raises `SubscriptionNotActive`.\n   - An unknown plan raises `PlanNotFound`.\n   - A retired target plan raises `PlanNotAvailable`. Customers sitting on a retired plan can move off it like anyone else.\n   - Same plan and interval with nothing pending raises `InvalidPlanChange`.\n   - I don't mind how you handle an interval-only switch while staying on a retired plan, or a request made after `period_end` before the renewal job has run.\n   - A rejected request changes nothing. No invoice is recorded and the subscription is untouched.\n\n7. Scope is fine as you describe it. One session works for me, with the spec, the ADR, glossary terms and tests.",
+ "exit": 0,
+ "stderr_tail": "2026/10/29 00:29:47 socat[3979634] E read(6, 0x616171ac5000, 8192): Connection reset by peer\n2026/10/29 00:29:47 socat[3979633] E read(6, 0x616171ac5000, 8192): Connection reset by peer\n2026/10/29 00:31:58 socat[3979527] W exiting on signal 15\n",
+ "wall_s": 432.1,
+ "result": "`BillingService.change_plan` is in place and works the way you described.\n\n```\n$ python3 -m pytest -q\n.....................................................                    [100%]\n53 passed in 0.04s\n```\n\nThat's 20 existing tests plus 33 new ones. I wrote the new tests first and ran them against stubs, where all 30 initial ones failed. The amounts I worked out by hand all came out right, including your example: −20.32 + 50.81 = 30.49.\n\n**How it behaves**\n- **Upgrades** apply now and the period doesn't move. The invoice has the two lines, priced at the current interval's prices.\n- **Downgrades and interval switches** are saved as a scheduled change on the subscription and return `None`. `renew_due` applies the scheduled change: it starts the new plan and interval and bills the full price.\n- **Upgrade plus interval switch** is split: the upgrade now, the switch at the period end.\n- **Trials** take any change immediately and bill nothing.\n- **Rejected requests** change nothing.\n\n**Where you had no view, I chose:**\n- A different plan at the same monthly price is scheduled for the period end, so nothing is billed now.\n- An interval-only switch while staying on a retired plan raises `PlanNotAvailable`.\n- A request made after `period_end`, before the renewal job has run, raises `InvalidPlanChange`.\n- A scheduled change still applies at renewal if its target plan was retired after it was scheduled.\n\nEach of these has its own test.\n\n**Decision for you:** your rules can produce a negative upgrade invoice. Upgrades are classified by monthly price but prorated at the current interval's prices. So a plan that costs more monthly but less annually, say 30/300 → 35/250, gives an annual customer an invoice of −50.00, and nothing in the package handles that. I followed the rules as given and recorded this in the ADR. Your options are to avoid that price shape in the plan catalogue or to change the rule.\n\n**Reviews**\n- A fresh agent checked the change against the spec and found no defects. It flagged two untested cases, and I added tests for both.\n- `/code-review` led to one fix: `change_plan` now raises `TypeError` straight away if `new_interval` isn't an `Interval`. Before, a wrong value was stored and only failed inside `renew_due`, where it stopped renewal for every subscription.\n- One review finding was wrong: the credit line on a free plan does not show as `-0.00`. My check for it passed before any fix, so I dropped it.\n- I skipped the remaining review findings as cosmetic, including one about cancelling: `cancel` leaves the scheduled change on the subscription. It's never applied, but it still shows up.\n\n**Docs added**\n- `specs/plan-change.md`, with your interface copied verbatim\n- `docs/adr/0001-plan-change-timing.md`\n- `GLOSSARY.md`\n- README updates\n\nNothing is committed. Compiled `__pycache__/*.pyc` files are tracked in git, so running the tests modified them; I'd leave them out of any commit and add them to `.gitignore`.",
+ "is_error": false,
+ "num_turns": 37,
+ "total_cost_usd": 2.362734,
+ "usage": {
+  "input_tokens": 30,
+  "cache_creation_input_tokens": 46096,
+  "cache_read_input_tokens": 868546,
+  "output_tokens": 31805,
+  "output_tokens_details": {
+   "thinking_tokens": 10998
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 46096,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 64,
+   "outputTokens": 54245,
+   "thinkingTokens": 24404,
+   "cacheReadInputTokens": 1287605,
+   "cacheCreationInputTokens": 158400,
+   "cacheCreationEphemeral5mInputTokens": 82381,
+   "cacheCreationEphemeral1hInputTokens": 76019,
+   "webSearchRequests": 0,
+   "costUSD": 2.362734,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 431590,
+ "permission_denials": [
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_019iCsKJVTATiY6MSa75F1wH",
+   "tool_input": {
+    "command": "python3 -c \"\nfrom datetime import date as d\nfrom decimal import Decimal as D, ROUND_HALF_UP as H\nq=lambda x: x.quantize(D('0.01'),H)\nr=(d(2026,4,1)-d(2026,3,11)).days; t=(d(2026,4,1)-d(2026,3,1)).days\nprint(r,t,q(D(30)*r/t),q(D(75)*r/t))\nr=(d(2027,1,15)-d(2026,7,15)).days; t=(d(2027,1,15)-d(2026,1,15)).days\nprint(r,t,q(D(100)*r/t),q(D(300)*r/t))\nr=(d(2026,2,15)-d(2026,1,25)).days; t=31\nprint(r,q(D(10)*r/t),q(D(30)*r/t), q(D(30)*r/t),q(D(75)*r/t))\n\"",
+    "description": "Compute expected proration amounts"
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01DDadcnBZrJEUwPWkCoVSht",
+   "tool_input": {
+    "command": "cd /tmp/pab-work/T1-billing-proration-N-1/ws; cat -n src/billing/service.py | sed -n 1,95p; cat src/billing/plans.py src/billing/store.py; cat -n tests/test_plan_change.py; cat tests/conftest.py",
+    "description": "Read service, plans, store, tests"
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01FVXLosGVxEcHC4zNEqoRBW",
+   "tool_input": {
+    "command": "mkdir -p /tmp/review-scratch && cat > /tmp/review-scratch/test_probe.py <<'EOF'\nfrom datetime import date\nfrom decimal import Decimal\nfrom billing.plans import Interval\n\ndef test_catchup_downgrade(service, store, clock):\n    sub = service.subscribe(\"c\", \"pro\")\n    service.change_plan(sub.id, \"basic\")\n    clock.move_to(date(2026, 4, 20))\n    invs = service.renew_due()\n    assert [i.total for i in invs] == [Decimal(\"10.00\")] * 3\n    assert store.get_subscription(sub.id).scheduled_change is None\n\ndef test_catchup_interval(service, store, clock):\n    sub = service.subscribe(\"c\", \"pro\")\n    service.change_plan(sub.id, \"premium\", Interval.ANNUAL)\n    clock.move_to(date(2026, 4, 20))\n    invs = service.renew_due()\n    assert [i.total for i in invs] == [Decimal(\"750.00\")]\n    assert store.get_subscription(sub.id).period_end == date(2027, 2, 15)\n\ndef test_trial_upgrade_then_renewal_catchup(service, store, clock):\n    sub = service.subscribe(\"c\", \"pro\", Interval.MONTHLY, trial_days=10)\n    service.change_plan(sub.id, \"basic\", Interval.ANNUAL)\n    clock.move_to(date(2026, 1, 25))\n    assert [i.total for i in service.renew_due()] == [Decimal(\"100.00\")]\nEOF\ncd /tmp/pab-work/T1-billing-proration-N-1/ws && python3 -m pytest -q 2>&1 | tail -3; cp tests/conftest.py /tmp/review-scratch/conftest.py; PYTHONPATH=src python3 -m pytest -q -p no:cacheprovider --rootdir=/tmp/pab-work/T1-billing-proration-N-1/ws /tmp/review-scratch/test_probe.py 2>&1 | tail -5",
+    "description": "Run suite and probe catch-up behaviour"
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_012WSsa2stB7xqErcEzZXuNu",
+   "tool_input": {
+    "command": "PYTHONPATH=/tmp/pab-work/T1-billing-proration-N-1/ws/src python3 -m pytest -q -p no:cacheprovider --rootdir=/tmp/pab-work/T1-billing-proration-N-1/ws /tmp/review-scratch/test_probe.py 2>&1 | tail -5",
+    "description": "Run scratch probe tests"
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01TuATXFMg1Li1Qf1L7gxTwV",
+   "tool_input": {
+    "command": "PYTHONPATH=src python3 -m pytest -q -p no:cacheprovider --rootdir=/tmp/pab-work/T1-billing-proration-N-1/ws /tmp/review-scratch/test_probe.py",
+    "description": "Run scratch probe tests"
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01DU7ZUvdAWNbdnjfixcaSuk",
+   "tool_input": {
+    "command": "PYTHONPATH=src python3 -c \"\nfrom decimal import Decimal\nfrom datetime import date\nfrom billing import *\ns=InMemoryStore(); s.add_plan(Plan('free','Free',Decimal('0'),Decimal('0'))); s.add_plan(Plan('pro','Pro',Decimal('30'),Decimal('300')))\ns.add_plan(Plan('team','Team',Decimal('35'),Decimal('250')))\nc=FixedClock(date(2026,1,15)); svc=BillingService(s,c)\nsub=svc.subscribe('c','free'); c.move_to(date(2026,1,20)); inv=svc.change_plan(sub.id,'pro'); print([str(l.amount) for l in inv.lines])\nsub=svc.subscribe('c','pro',Interval.ANNUAL); inv=svc.change_plan(sub.id,'team'); print(inv.total)\nsub=svc.subscribe('c','pro'); print(svc.change_plan(sub.id,'pro','annual'))\nc.move_to(date(2026,3,1))\ntry: svc.renew_due()\nexcept Exception as e: print(type(e).__name__, e)\n\"; git ls-files | grep -c pyc",
+    "description": "Probe edge cases of change_plan"
+   }
+  }
+ ],
+ "subagent_stats": {
+  "spawned": 1,
+  "requested": {
+   "background": 0,
+   "foreground": 1,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 1,
+  "spawned_by_subagents": 0,
+  "completed": 1,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {
+   "general-purpose": 1
+  }
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "2df05b07-d9b3-4f6b-a2a4-7be5c2d1f3b7"
+}

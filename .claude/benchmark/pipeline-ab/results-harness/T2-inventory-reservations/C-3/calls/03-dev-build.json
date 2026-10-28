@@ -1,0 +1,116 @@
+{
+ "n": 3,
+ "label": "build",
+ "role": "dev",
+ "session": "df704a97-5803-4090-bf7d-1b80a2182338",
+ "resume": true,
+ "prompt": "Answers by number:\n1. 20 minutes, not 15. A configurable TTL is fine as long as the default is 20 min. `expires_at` = creation time + 20 min.\n2. Not good at exactly `expires_at`. From that instant on it is EXPIRED, so `now >= expires_at` is right.\n3. Yes. It reports EXPIRED and the units are available again, with no sweep.\n4. `ReservationExpired`. Agreed.\n5. Return the same order and create nothing. This holds at any time, even after the 20 minutes have passed.\n6. All three are right. RELEASED returns unchanged. CONFIRMED raises `InvalidReservationState`. EXPIRED is a no-op that returns it as EXPIRED, with no error.\n7. I don't mind either way. Do whatever is simplest.\n8. Fine. Placing the order at confirm time with a normal id is OK. One more point: the hold becomes that order's allocation, so `available` doesn't change at confirm. On-hand only moves when the order ships.\n9. Agreed.\n10. Global across all warehouses, and a key is never reused for a different request. Agreed.\n11. Agreed. A failed `reserve` leaves no trace, so the key can be used again.\n12. Not all-or-nothing. Each line holds as many units as are available right now, up to what was asked. A line with nothing available is left out of `items` entirely. Only if no line can hold anything does `reserve` fail with `InsufficientStock`, and then nothing is created. Validation is as you listed: unknown warehouse is `UnknownWarehouse`, unknown SKU is `UnknownSku`, zero or negative quantity is `InvalidQuantity`. A rejected request holds nothing, not even for its valid lines. I don't mind about empty items or an empty key.\n13. Agreed on available = on-hand − allocated − held, floored at 0, and a hold in one warehouse doesn't affect others. `place_order` can only take what's available, and it stays all-or-nothing. I don't mind about the report or `held()`, so leave the report alone.\n14. Any id format is fine. Also, holds never write to the ledger or change on-hand. `receive` and `adjust` are never blocked by holds. If a write-off drops on-hand below what is held, available shows 0 and the reservations stay as they are. Unknown reservation id raises `ReservationNotFound` for get, confirm and release.",
+ "exit": 0,
+ "stderr_tail": "2026/10/29 01:14:46 socat[4155416] W exiting on signal 15\n",
+ "wall_s": 246.4,
+ "result": "Stock reservations are built to your rules and the full test suite passes:\n\n```\n$ python3 -m pytest -q\n..............................................................           [100%]\n62 passed in 0.02s\n```\n\nThe spec is at `specs/stock-reservations.md`. It includes your interface word for word, the acceptance criteria as checkboxes, and the non-goals. `tests/test_reservations.py` covers every criterion. To make sure the expiry tests can actually fail, I briefly changed the cut-off from `now >= expires_at` to `>`: four tests failed, then I put it back.\n\n**How it works**\n- **Holds:** a hold reduces `available` (on-hand − allocated − held) but never writes to the ledger or changes on-hand.\n- **Partial holds:** `reserve` holds as much as is available on each line, up to what was asked, and leaves out lines with nothing available. It raises `InsufficientStock` only when it can hold nothing at all.\n- **Expiry:** a hold lapses when `now >= expires_at`, worked out from the clock whenever someone reads it, so no sweep is needed. The 20-minute default can be changed with an optional `hold_ttl=` keyword; the three-argument constructor still works.\n- **Confirm:** it creates a normal PLACED order with `placed_at` = confirm time, and `available` doesn't change. Confirming twice returns the same order, even after the 20 minutes. Confirming a lapsed hold raises `ReservationExpired`, and confirming a released one raises `InvalidReservationState`.\n- **Release:** releasing an already-released or lapsed hold returns it as it is. Releasing a confirmed one raises `InvalidReservationState`.\n- **Idempotency keys:** each key is recorded with the original request (warehouse plus the requested items, not what was actually held). It is shared across warehouses and never expires. A failed `reserve` records nothing, so the key can be reused.\n- **Ids:** reservations are numbered `RES-0001`, `RES-0002`, and so on. `stock_report` is unchanged.\n\n**From the `/code-review` pass**\n- **Fixed:** a retry with an invalid quantity like `{\"MUG\": True}` matched an earlier `{\"MUG\": 1}` (Python treats `True` as 1) and returned the old reservation. I added a test that failed, then fixed it by validating the request before looking up the key.\n  - This adds one rule you didn't state: an invalid request gets its validation error (say `UnknownWarehouse`) even if its key was used before, rather than `IdempotencyConflict`. I've recorded it in the spec.\n- **Fixed:** saving a new hold and saving its key were two separate repository calls. A database-backed repository failing between them could hold stock twice on retry. It's now a single `add_reservation` call.\n- **Not changed:**\n  - `get_reservation` returns the stored object, so a caller who edits its `items` changes the hold itself. Orders already work this way.\n  - Availability is worked out by scanning every order and hold, and holds that lapse unread are still scanned. That's fine in memory but will slow down as abandoned holds pile up.\n  - A bad `hold_ttl` raises a plain `ValueError`, as `FixedClock` does.\n\n**Project docs**\n- I created `GLOSSARY.md`, which covers the existing stock terms plus reservations.\n- I added two decision records under `docs/adr/`: `0001-lazy-reservation-expiry.md` and `0002-reservation-idempotency-keys.md`.\n- I updated `README.md`.\n\nNothing is committed yet.",
+ "is_error": false,
+ "num_turns": 33,
+ "total_cost_usd": 1.3812236,
+ "usage": {
+  "input_tokens": 36,
+  "cache_creation_input_tokens": 31175,
+  "cache_read_input_tokens": 916572,
+  "output_tokens": 23269,
+  "output_tokens_details": {
+   "thinking_tokens": 3177
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 31175,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 58,
+   "outputTokens": 30743,
+   "thinkingTokens": 6520,
+   "cacheReadInputTokens": 1136628,
+   "cacheCreationInputTokens": 77214,
+   "cacheCreationEphemeral5mInputTokens": 26302,
+   "cacheCreationEphemeral1hInputTokens": 50912,
+   "webSearchRequests": 0,
+   "costUSD": 1.3812236,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 245930,
+ "permission_denials": [
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01LeQ4a74jcPeKMjdTTvbBtc",
+   "tool_input": {
+    "command": "python3 - <<'EOF'\np = \"src/inventory/repository.py\"\ns = open(p).read()\ns = s.replace(\n    \"from .errors import DuplicateEntity, OrderNotFound, UnknownSku, UnknownWarehouse\\n\"\n    \"from .models import Order, OrderStatus, Product, Warehouse\\n\",\n    \"from .errors import (\\n    DuplicateEntity,\\n    OrderNotFound,\\n    ReservationNotFound,\\n    UnknownSku,\\n    UnknownWarehouse,\\n)\\n\"\n    \"from .models import Order, OrderStatus, Product, Reservation, ReservationStatus, Warehouse\\n\",\n)\ns = s.replace(\n    \"        self._order_seq = 0\\n\",\n    \"        self._order_seq = 0\\n\"\n    \"        self._reservations: dict[str, Reservation] = {}\\n\"\n    \"        self._reservation_seq = 0\\n\"\n    \"        # idempotency key -> (warehouse, requested items, reservation id)\\n\"\n    \"        self._reservation_keys: dict[str, tuple[str, dict[str, int], str]] = {}\\n\",\n)\ns += '''\n    # -- reservations ----------------------------------------------------\n    def next_reservation_id(self) -> str:\n        self._reservation_seq += 1\n        return f\"RES-{self._reservation_seq:04d}\"\n\n    def save_reservation(self, reservation: Reservation) -> None:\n        self._reservations[reservation.reservation_id] = reservation\n\n    def get_reservation(self, reservation_id: str) -> Reservation:\n        try:\n            return self._reservations[reservation_id]\n        except KeyError:\n            raise ReservationNotFound(reservation_id) from None\n\n    def reservations(\n        self, warehouse: str | None = None, status: ReservationStatus | None = None\n    ) -> list[Reservation]:\n        return [\n            r\n            for r in self._reservations.values()\n            if (warehouse is None or r.warehouse == warehouse)\n            and (status is None or r.status is status)\n        ]\n\n    def remember_reservation_key(\n        self, key: str, warehouse: str, requested: dict[str, int], reservation_id: str\n    ) -> None:\n        self._reservation_keys[key] = (warehouse, dict(requested), reservation_id)\n\n    def reservation_key(self, key: str) -> tuple[str, dict[str, int], str] | None:\n        \"\"\"The request first seen under ``key``, or None if the key is new.\"\"\"\n        return self._reservation_keys.get(key)\n'''\nopen(p, \"w\").write(s)\nEOF",
+    "description": "Add reservation storage and idempotency index to repository"
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01JWaaRA6rq18xjmEG4SFnJg",
+   "tool_input": {
+    "command": "sed -i 's/now >= self.expires_at/now > self.expires_at/' src/inventory/models.py && python3 -m pytest -q 2>&1 | tail -4; sed -i 's/now > self.expires_at/now >= self.expires_at/' src/inventory/models.py && git diff --stat",
+    "description": "Mutate expiry boundary, run tests, then revert"
+   }
+  },
+  {
+   "tool_name": "Read",
+   "tool_use_id": "toolu_01ArmhjDRBgDvh2Zdbqorwo2",
+   "tool_input": {
+    "file_path": "/home/nikita/.claude/projects/-tmp-pab-work-T2-inventory-reservations-C-3-ws/df704a97-5803-4090-bf7d-1b80a2182338/tool-results/bekw7pln7.txt"
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01M2HTwCWGwk4Q5FuN4CSm73",
+   "tool_input": {
+    "command": "cd /tmp/pab-work/T2-inventory-reservations-C-3/ws; cat src/inventory/service.py | sed -n 85,260p; cat src/inventory/repository.py | sed -n 25,75p; python3 -m pytest -q 2>&1 | tail -3",
+    "description": "Read service helpers and run tests"
+   }
+  }
+ ],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "df704a97-5803-4090-bf7d-1b80a2182338"
+}

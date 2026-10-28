@@ -1,0 +1,93 @@
+{
+ "n": 1,
+ "label": "build",
+ "role": "dev",
+ "session": "1bba1634-7b72-463a-a5e2-1e4445e8f4da",
+ "resume": false,
+ "prompt": "/harness:task Add stock reservations to the `inventory` package. Checkout must be able to hold stock for a cart before payment, then either confirm the hold into an order or release it. Holds nobody confirms must lapse on their own after a while, and retries from the cart service must be safe (idempotency key).\n\nInterface — hidden tests call exactly this; `InventoryService(repository, ledger, clock)` keeps working as is:\n- `InventoryService.reserve(warehouse: str, items: dict[str, int], idempotency_key: str) -> Reservation`\n- `InventoryService.confirm_reservation(reservation_id: str) -> Order`\n- `InventoryService.release_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.get_reservation(reservation_id: str) -> Reservation`\n- `InventoryService.available(sku, warehouse)` must take holds into account.\n- `inventory.models`: dataclass `Reservation` with `reservation_id: str`, `warehouse: str`, `items: dict[str, int]` (units held per SKU), `status: ReservationStatus`, `expires_at: datetime`, `order_id: str | None`; enum `ReservationStatus` with members `ACTIVE`, `CONFIRMED`, `RELEASED`, `EXPIRED`.\n- `inventory.errors`: new `ReservationNotFound`, `ReservationExpired`, `InvalidReservationState`, `IdempotencyConflict` (all subclass `InventoryError`); reuse the existing errors where they fit.\n- Time comes only from the injected clock. There is no background job: expiry must take effect without anyone calling a sweep.\n\nI own the business rules — ask me if something is unclear.",
+ "exit": 0,
+ "stderr_tail": "2026/10/29 00:40:26 socat[4034886] W exiting on signal 15\n",
+ "wall_s": 32.3,
+ "result": "I've read the whole package. There's no `GLOSSARY.md`, no `docs/adr/`, and no `specs/` yet, so I'll create them. Before I write the spec I need your call on these business rules. Each one has my recommended default, so you can just reply \"defaults ok\" or override by number.\n\n**Expiry**\n1. **Hold length (TTL).** What should it be, and should it be configurable? *Recommended:* 15 minutes by default, with an optional keyword on the constructor (`InventoryService(repo, ledger, clock, reservation_ttl=timedelta(...))`). The existing three-argument call keeps working.\n2. **Boundary.** A hold counts as expired once `clock.now() >= expires_at`. At exactly `expires_at` it no longer holds stock. *OK?*\n3. **Reading an expired hold.** When a hold has lapsed but is still stored as `ACTIVE`, `get_reservation` reports it as `EXPIRED`. *Recommended:* yes, and stored state is updated to match.\n\n**Confirm**\n4. **Confirm after expiry** raises `ReservationExpired`, even if the stock happens to still be free. *OK?*\n5. **What confirm creates.** Confirm makes a normal `PLACED` order through the existing order path: `placed_at` is the time of confirmation, the hold turns into an allocation, and the reservation becomes `CONFIRMED` with its `order_id` set. It does **not** re-check stock: the hold was the promise. If a write-off happened in the meantime, that shows up at `ship_order` time, the same as for orders today. *OK, or should confirm re-check and raise `InsufficientStock`?*\n6. **Confirming twice.** *Recommended:* return the same `Order` again, with no second order created, since retries are the point. The alternative is `InvalidReservationState`.\n\n**Release**\n7. **Release from each state.**\n   - `ACTIVE`: becomes `RELEASED`.\n   - `RELEASED`: returns it unchanged (idempotent).\n   - `CONFIRMED`: raises `InvalidReservationState`.\n   - `EXPIRED`: *recommended* returns it unchanged with status `EXPIRED`, because the stock is already free and there's nothing for the caller to do. The alternative is raising `ReservationExpired`.\n\n**Idempotency**\n8. **Same key, same request.** The same key with the same warehouse and items returns the **original** reservation in whatever state it's in now: active, confirmed, released or expired. It doesn't create a new hold or extend the expiry. *OK? Or should a retry after the original expired or was released create a fresh hold?*\n9. **Same key, different request.** A different warehouse or different items raises `IdempotencyConflict`. Keys are global, not per warehouse, and are remembered for as long as the repository lives.\n10. **Failed attempts.** A `reserve` that fails (`InsufficientStock`, bad input) does not use up the key, so a retry is evaluated fresh.\n\n**Validation, stock and reporting**\n11. **Validation.** `reserve` validates exactly like `place_order`: `UnknownWarehouse`/`UnknownSku`, `InvalidQuantity`, `InvalidOrder` for empty items, and `InsufficientStock` with all-or-nothing behaviour.\n12. **Available stock.** `available = on_hand − allocated − held`, floored at 0, where *held* means units in active, unexpired holds. `place_order` therefore can't take held stock. `allocated()` stays \"PLACED orders only\".\n13. **Stock report.** Should `stock_report` gain a `held` column? *Recommended:* add it as a non-goal for now. Changing the positional `StockRow` would break existing callers, and today the report's `available` already reflects holds.\n14. **Ids.** Reservation ids are sequential `RES-0001`, `RES-0002`, … like orders.",
+ "is_error": false,
+ "num_turns": 5,
+ "total_cost_usd": 0.23319900000000002,
+ "usage": {
+  "input_tokens": 8,
+  "cache_creation_input_tokens": 19777,
+  "cache_read_input_tokens": 73555,
+  "output_tokens": 3012,
+  "output_tokens_details": {
+   "thinking_tokens": 1110
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 19777,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 8,
+   "outputTokens": 3012,
+   "cacheReadInputTokens": 73555,
+   "cacheCreationInputTokens": 19777,
+   "webSearchRequests": 0,
+   "costUSD": 0.23319900000000002,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "thinkingTokens": 1110,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 19777,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 31672,
+ "permission_denials": [
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01XXd1mAbK8tytK9AdQCjX1h",
+   "tool_input": {
+    "command": "for f in README.md pyproject.toml src/inventory/*.py tests/*.py; do echo \"=== $f\"; cat \"$f\"; done",
+    "description": "Print all source and test files"
+   }
+  }
+ ],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "1bba1634-7b72-463a-a5e2-1e4445e8f4da"
+}

@@ -1,0 +1,929 @@
+diff --git a/GLOSSARY.md b/GLOSSARY.md
+new file mode 100644
+index 0000000..3319c9c
+--- /dev/null
++++ b/GLOSSARY.md
+@@ -0,0 +1,28 @@
++# Glossary
++
++**Normalised value** — a field value after it has been through `validation.py`
++(e.g. an email trimmed and lower-cased). Only normalised values are stored and compared.
++
++**Import** — loading a CSV file into the repository with `import_contacts`. It creates
++new contacts and merges into existing ones by normalised email. See ADR 0001.
++
++**Import report** (`ImportReport`) — what an import did: emails `created` and
++`updated`, plus row `errors` and `warnings`.
++
++**Contact row** — a non-blank row after the header of an import file. The 1000-row
++limit counts contact rows.
++
++**Blank row** — an empty line, or a row whose cells are all empty or spaces. Skipped
++silently on import.
++
++**Row number** — the line number in the import file, counting every line including
++blank ones. The header is normally row 1.
++
++**Row error** — a problem that makes an import skip the row entirely
++(`ImportReport.errors`).
++
++**Row warning** — a problem reported for a row that was still applied, e.g. an invalid
++phone that was left out (`ImportReport.warnings`).
++
++**File error** (`ImportFileError`) — the import file as a whole was rejected, and
++nothing was imported.
+diff --git a/docs/adr/0001-csv-import-merge-rules.md b/docs/adr/0001-csv-import-merge-rules.md
+new file mode 100644
+index 0000000..80cac83
+--- /dev/null
++++ b/docs/adr/0001-csv-import-merge-rules.md
+@@ -0,0 +1,36 @@
++# 0001 — CSV import: merge rules, per-row partial import, 1000-row limit
++
++Date: 2026-10-29 · Status: accepted
++
++## Context
++
++Sales imports lead spreadsheets with `import_contacts` (see `specs/csv-import.md`).
++The files overlap with contacts we already hold, often contain a few bad rows, and are
++imported repeatedly as they are corrected.
++
++## Decision
++
++1. **Partial import per row.** Valid rows are applied and invalid rows are reported
++   and skipped. A rejected row is not applied at all, not even partly to an existing
++   contact.
++2. **Existing contacts are merged, never duplicated or wiped.**
++   - Name: the file replaces ours, and is required on every row.
++   - Phone: replaced only when the cell has a value. An empty cell or a missing column
++     keeps ours. An invalid phone is a warning; the rest of the row is applied and the
++     phone is kept.
++   - Tags: union. An import never removes tags.
++   - Nothing is deleted.
++3. **First row wins** for an email repeated within one file; later rows are errors.
++4. **Whole-file rejection, with nothing applied**, for files that can't be read
++   (empty, not UTF-8, malformed CSV, required columns missing) and for files with
++   more than **1000 contact rows**. People split a big file instead of getting it
++   half-loaded. The importer validates the whole file before it writes anything.
++
++## Consequences
++
++- An import can't clear a phone or remove a tag. That has to be done through
++  `ContactBook`.
++- Importing the same file twice is safe: the second run lists every row in `updated`
++  and changes nothing.
++- Any future import path (e.g. other formats, the HTTP upload) should keep these rules,
++  so that "import" means the same thing everywhere.
+diff --git a/specs/csv-import.md b/specs/csv-import.md
+new file mode 100644
+index 0000000..a33803d
+--- /dev/null
++++ b/specs/csv-import.md
+@@ -0,0 +1,159 @@
++# CSV import
++
++## What and why
++
++Sales keeps leads in spreadsheets and wants to load a whole CSV file into contactbook
++instead of adding contacts one by one. The import creates new contacts, updates
++existing ones, and returns a report of what happened so that people can fix the
++rejected rows and import again.
++
++The file has the same columns as our CSV export (`name,email,phone,tags`, tags joined
++with `;`).
++
++## Interface (fixed by the owner — copied verbatim)
++
++- `src/contactbook/importer.py`: `import_contacts(repo: InMemoryContactRepository, data: str | bytes) -> ImportReport`
++  where `data` is the file content: raw bytes as read from disk, or already-decoded text.
++- `ImportReport` (dataclass, same module): `created: list[str]`, `updated: list[str]` (normalised
++  emails), `errors: list[RowIssue]`, `warnings: list[RowIssue]`.
++- `RowIssue` (dataclass, same module): `row: int`, `column: str | None`, `message: str`.
++- `ImportFileError(ContactError)` in `src/contactbook/errors.py`, raised when the file as a whole
++  can't be imported.
++
++## Behaviour
++
++### Reading the file
++
++- Bytes are decoded as UTF-8; a leading BOM is dropped. Text input that still starts
++  with the BOM character has it dropped too.
++- Comma is the only delimiter. Quoting follows the CSV rules that `export_csv` writes.
++- Header names are matched case-insensitively, ignoring surrounding spaces; column order
++  is free.
++- Recognised columns: `name`, `email`, `phone`, `tags`, and the pair `first_name` +
++  `last_name` as a replacement for `name`. `email` is required. `name` is required, or
++  else both `first_name` and `last_name`. `phone` and `tags` are optional.
++- With `first_name`/`last_name`, the name is first and last joined with one space and
++  then validated like any name. Issues with it are reported with column `name`.
++- Other columns are ignored, with a warning (see below).
++
++### Row numbers and blank rows
++
++- `RowIssue.row` is the line number in the file. Every line counts, blank lines
++  included. The header is row 1 and the first contact is row 2 (when there are no
++  leading blank lines). A quoted cell spanning several lines is reported at the line
++  where its row starts.
++- A blank row is an empty line, or a row whose cells are all empty or spaces (Excel's
++  `,,,`). Blank rows are skipped silently: no report entry and no row limit count.
++- A contact row is any non-blank row after the header.
++
++### Whole-file rejection — `ImportFileError`, repository untouched
++
++- The file is empty or contains only blank rows (no header).
++- The header has no `email` column, or no `name` column and not both `first_name`
++  and `last_name`.
++- The bytes are not valid UTF-8. The message tells the user to re-save the file as
++  "CSV UTF-8".
++- There are more than 1000 contact rows. Blank rows don't count. Rows that would be
++  rejected do count.
++- *(My call; the owner didn't mind)* A recognised column appears twice in the header.
++- *(My call)* The CSV is malformed, e.g. a quote is never closed. The message names
++  the line.
++- *(My call)* A single cell is longer than the field limit of Python's `csv` reader,
++  131072 characters by default. If something else in the process raises that limit,
++  such a cell becomes an ordinary row error. Lifting that limit would change a process-wide setting, and such a
++  cell is almost certainly a broken file rather than a lead.
++
++A file with a header and no contact rows is valid and gives an empty report.
++
++### Row errors — row skipped entirely, nothing from it applied
++
++Each problem is one `RowIssue` in `errors`, with `column` set to the field. Every
++problem in the row is reported.
++
++- `name`: missing/blank, or invalid (e.g. too long), including on rows that update an
++  existing contact.
++- `email`: missing/blank or invalid.
++- `tags`: any tag in the cell is invalid.
++- `email`: the normalised email already appeared on an earlier contact row of the same
++  file. The first row wins; later rows are errors. *(My call)* This holds even when the
++  earlier row was itself rejected, so the outcome never depends on whether a row
++  before it was valid.
++- *(My call)* `column=None`: the row has more cells than the header has columns, even
++  if the extra cells are empty. Spreadsheets write rows as wide as the header, so an
++  extra cell means something shifted. The usual cause is an unquoted comma in a name. If such a row were imported,
++  its values would land in the wrong columns. Its cells are therefore not read at all:
++  this is the row's only error, and its email doesn't count as a use for the
++  repeated-email rule. Missing trailing cells are treated as empty.
++
++Rows with an error produce no warnings.
++
++### Applying a valid row
++
++The email is normalised, then looked up in the repository with the existing
++case-insensitive lookup.
++
++- **New contact** → added; its normalised email is appended to `created`.
++- **Existing contact** → updated, never duplicated; its normalised email is appended to
++  `updated` (also when nothing actually changed):
++  - name: the file's value replaces the stored one;
++  - phone: replaced only when the cell has a value (not empty or spaces). An empty
++    cell or a missing `phone` column keeps the stored phone;
++  - tags: the file's tags are added to the stored ones. An import never removes tags.
++- **Phone that fails validation** → not a row error. The row is applied without it:
++  the stored phone is kept, or a new contact gets no phone. A warning with column
++  `phone` is added for the row.
++- Tags cell: split on `;`, each tag normalised. Empty pieces (e.g. a trailing `;`) are
++  ignored.
++
++`created` and `updated` are in file order.
++
++### Warnings
++
++- `phone`: invalid phone, as above.
++- *(My call; the owner allowed warning or silence)* One warning per ignored named
++  header column, with `row` = the header row and `column=None`. This catches typos
++  like `phnoe`. Header cells with no name (Excel's trailing `,,`) are ignored
++  silently. If `name` is present, `first_name`/`last_name` are ignored too and get
++  this warning.
++
++## Acceptance criteria
++
++- [ ] A file in `export_csv` format, imported into an empty repository, recreates the
++      same contacts. `created` lists their emails in order.
++- [ ] Bytes with a UTF-8 BOM, and text starting with `﻿`, import the same as without it.
++- [ ] Non-UTF-8 bytes → `ImportFileError` mentioning CSV UTF-8; repo unchanged.
++- [ ] Empty file / blank-only file → `ImportFileError`.
++- [ ] Header-only file → empty report, no error.
++- [ ] Missing `email` column; missing `name` column (and no first/last pair) → `ImportFileError`.
++- [ ] `first_name` + `last_name` → name joined with one space. A blank pair → error with column `name`.
++- [ ] Headers match ignoring case and spaces, in any order. Unknown columns don't cause errors.
++- [ ] 1000 contact rows import. 1001 contact rows → `ImportFileError` and repo unchanged.
++      Blank rows don't count toward the limit.
++- [ ] Row numbers: header is 1, first contact is 2, and blank lines count.
++- [ ] Blank rows (empty line, `,,,`, cells of spaces) produce no report entries.
++- [ ] Invalid/missing name, invalid/missing email, invalid tag → error on that row with that column;
++      the row isn't applied, and an existing contact stays untouched.
++- [ ] Bad name on a row matching an existing contact → error; contact unchanged.
++- [ ] Repeated email in the file → later rows are errors with column `email`; first row applied.
++- [ ] Existing contact: name replaced, phone replaced only when the cell is non-empty, tags unioned;
++      email listed in `updated`, not `created`, and the repo size doesn't grow.
++- [ ] Empty phone cell or no phone column → existing phone kept.
++- [ ] Invalid phone → warning (column `phone`), rest of the row applied, existing phone kept / new
++      contact has no phone.
++- [ ] Unclosed quote → `ImportFileError`, repo unchanged.
++- [ ] `ImportFileError` is a `ContactError`.
++- [ ] `python3 -m pytest -q` exits 0.
++
++## Non-goals
++
++- Dry-run / preview mode.
++- Deleting contacts missing from the file.
++- A `ContactBook` method — `import_contacts` is the only entry point.
++- CSV-injection handling (an export concern).
++- Delimiters other than comma; encodings other than UTF-8.
++
++## Scope limits
++
++- New module `src/contactbook/importer.py`. `ImportFileError` is added to `errors.py`
++  and re-exported from the package. Existing modules are otherwise unchanged.
++- Standard library only.
+diff --git a/src/contactbook/__init__.py b/src/contactbook/__init__.py
+index 016d153..ac82c49 100644
+--- a/src/contactbook/__init__.py
++++ b/src/contactbook/__init__.py
+@@ -4,6 +4,7 @@ from .errors import (
+     ContactError,
+     ContactNotFoundError,
+     DuplicateContactError,
++    ImportFileError,
+     ValidationError,
+ )
+ from .models import Contact
+@@ -18,6 +19,7 @@ __all__ = [
+     "ContactError",
+     "ContactNotFoundError",
+     "DuplicateContactError",
++    "ImportFileError",
+     "InMemoryContactRepository",
+     "ValidationError",
+ ]
+diff --git a/src/contactbook/__pycache__/__init__.cpython-312.pyc b/src/contactbook/__pycache__/__init__.cpython-312.pyc
+new file mode 100644
+index 0000000..0ead4c5
+Binary files /dev/null and b/src/contactbook/__pycache__/__init__.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/errors.cpython-312.pyc b/src/contactbook/__pycache__/errors.cpython-312.pyc
+new file mode 100644
+index 0000000..0a65fc5
+Binary files /dev/null and b/src/contactbook/__pycache__/errors.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/export.cpython-312.pyc b/src/contactbook/__pycache__/export.cpython-312.pyc
+new file mode 100644
+index 0000000..866cb88
+Binary files /dev/null and b/src/contactbook/__pycache__/export.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/importer.cpython-312.pyc b/src/contactbook/__pycache__/importer.cpython-312.pyc
+new file mode 100644
+index 0000000..a847aa7
+Binary files /dev/null and b/src/contactbook/__pycache__/importer.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/models.cpython-312.pyc b/src/contactbook/__pycache__/models.cpython-312.pyc
+new file mode 100644
+index 0000000..99a5769
+Binary files /dev/null and b/src/contactbook/__pycache__/models.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/repository.cpython-312.pyc b/src/contactbook/__pycache__/repository.cpython-312.pyc
+new file mode 100644
+index 0000000..4e8d24e
+Binary files /dev/null and b/src/contactbook/__pycache__/repository.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/service.cpython-312.pyc b/src/contactbook/__pycache__/service.cpython-312.pyc
+new file mode 100644
+index 0000000..9e74c0a
+Binary files /dev/null and b/src/contactbook/__pycache__/service.cpython-312.pyc differ
+diff --git a/src/contactbook/__pycache__/validation.cpython-312.pyc b/src/contactbook/__pycache__/validation.cpython-312.pyc
+new file mode 100644
+index 0000000..7f4570c
+Binary files /dev/null and b/src/contactbook/__pycache__/validation.cpython-312.pyc differ
+diff --git a/src/contactbook/errors.py b/src/contactbook/errors.py
+index 8d435b2..5dfa13a 100644
+--- a/src/contactbook/errors.py
++++ b/src/contactbook/errors.py
+@@ -32,6 +32,14 @@ class DuplicateContactError(ContactError):
+         self.email = email
+ 
+ 
++class ImportFileError(ContactError):
++    """An import file was rejected as a whole; nothing from it was imported.
++
++    Problems with single rows are not raised: they are reported in the
++    ImportReport instead.
++    """
++
++
+ class ContactNotFoundError(ContactError):
+     """No contact with this email."""
+ 
+diff --git a/src/contactbook/importer.py b/src/contactbook/importer.py
+new file mode 100644
+index 0000000..822c44c
+--- /dev/null
++++ b/src/contactbook/importer.py
+@@ -0,0 +1,224 @@
++"""CSV import of contacts.
++
++Reads files in the export format (see export.py) and merges them into a
++repository. The rules are in specs/csv-import.md and ADR 0001; in short:
++
++- the whole file is read and checked before anything is written, so an
++  ImportFileError always leaves the repository untouched;
++- a row with an error is skipped entirely; an invalid phone is only a warning;
++- existing contacts are merged: the name is replaced, the phone only when the
++  cell has a value, and tags are added, never removed.
++"""
++
++from __future__ import annotations
++
++import csv
++import io
++from dataclasses import dataclass, field, replace
++
++from .errors import ImportFileError, ValidationError
++from .export import TAG_SEPARATOR
++from .models import Contact
++from .repository import InMemoryContactRepository
++from .validation import normalize_email, normalize_phone, normalize_tags, validate_name
++
++MAX_IMPORT_ROWS = 1000
++
++_BOM = "\ufeff"
++_FIELDS = ("name", "email", "phone", "tags")
++_NAME_PARTS = ("first_name", "last_name")
++
++
++@dataclass
++class RowIssue:
++    """A problem with one row. ``row`` is the line number in the file (every
++    line counts, blank ones too); ``column`` is ``name``, ``email``, ``phone``,
++    ``tags`` or None when the issue is not about a single field."""
++
++    row: int
++    column: str | None
++    message: str
++
++
++@dataclass
++class ImportReport:
++    """What an import did. Emails are normalised and in file order."""
++
++    created: list[str] = field(default_factory=list)
++    updated: list[str] = field(default_factory=list)
++    errors: list[RowIssue] = field(default_factory=list)
++    warnings: list[RowIssue] = field(default_factory=list)
++
++
++@dataclass(frozen=True, slots=True)
++class _ValidRow:
++    name: str
++    email: str
++    phone: str | None  # None: keep the stored phone
++    tags: frozenset[str]
++
++
++def import_contacts(repo: InMemoryContactRepository, data: str | bytes) -> ImportReport:
++    """Import a CSV file (raw bytes or decoded text) into ``repo``.
++
++    Raises ImportFileError, without touching ``repo``, when the file as a whole
++    can't be imported; problems with single rows end up in the report.
++    """
++    records = _read_records(_decode(data))
++    if not records:
++        raise ImportFileError("the file is empty")
++    (header_line, header), *rows = records
++    report = ImportReport()
++    columns = _read_header(header_line, header, report)
++
++    seen: dict[str, int] = {}
++    valid = [
++        parsed
++        for line, cells in rows
++        if (parsed := _read_row(line, cells, len(header), columns, seen, report))
++    ]
++
++    for row in valid:
++        existing = repo.find(row.email)
++        if existing is None:
++            repo.add(Contact(name=row.name, email=row.email, phone=row.phone, tags=row.tags))
++            report.created.append(row.email)
++        else:
++            repo.update(
++                replace(
++                    existing,
++                    name=row.name,
++                    phone=row.phone or existing.phone,
++                    tags=existing.tags | row.tags,
++                )
++            )
++            report.updated.append(row.email)
++    return report
++
++
++def _decode(data: str | bytes) -> str:
++    if isinstance(data, bytes):
++        try:
++            text = data.decode("utf-8")
++        except UnicodeDecodeError as exc:
++            raise ImportFileError(
++                f"the file is not UTF-8 text (invalid byte at offset {exc.start}); "
++                'please re-save it as "CSV UTF-8"'
++            ) from None
++    elif isinstance(data, str):
++        text = data
++    else:
++        raise TypeError(f"import data must be str or bytes, not {type(data).__name__}")
++    return text.removeprefix(_BOM)
++
++
++def _read_records(text: str) -> list[tuple[int, list[str]]]:
++    """Non-blank records with the line they start on: the header and the contact
++    rows. Stops reading as soon as the row limit is exceeded."""
++    reader = csv.reader(io.StringIO(text, newline=""), strict=True)
++    records: list[tuple[int, list[str]]] = []
++    while True:
++        line = reader.line_num + 1
++        try:
++            cells = next(reader)
++        except StopIteration:
++            return records
++        except csv.Error as exc:
++            raise ImportFileError(f"line {line} is not valid CSV: {exc}") from None
++        if not any(cell.strip() for cell in cells):
++            continue
++        records.append((line, cells))
++        if len(records) > MAX_IMPORT_ROWS + 1:
++            raise ImportFileError(
++                f"the file has more than {MAX_IMPORT_ROWS} contacts; "
++                "please split it into smaller files"
++            )
++
++
++def _read_header(line: int, header: list[str], report: ImportReport) -> dict[str, int]:
++    """Map recognised column names to their position; warn about ignored ones."""
++    columns: dict[str, int] = {}
++    for index, raw in enumerate(header):
++        name = raw.strip().lower()
++        if name in _FIELDS or name in _NAME_PARTS:
++            if name in columns:
++                raise ImportFileError(f"column {name!r} appears more than once in the header")
++            columns[name] = index
++    if "email" not in columns:
++        raise ImportFileError("the header has no 'email' column")
++    if "name" in columns:
++        for part in _NAME_PARTS:
++            columns.pop(part, None)
++    elif not all(part in columns for part in _NAME_PARTS):
++        raise ImportFileError(
++            "the header has no 'name' column (or 'first_name' and 'last_name' columns)"
++        )
++
++    used = set(columns.values())
++    for index, raw in enumerate(header):
++        if index not in used and raw.strip():
++            report.warnings.append(RowIssue(line, None, f"column {raw.strip()!r} is ignored"))
++    return columns
++
++
++def _read_row(
++    line: int,
++    cells: list[str],
++    width: int,
++    columns: dict[str, int],
++    seen: dict[str, int],
++    report: ImportReport,
++) -> _ValidRow | None:
++    """Validate one contact row. Returns None, after reporting its errors, if the
++    row must be skipped. ``seen`` maps emails to the row that first used them."""
++    if len(cells) > width:
++        report.errors.append(
++            RowIssue(
++                line,
++                None,
++                f"row has {len(cells)} cells but the header has {width} columns "
++                "(a comma in a value that is not quoted?)",
++            )
++        )
++        return None
++
++    def cell(column: str) -> str:
++        index = columns.get(column)
++        return cells[index] if index is not None and index < len(cells) else ""
++
++    errors: list[RowIssue] = []
++
++    def check(column: str, normalise, raw):
++        try:
++            return normalise(raw)
++        except ValidationError as exc:
++            errors.append(RowIssue(line, column, exc.message))
++            return None
++
++    raw_name = cell("name") if "name" in columns else f"{cell('first_name')} {cell('last_name')}"
++    name = check("name", validate_name, raw_name)
++    email = check("email", normalize_email, cell("email"))
++    if email is not None:
++        if email in seen:
++            errors.append(
++                RowIssue(line, "email", f"{email} already appears on row {seen[email]}")
++            )
++        else:
++            seen[email] = line
++    pieces = [piece for piece in cell("tags").split(TAG_SEPARATOR) if piece.strip()]
++    tags = check("tags", normalize_tags, pieces)
++
++    if errors:
++        report.errors.extend(errors)
++        return None
++
++    phone = None
++    raw_phone = cell("phone")
++    if raw_phone.strip():
++        try:
++            phone = normalize_phone(raw_phone)
++        except ValidationError as exc:
++            report.warnings.append(
++                RowIssue(line, "phone", f"{exc.message}; the phone was not imported")
++            )
++    return _ValidRow(name=name, email=email, phone=phone, tags=tags)
+diff --git a/tests/__pycache__/test_export.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_export.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..5e97e74
+Binary files /dev/null and b/tests/__pycache__/test_export.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_importer.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_importer.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..5b9c194
+Binary files /dev/null and b/tests/__pycache__/test_importer.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_models.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_models.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..203ba7e
+Binary files /dev/null and b/tests/__pycache__/test_models.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_repository.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_repository.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..7bdfe7b
+Binary files /dev/null and b/tests/__pycache__/test_repository.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_service.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_service.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..fe7f7d3
+Binary files /dev/null and b/tests/__pycache__/test_service.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_validation.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_validation.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..987456f
+Binary files /dev/null and b/tests/__pycache__/test_validation.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/test_importer.py b/tests/test_importer.py
+new file mode 100644
+index 0000000..153755f
+--- /dev/null
++++ b/tests/test_importer.py
+@@ -0,0 +1,357 @@
++import pytest
++
++from contactbook.errors import ContactError, ImportFileError
++from contactbook.export import export_csv
++from contactbook.importer import ImportReport, RowIssue, import_contacts
++from contactbook.models import Contact
++from contactbook.repository import InMemoryContactRepository
++
++HEADER = "name,email,phone,tags\n"
++
++
++def ann(**overrides):
++    fields = {"name": "Ann Lee", "email": "ann@example.com"}
++    fields.update(overrides)
++    return Contact.create(**fields)
++
++
++def issues(found):
++    return [(issue.row, issue.column) for issue in found]
++
++
++# --- reading the file -------------------------------------------------------
++
++
++def test_export_round_trips_into_an_empty_repository():
++    contacts = [
++        ann(phone="+15551234567", tags=["vip", "lead"]),
++        Contact.create(name="Bob, Jr.", email="bob@example.com"),
++    ]
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, export_csv(contacts))
++    assert report == ImportReport(
++        created=["ann@example.com", "bob@example.com"], updated=[], errors=[], warnings=[]
++    )
++    assert repo.all() == contacts
++
++
++def test_bytes_and_text_with_or_without_bom_import_the_same():
++    text = HEADER + "Ann Lee,ann@example.com,,\n"
++    for data in (text, "\ufeff" + text, text.encode(), b"\xef\xbb\xbf" + text.encode()):
++        repo = InMemoryContactRepository()
++        report = import_contacts(repo, data)
++        assert report.created == ["ann@example.com"], data
++        assert report.warnings == [], data
++
++
++def test_utf8_names_survive_bytes_input():
++    repo = InMemoryContactRepository()
++    import_contacts(repo, (HEADER + "Zoë Ångström,zoe@example.com,,\n").encode())
++    assert repo.get("zoe@example.com").name == "Zoë Ångström"
++
++
++def test_crlf_line_endings_are_accepted():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, b"name,email\r\nAnn Lee,ann@example.com\r\n")
++    assert report.created == ["ann@example.com"]
++
++
++def test_non_utf8_bytes_reject_the_file():
++    repo = InMemoryContactRepository()
++    data = (HEADER + "Zoë,zoe@example.com,,\n").encode("cp1252")
++    with pytest.raises(ImportFileError, match="CSV UTF-8"):
++        import_contacts(repo, data)
++    assert len(repo) == 0
++
++
++def test_import_file_error_is_a_contact_error():
++    assert issubclass(ImportFileError, ContactError)
++
++
++@pytest.mark.parametrize("data", ["", b"", "\n\n", " , ,\n\n", "\ufeff", b"\xef\xbb\xbf\n"])
++def test_empty_file_is_rejected(data):
++    with pytest.raises(ImportFileError):
++        import_contacts(InMemoryContactRepository(), data)
++
++
++def test_header_only_file_gives_an_empty_report():
++    assert import_contacts(InMemoryContactRepository(), HEADER) == ImportReport(
++        created=[], updated=[], errors=[], warnings=[]
++    )
++
++
++@pytest.mark.parametrize(
++    "header", ["name,phone,tags", "email,phone,tags", "first_name,email", "last_name,email"]
++)
++def test_missing_required_column_rejects_the_file(header):
++    repo = InMemoryContactRepository()
++    with pytest.raises(ImportFileError):
++        import_contacts(repo, header + "\nAnn,ann@example.com\n")
++    assert len(repo) == 0
++
++
++def test_header_matching_ignores_case_spaces_and_order():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, " Tags , EMAIL,Name \nvip,ann@example.com,Ann Lee\n")
++    assert report.created == ["ann@example.com"]
++    assert repo.get("ann@example.com") == ann(tags=["vip"])
++
++
++def test_unknown_columns_are_ignored_with_a_warning_not_an_error():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, "name,company,email\nAnn Lee,ACME,ann@example.com\n")
++    assert report.created == ["ann@example.com"]
++    assert report.errors == []
++    assert issues(report.warnings) == [(1, None)]
++    assert "company" in report.warnings[0].message
++
++
++def test_repeated_recognised_column_rejects_the_file():
++    with pytest.raises(ImportFileError, match="email"):
++        import_contacts(InMemoryContactRepository(), "name,email,Email\nAnn,a@example.com,b@example.com\n")
++
++
++def test_unclosed_quote_rejects_the_file():
++    repo = InMemoryContactRepository()
++    data = HEADER + "Ann Lee,ann@example.com,,\n\"Bob,bob@example.com,,\nCid,cid@example.com,,\n"
++    with pytest.raises(ImportFileError, match="line 3"):
++        import_contacts(repo, data)
++    assert len(repo) == 0
++
++
++# --- first_name / last_name -------------------------------------------------
++
++
++def test_first_and_last_name_are_joined_with_one_space():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, "first_name,last_name,email\n Ann , Lee ,ann@example.com\n")
++    assert report.created == ["ann@example.com"]
++    assert repo.get("ann@example.com").name == "Ann Lee"
++
++
++def test_first_and_last_name_without_spaces_get_one_between_them():
++    repo = InMemoryContactRepository()
++    import_contacts(repo, "first_name,last_name,email\nAnn,Lee,ann@example.com\n")
++    assert repo.get("ann@example.com").name == "Ann Lee"
++
++
++def test_blank_first_and_last_name_is_a_name_error():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, "First_Name,Last_Name,email\n,,ann@example.com\n")
++    assert issues(report.errors) == [(2, "name")]
++    assert len(repo) == 0
++
++
++# --- row numbers, blank rows, limit -----------------------------------------
++
++
++def test_row_numbers_count_every_line_including_blank_ones():
++    data = HEADER + "\nAnn Lee,not-an-email,,\n,,,\n   ,  ,,\nBob,,,\n"
++    report = import_contacts(InMemoryContactRepository(), data)
++    assert issues(report.errors) == [(3, "email"), (6, "email")]
++
++
++def test_multi_line_cell_is_reported_at_the_line_its_row_starts():
++    data = HEADER + '"Ann\nLee",bad,,\n"Bob\n\nStone",,,\nCid,cid,,\n'
++    report = import_contacts(InMemoryContactRepository(), data)
++    assert issues(report.errors) == [(2, "email"), (4, "email"), (7, "email")]
++
++
++def test_cell_beyond_the_csv_field_limit_rejects_the_file():
++    repo = InMemoryContactRepository()
++    with pytest.raises(ImportFileError, match="line 2"):
++        import_contacts(repo, HEADER + "x" * 140_000 + ",ann@example.com,,\n")
++    assert len(repo) == 0
++
++
++def test_blank_rows_are_skipped_silently():
++    data = HEADER + "\n,,,\n , , , \nAnn Lee,ann@example.com,,\n\n"
++    report = import_contacts(InMemoryContactRepository(), data)
++    assert report == ImportReport(created=["ann@example.com"], updated=[], errors=[], warnings=[])
++
++
++def contact_rows(count):
++    return "".join(f"P{i},p{i}@example.com,,\n" for i in range(count))
++
++
++def test_a_thousand_contact_rows_are_imported():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, HEADER + contact_rows(1000) + ",,,\n\n" * 50)
++    assert len(report.created) == 1000
++    assert len(repo) == 1000
++
++
++def test_more_than_a_thousand_contact_rows_rejects_the_file():
++    repo = InMemoryContactRepository([ann()])
++    with pytest.raises(ImportFileError, match="1000"):
++        import_contacts(repo, HEADER + "Ann Smith,ann@example.com,,\n" + contact_rows(1000))
++    assert repo.all() == [ann()]
++
++
++def test_invalid_rows_count_towards_the_limit():
++    with pytest.raises(ImportFileError):
++        import_contacts(InMemoryContactRepository(), HEADER + contact_rows(1000) + "x,bad,,\n")
++
++
++# --- row errors -------------------------------------------------------------
++
++
++@pytest.mark.parametrize(
++    "row, column",
++    [
++        (",ann@example.com,,", "name"),
++        ("   ,ann@example.com,,", "name"),
++        (f"{'x' * 101},ann@example.com,,", "name"),
++        ("Ann Lee,,,", "email"),
++        ("Ann Lee,ann@example,,", "email"),
++        ("Ann Lee,ann@example.com,,vip;c++", "tags"),
++    ],
++)
++def test_invalid_field_is_a_row_error_and_the_row_is_skipped(row, column):
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, HEADER + row + "\n")
++    assert issues(report.errors) == [(2, column)]
++    assert report.created == report.updated == report.warnings == []
++    assert len(repo) == 0
++
++
++def test_every_problem_in_a_row_is_reported():
++    report = import_contacts(InMemoryContactRepository(), HEADER + ",nope,,c++\n")
++    assert issues(report.errors) == [(2, "name"), (2, "email"), (2, "tags")]
++
++
++def test_rejected_row_does_not_touch_the_existing_contact():
++    existing = ann(phone="+15551234567", tags=["vip"])
++    repo = InMemoryContactRepository([existing])
++    report = import_contacts(repo, HEADER + "Ann Smith,ann@example.com,+4930123456,lead;c++\n")
++    assert issues(report.errors) == [(2, "tags")]
++    assert report.updated == []
++    assert repo.get("ann@example.com") == existing
++
++
++def test_name_is_required_when_updating_too():
++    repo = InMemoryContactRepository([ann()])
++    report = import_contacts(repo, HEADER + ",ANN@example.com,+4930123456,lead\n")
++    assert issues(report.errors) == [(2, "name")]
++    assert repo.get("ann@example.com") == ann()
++
++
++def test_repeated_email_in_the_file_first_row_wins():
++    repo = InMemoryContactRepository()
++    data = HEADER + "Ann Lee,ann@example.com,,\nBob,bob@example.com,,\nAnn Smith, ANN@Example.com ,,vip\n"
++    report = import_contacts(repo, data)
++    assert report.created == ["ann@example.com", "bob@example.com"]
++    assert issues(report.errors) == [(4, "email")]
++    assert "row 2" in report.errors[0].message
++    assert repo.get("ann@example.com") == ann()
++
++
++def test_repeated_email_after_a_rejected_row_is_still_an_error():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, HEADER + ",ann@example.com,,\nAnn Lee,ann@example.com,,\n")
++    assert issues(report.errors) == [(2, "name"), (3, "email")]
++    assert len(repo) == 0
++
++
++def test_row_with_more_cells_than_the_header_is_an_error():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, "name,email\nLee, Ann,ann@example.com\nAnn Lee,ann@example.com\n")
++    assert issues(report.errors) == [(2, None)]
++    assert report.created == ["ann@example.com"]
++
++
++def test_shifted_row_is_an_error_even_when_the_extra_cell_is_empty():
++    existing = ann(phone="+15551234567")
++    repo = InMemoryContactRepository([existing])
++    report = import_contacts(repo, "email,name,phone,tags\nann@example.com,Lee, Ann,,\n")
++    assert issues(report.errors) == [(2, None)]
++    assert repo.get("ann@example.com") == existing
++
++
++def test_short_rows_are_padded_with_empty_cells():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, HEADER + "Bob,bob@example.com\n")
++    assert report.created == ["bob@example.com"]
++    assert report.errors == []
++
++
++def test_rows_as_wide_as_a_header_with_unnamed_columns_are_fine():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, "name,email,phone,tags,,\nAnn Lee,ann@example.com,,,,\n")
++    assert report == ImportReport(created=["ann@example.com"], updated=[], errors=[], warnings=[])
++
++
++# --- merging into existing contacts -----------------------------------------
++
++
++def test_existing_contact_is_merged_not_duplicated():
++    repo = InMemoryContactRepository([ann(phone="+15551234567", tags=["vip"])])
++    report = import_contacts(repo, HEADER + "Ann Smith,ANN@example.com,+49 30 123456,lead\n")
++    assert report.created == []
++    assert report.updated == ["ann@example.com"]
++    assert len(repo) == 1
++    assert repo.get("ann@example.com") == Contact(
++        name="Ann Smith",
++        email="ann@example.com",
++        phone="+4930123456",
++        tags=frozenset({"vip", "lead"}),
++    )
++
++
++@pytest.mark.parametrize(
++    "data", [HEADER + "Ann Smith,ann@example.com,  ,\n", "name,email\nAnn Smith,ann@example.com\n"]
++)
++def test_empty_or_missing_phone_keeps_the_existing_phone(data):
++    repo = InMemoryContactRepository([ann(phone="+15551234567", tags=["vip"])])
++    report = import_contacts(repo, data)
++    assert report.updated == ["ann@example.com"]
++    assert report.warnings == []
++    assert repo.get("ann@example.com") == ann(
++        name="Ann Smith", phone="+15551234567", tags=["vip"]
++    )
++
++
++def test_unchanged_contact_is_listed_as_updated():
++    repo = InMemoryContactRepository([ann()])
++    report = import_contacts(repo, HEADER + "Ann Lee,ann@example.com,,\n")
++    assert report == ImportReport(created=[], updated=["ann@example.com"], errors=[], warnings=[])
++
++
++def test_tags_cell_ignores_empty_pieces():
++    repo = InMemoryContactRepository()
++    import_contacts(repo, HEADER + "Ann Lee,ann@example.com,, VIP ;;Key Account;\n")
++    assert repo.get("ann@example.com").tags == {"vip", "key-account"}
++
++
++# --- invalid phone is a warning ---------------------------------------------
++
++
++def test_invalid_phone_on_new_contact_is_a_warning_and_contact_has_no_phone():
++    repo = InMemoryContactRepository()
++    report = import_contacts(repo, HEADER + "Ann Lee,ann@example.com,CALL ME,vip\n")
++    assert report.created == ["ann@example.com"]
++    assert report.errors == []
++    assert issues(report.warnings) == [(2, "phone")]
++    assert repo.get("ann@example.com") == ann(tags=["vip"])
++
++
++def test_invalid_phone_on_existing_contact_keeps_its_phone():
++    repo = InMemoryContactRepository([ann(phone="+15551234567")])
++    report = import_contacts(repo, HEADER + "Ann Smith,ann@example.com,12345,lead\n")
++    assert report.updated == ["ann@example.com"]
++    assert issues(report.warnings) == [(2, "phone")]
++    assert repo.get("ann@example.com") == ann(
++        name="Ann Smith", phone="+15551234567", tags=["lead"]
++    )
++
++
++def test_rejected_row_reports_no_phone_warning():
++    report = import_contacts(InMemoryContactRepository(), HEADER + ",ann@example.com,123,\n")
++    assert issues(report.errors) == [(2, "name")]
++    assert report.warnings == []
++
++
++def test_row_issue_shape():
++    report = import_contacts(InMemoryContactRepository(), HEADER + "Ann Lee,bad,,\n")
++    assert isinstance(report.errors[0], RowIssue)
++    assert report.errors[0].message

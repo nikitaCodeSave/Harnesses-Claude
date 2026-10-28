@@ -1,0 +1,123 @@
+{
+ "n": 3,
+ "label": "build",
+ "role": "dev",
+ "session": "8731a3c8-eed6-4e19-a7e4-d75c06bf3dcf",
+ "resume": true,
+ "prompt": "Defaults are fine except where I say otherwise below.\n\n1. Make it 20 minutes, not 15. The optional keyword argument is fine as long as the default is 20.\n2. Agreed. A hold is expired from `expires_at` on, including that exact instant, and its units are available again. `expires_at` is creation time plus 20 minutes.\n3. Agreed. The order is for exactly the units actually held, which matters after a partial hold (see 16).\n4. I don't mind either way. `receive` and `adjust` are never blocked by holds. If a write-off leaves on-hand below what is held, available shows 0 and the reservations stay as they are.\n5. Agreed.\n6. Agreed. Return the same order and create nothing, even after the 20 minutes have passed.\n7. Agreed.\n8. Agreed.\n9. Agreed.\n10. Agreed. It's a no-op that returns the reservation unchanged, still `EXPIRED`, with no error.\n11. Agreed.\n12. Agreed. One global namespace.\n13. Agreed. \"Same request\" means the same warehouse and the same requested items, meaning what was asked for rather than what ended up held. A repeat doesn't move `expires_at`.\n14. Agreed. It raises `IdempotencyConflict` even if the original reservation is finished.\n15. Agreed. A `reserve` that fails leaves no trace, so its key can be reused.\n16. The reservation is not all-or-nothing, so please change that.\n    - Each line holds as many units as are available right now, up to what was asked.\n    - A line with nothing available is left out of `items` entirely, not even shown with 0.\n    - `InsufficientStock` is raised only when no line can hold anything, and then nothing is created.\n    - Input validation works as in `place_order`: `UnknownWarehouse`, `UnknownSku` and `InvalidQuantity`. A rejected request holds nothing, not even for its valid lines.\n    - `place_order` stays all-or-nothing and can only take available stock.\n    - For an empty `items` or an empty key, any `InventoryError` is fine.\n17. A separate `reserved()` is fine. I don't mind whether the report gets a column.\n18. I don't mind the id format. `RES-0001` is fine.\n\nNon-goals are confirmed.",
+ "exit": 0,
+ "stderr_tail": "2026/10/29 01:14:32 socat[4153867] W exiting on signal 15\n",
+ "wall_s": 256.2,
+ "result": "Stock reservations are built and match the spec we agreed. `python3 -m pytest -q` exits 0:\n\n```\n.......................................................                  [100%]\n55 passed in 0.02s\nexit=0\n```\n\nThat's the 20 existing tests plus 35 new ones in `tests/test_reservations.py`. I wrote the new tests before the code, and they failed then. To check they can catch real mistakes, I temporarily broke two things: I let a hold stay live at the exact `expires_at` instant, and I removed the per-line cap on partial holds. Nine tests failed; I then restored the code. Nothing is committed.\n\n**What changed**\n- **`service.py`:**\n  - Adds `reserve`, `confirm_reservation`, `release_reservation`, `get_reservation` and `reserved()`.\n  - `available` is now on-hand minus allocated minus reserved, never below zero.\n  - The constructor takes an optional `reservation_ttl`, default 20 minutes.\n- **Expiry needs no sweep:** a hold counts only while it is `ACTIVE` and the clock is before `expires_at`. Reading a lapsed hold records it as `EXPIRED`.\n- **Partial holds:** each line holds what is available, up to what was asked. A line with nothing available is left out of `items`. Retries are matched on the requested items, not what was actually held.\n- **`models.py`, `errors.py`, `repository.py`, `__init__.py`:** the `Reservation` and `ReservationStatus` types, the four new errors, and storage for reservations and idempotency keys.\n- **Docs:**\n  - `specs/stock-reservations.md`, with your interface copied verbatim.\n  - A new `GLOSSARY.md`.\n  - `docs/adr/0001-lazy-reservation-expiry.md` and `docs/adr/0002-reservation-idempotency-keys.md`.\n  - The README concepts section.\n\n**Choices I made where you said either was fine**\n- Confirm doesn't re-check stock: the hold is honoured even after a write-off.\n- An empty `items` or empty key raises `InvalidOrder`.\n- `stock_report` has no reserved column, so `StockRow` is unchanged. As a result, a report row's `available` can now be less than on-hand minus allocated, with nothing in the row to explain the difference.\n\n**Review:** `/code-review` (medium) found no correctness bugs against the spec. I chose not to act on its other findings:\n- **Speed:** a hold that lapses without anyone reading it stays stored as `ACTIVE`. Every `available()` call therefore still walks it, so the cost grows with past holds, not just current ones. This doesn't matter at in-memory scale; ADR 0001 notes that a database repository should filter by `expires_at`.\n- **Shared objects:** callers get the stored `Reservation` itself, so they could edit `items` directly. Orders work the same way today.\n- **Clock going backwards:** expiry assumes the clock never moves back. ADR 0001 states this assumption, and `FixedClock` enforces it.\n- **Error wording:** the empty-`items` error from `reserve` says \"an order needs at least one line\". When no line can hold anything, `InsufficientStock` names only the first SKU.\n\n**Decision for you:** CLAUDE.md asks for a fresh-session review against the spec when a change touches an invariant. \"Never promise more than available\" is one, so I recommend running that review in a new session using `specs/stock-reservations.md`.",
+ "is_error": false,
+ "num_turns": 30,
+ "total_cost_usd": 1.4377774,
+ "usage": {
+  "input_tokens": 22,
+  "cache_creation_input_tokens": 33801,
+  "cache_read_input_tokens": 556749,
+  "output_tokens": 24829,
+  "output_tokens_details": {
+   "thinking_tokens": 5726
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 33801,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-opus-5-5": {
+   "inputTokens": 52,
+   "outputTokens": 34476,
+   "thinkingTokens": 9001,
+   "cacheReadInputTokens": 891462,
+   "cacheCreationInputTokens": 81777,
+   "cacheCreationEphemeral5mInputTokens": 28153,
+   "cacheCreationEphemeral1hInputTokens": 53624,
+   "webSearchRequests": 0,
+   "costUSD": 1.4377774,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-opus-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 255705,
+ "permission_denials": [
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01XkhcV3N7X7kP9EacMe2wMP",
+   "tool_input": {
+    "command": "mkdir -p /tmp/pab-mut && cp src/inventory/models.py src/inventory/service.py /tmp/pab-mut/\nrun() { python3 -m pytest -q tests/test_reservations.py 2>&1 | tail -1; cp /tmp/pab-mut/models.py src/inventory/models.py; cp /tmp/pab-mut/service.py src/inventory/service.py; }\nsed -i 's/now < self.expires_at/now <= self.expires_at/' src/inventory/models.py; echo -n \"expiry boundary: \"; run\nsed -i 's/            - self.reserved(sku, warehouse),/            - 0,/' src/inventory/service.py; echo -n \"available ignores holds: \"; run\nsed -i 's/(previous.warehouse, previous.items) != (warehouse, wanted)/False/' src/inventory/service.py; echo -n \"no conflict check: \"; run\nsed -i 's/take = min(quantity, self.available(sku, warehouse))/take = quantity/' src/inventory/service.py; echo -n \"no partial cap: \"; run\npython3 -m pytest -q 2>&1 | tail -1",
+    "description": "Mutation-check that reservation tests can fail, then restore"
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_018tPWE3AKRybn1szp5d1ZZd",
+   "tool_input": {
+    "command": "cp src/inventory/models.py src/inventory/service.py /tmp/pab-work/T2-inventory-reservations-N-3/ws/.pytest_cache/ && sed -i 's/now < self.expires_at/now <= self.expires_at/' src/inventory/models.py && python3 -m pytest -q tests/test_reservations.py 2>&1 | tail -1; cp .pytest_cache/models.py src/inventory/models.py",
+    "description": "Mutate expiry boundary, run tests, restore"
+   }
+  },
+  {
+   "tool_name": "Read",
+   "tool_use_id": "toolu_01JpTKETxZNkvcKXjhuBJ1HZ",
+   "tool_input": {
+    "file_path": "/home/nikita/.claude/projects/-tmp-pab-work-T2-inventory-reservations-N-3-ws/8731a3c8-eed6-4e19-a7e4-d75c06bf3dcf/tool-results/bb2hvm3s1.txt",
+    "allow_large": true
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_015JaBvd235FtbJevAPvYu2D",
+   "tool_input": {
+    "command": "cd /tmp/pab-work/T2-inventory-reservations-N-3/ws; cat src/inventory/service.py | sed -n 90,150p; sed -n 230,300p src/inventory/service.py; cat specs/*.md; ls docs/adr; cat docs/adr/*; cat GLOSSARY.md; cat src/inventory/ledger.py | head -60"
+   }
+  },
+  {
+   "tool_name": "Bash",
+   "tool_use_id": "toolu_01C1FzK1Fcw5wJFna98JDfaq",
+   "tool_input": {
+    "command": "cd /tmp/pab-work/T2-inventory-reservations-N-3/ws; cat docs/adr/0001-lazy-reservation-expiry.md docs/adr/0002-reservation-idempotency-keys.md GLOSSARY.md; python3 -m pytest -q 2>&1 | tail -3"
+   }
+  }
+ ],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "8731a3c8-eed6-4e19-a7e4-d75c06bf3dcf"
+}

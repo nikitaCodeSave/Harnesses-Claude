@@ -1,0 +1,795 @@
+diff --git a/GLOSSARY.md b/GLOSSARY.md
+new file mode 100644
+index 0000000..753a509
+--- /dev/null
++++ b/GLOSSARY.md
+@@ -0,0 +1,29 @@
++# Glossary
++
++**Billing period** — the half-open date range `[period_start, period_end)` a subscription has
++paid for; the renewal is billed on `period_end`. During a trial, the current period is the trial.
++
++**Plan change** — a request to move a subscription to another plan and/or interval
++(`BillingService.change_plan`). Its *target* is the plan and interval the customer asks for.
++
++**Upgrade** — a plan change to a plan with a higher monthly list price, whatever the interval.
++Applies immediately and is prorated. See ADR 0001.
++
++**Downgrade** — a plan change to a plan with a lower monthly list price, whatever the interval.
++Never applies mid-period; it becomes a scheduled change.
++
++**Interval switch** — moving between monthly and annual billing. Never applies mid-period
++(outside a trial); it becomes a scheduled change.
++
++**Scheduled change** — the plan and interval a subscription moves to at its next renewal. At
++most one per subscription; a new plan change replaces it; requesting the current plan and
++interval cancels it.
++
++**Proration** — billing an upgrade for only the rest of the current period: a *credit line*
++for the old plan and a *charge line* for the new plan, each
++`price × remaining_days / period_days` in calendar days, rounded half-up to cents per line.
++
++**Remaining days** — days from the change date (inclusive) to the period end (exclusive).
++
++**Period days** — calendar length of the current billing period: 28–31 for a month, 365 or 366
++for a year.
+diff --git a/README.md b/README.md
+index 8ad6142..641d4da 100644
+--- a/README.md
++++ b/README.md
+@@ -12,12 +12,14 @@ src/billing/
+   clock.py          Clock protocol + FixedClock
+   plans.py          Plan, Interval
+   periods.py        month arithmetic, period_end()
+-  subscriptions.py  Subscription, SubscriptionStatus
++  subscriptions.py  Subscription, SubscriptionStatus, ScheduledChange
+   invoices.py       Invoice, LineItem
+   store.py          InMemoryStore (plans, subscriptions, invoices)
+-  service.py        BillingService: subscribe / renew_due / cancel
++  service.py        BillingService: subscribe / renew_due / cancel / change_plan
+ ```
+ 
++Domain terms: `GLOSSARY.md`. Decisions: `docs/adr/`. Specs: `specs/`.
++
+ ## Conventions
+ 
+ - Money is always `Decimal` in whole cents; build amounts with `to_money()`. Floats raise.
+@@ -28,6 +30,8 @@ src/billing/
+   `period_end`. Month arithmetic clamps to the end of shorter months.
+ - Retired plans (`active=False`) cannot be sold; existing customers keep renewing on them.
+ - Domain failures raise subclasses of `billing.errors.BillingError`.
++- Plan changes: upgrades apply now, prorated; downgrades and interval switches wait for the
++  renewal at the period end (ADR 0001).
+ 
+ ## Tests
+ 
+diff --git a/docs/adr/0001-plan-change-proration.md b/docs/adr/0001-plan-change-proration.md
+new file mode 100644
+index 0000000..f66d4b0
+--- /dev/null
++++ b/docs/adr/0001-plan-change-proration.md
+@@ -0,0 +1,35 @@
++# 0001 — Plan changes: prorate upgrades now, defer everything else to the period end
++
++Date: 2026-10-29 · Status: accepted
++
++## Context
++
++Customers need to change plan mid-cycle (spec: `specs/plan-change.md`). Billing must not charge
++anyone twice for the same days, and the package has no concept of refunds, credit notes or
++account balances.
++
++## Decision
++
++- Upgrade vs downgrade is decided by comparing plans' **monthly list price**, regardless of
++  interval.
++- **Upgrades apply immediately** without moving the billing period. They are invoiced with a
++  credit line for the old plan and a charge line for the new plan, both at the current
++  interval's prices, each `price × remaining_days / period_days` in real calendar days
++  (remaining = change date inclusive to period end exclusive), computed exactly and rounded
++  half-up to cents per line. No rounded daily rate.
++- **Downgrades and interval switches never take effect mid-period.** They become a *scheduled
++  change* applied by the renewal at the period end, which bills the new plan/interval in
++  full. Nothing is billed, refunded or credited at the request. An upgrade combined with an
++  interval switch is split: upgrade now, interval switch at the period end.
++- At most one scheduled change per subscription; each request names the full target and
++  replaces it. Requesting the current plan and interval cancels it.
++- During a free trial any change applies immediately, unbilled; the trial end does not move.
++
++## Consequences
++
++- Invoices never have a negative total and unused annual time is never refunded.
++- An annual customer who downgrades keeps (and has paid for) the dearer plan until the year ends.
++- `Subscription` carries an optional scheduled change that `renew_due` consumes; any future
++  store implementation must persist it.
++- Later features (cancel at period end, price changes) should reuse the scheduled-change
++  mechanism rather than inventing a second one.
+diff --git a/specs/plan-change.md b/specs/plan-change.md
+new file mode 100644
+index 0000000..ae756d3
+--- /dev/null
++++ b/specs/plan-change.md
+@@ -0,0 +1,123 @@
++# Mid-cycle plan changes
++
++## What and why
++
++Customers cannot change plan today: support cancels and resubscribes them by hand. Add plan
++changes to `BillingService`: upgrades, downgrades and switches between monthly and annual
++billing, prorated so nobody pays twice for the same days. Proration policy is recorded in
++[ADR 0001](../docs/adr/0001-plan-change-proration.md); terms are in `GLOSSARY.md`.
++
++## Interface (fixed by the product owner, verbatim)
++
++- `BillingService.change_plan(subscription_id: str, new_plan_code: str, new_interval: Interval | None = None) -> Invoice | None`
++  in `src/billing/service.py`. `new_interval=None` keeps the subscription's current interval.
++- Return the invoice issued for the change (recorded in the store like every other invoice),
++  or `None` when nothing is billed at the moment of the request.
++- Add `InvalidPlanChange(BillingError)` to `src/billing/errors.py` for change requests that
++  can't be honoured; keep using the existing error classes where they already fit.
++
++## Rules
++
++The **target** of a request is `(new_plan_code, new_interval or subscription.interval)`.
++
++- **Upgrade vs downgrade** is decided by the plans' `monthly_price`, whatever interval the
++  customer is on or moving to. Target monthly price higher than the current plan's: upgrade.
++  Lower: downgrade. Same plan, other interval: interval switch (neither).
++- **Upgrade, active subscription**: applies now. Plan changes immediately; the billing period
++  does not move. An invoice dated today is issued with two lines, each priced at the
++  *current interval's* list prices:
++  - credit `-(old_price × remaining_days / period_days)`
++  - charge `+(new_price × remaining_days / period_days)`
++  where `remaining_days = period_end - today` (today inclusive, period end exclusive) and
++  `period_days = period_end - period_start` in real calendar days (28–31 for a month,
++  365/366 for a year). Each line is computed exactly and rounded half-up to cents on its
++  own; the total is the sum of the two rounded lines. The next renewal bills the new plan in
++  full.
++- **Upgrade with an interval switch**: split. The upgrade applies now as above, at the
++  current interval's prices; the interval switch is scheduled for the period end.
++- **Downgrade** (with or without an interval switch) and **interval switch alone**: scheduled
++  for the period end. Nothing is billed, refunded or credited; returns `None`; no invoice is
++  recorded. The customer keeps the current plan and interval until the renewal, which moves
++  them to the scheduled plan and interval, starts a period of that interval and bills its
++  full price.
++- **One scheduled change at a time.** Each request names the full target and replaces whatever
++  was scheduled. An upgrade that applies now discards anything scheduled, unless the same
++  request schedules an interval switch. A scheduled change has not happened, so an upgrade is
++  always prorated from the current plan.
++- **Same plan and same interval**: if a change is scheduled, the request cancels it (returns
++  `None`, nothing billed, renewal continues on the current plan). Otherwise `InvalidPlanChange`.
++- **Trial**: any change (up, down, interval) applies immediately in full; no proration, no
++  invoice, returns `None`. The trial end does not move. At trial end the customer is billed
++  the full price of the plan and interval they are on by then.
++
++## Rejections
++
++A rejected request changes nothing: no invoice, the subscription is untouched.
++
++| Situation | Error |
++|---|---|
++| unknown subscription | `SubscriptionNotFound` |
++| canceled subscription | `SubscriptionNotActive` |
++| unknown target plan | `PlanNotFound` |
++| target plan retired (moving *off* a retired plan is allowed) | `PlanNotAvailable` |
++| today ≥ `period_end` and the renewal has not run | `InvalidPlanChange` |
++| same plan and interval, nothing scheduled | `InvalidPlanChange` |
++| upgrade whose prorated total would be negative (see implementer decisions) | `InvalidPlanChange` |
++
++## Implementer decisions (not covered in the interview — confirm or overrule)
++
++1. **Equal monthly price, different plan** is neither cheaper nor dearer; it is treated like an
++   interval switch: scheduled for the period end, nothing billed.
++2. **Upgrade by monthly price while on annual, but the target's annual price is lower** (an
++   inverted catalog) would give a negative-total invoice. Rejected with `InvalidPlanChange`.
++3. **Cancelling a scheduled change while on a retired plan** is allowed: the customer just keeps
++   renewing on it. An interval switch on a retired plan is rejected (`PlanNotAvailable`),
++   because it sells the retired plan at a new interval.
++4. **Scheduled target retired before the renewal**: the change is still applied — availability
++   is checked at the request.
++5. **Upgrade whose two rounded lines cancel out** (total `0.00`, e.g. close prices or matching
++   annual prices) still applies now and issues the 0.00 invoice, which records the switch;
++   it is not `None`.
++
++## Acceptance criteria
++
++Fixture plans: Basic 10/100, Pro 30/300, Premium 75/750 (monthly/annual).
++
++- [ ] Pro monthly from Mar 1, upgrade to Premium on Mar 11 → invoice issued Mar 11 with lines
++      `-20.32` and `+50.81`, total `30.49`, recorded in the store; subscription is on Premium,
++      period still Mar 1–Apr 1.
++- [ ] After that upgrade, the Apr 1 renewal bills `75.00`.
++- [ ] Annual Pro from 2028-01-01, upgrade to Premium on 2028-07-01 → 184/366 days: lines
++      `-150.82`, `+377.05`. Same in 2027 → 184/365: `-151.23`, `+378.08`.
++- [ ] Downgrade Pro → Basic mid-period → `None`, no invoice, still on Pro; renewal moves to
++      Basic and bills `10.00`.
++- [ ] Interval switch Pro monthly → annual mid-period → `None`, no invoice; renewal starts a
++      12-month period and bills `300.00`.
++- [ ] Upgrade Pro monthly → Premium annual → invoice `30.49` (monthly prices), on Premium
++      monthly now; renewal starts an annual Premium period billing `750.00`.
++- [ ] Downgrade Pro monthly → Basic annual → `None`; renewal bills Basic annual `100.00`.
++- [ ] Pro, Basic scheduled Mar 5, Premium requested Mar 11 → invoice `30.49`; renewal bills
++      Premium `75.00` (the downgrade is discarded).
++- [ ] A later request replaces the scheduled one (Basic scheduled, then Pro annual → renewal
++      bills Pro annual `300.00`).
++- [ ] Same plan and interval with a scheduled change → `None`, schedule cleared; renewal bills
++      the current plan. Without a scheduled change → `InvalidPlanChange`.
++- [ ] Trial: changing plan and interval applies immediately, `None`, no invoice, trial end
++      unchanged; trial end bills the new plan and interval in full.
++- [ ] `new_interval=None` keeps the current interval.
++- [ ] Each rejection in the table raises its error and leaves subscription and invoices as
++      they were.
++- [ ] Customers on a retired plan can upgrade off it.
++- [ ] `python3 -m pytest -q` exits 0.
++
++## Non-goals
++
++- Refunds, credit notes, account balances, negative-total invoices.
++- Changing the billing anchor / starting a new period at the request.
++- Changing plan prices, coupons, taxes, quantities/seats.
++- Cancelling at period end (cancel stays immediate).
++
++## Scope limits
++
++Changes stay within `src/billing/` (service, subscriptions, errors, package exports), the
++tests, README, GLOSSARY, the ADR and this spec. No new dependencies; store interface unchanged.
+diff --git a/src/billing/__init__.py b/src/billing/__init__.py
+index cfe5c0f..ce2167d 100644
+--- a/src/billing/__init__.py
++++ b/src/billing/__init__.py
+@@ -4,6 +4,7 @@ from billing.clock import Clock, FixedClock
+ from billing.errors import (
+     BillingError,
+     InvalidPlan,
++    InvalidPlanChange,
+     InvoiceError,
+     PlanNotAvailable,
+     PlanNotFound,
+@@ -15,7 +16,7 @@ from billing.money import to_money
+ from billing.plans import Interval, Plan
+ from billing.service import BillingService
+ from billing.store import InMemoryStore
+-from billing.subscriptions import Subscription, SubscriptionStatus
++from billing.subscriptions import ScheduledChange, Subscription, SubscriptionStatus
+ 
+ __all__ = [
+     "BillingError",
+@@ -25,12 +26,14 @@ __all__ = [
+     "InMemoryStore",
+     "Interval",
+     "InvalidPlan",
++    "InvalidPlanChange",
+     "Invoice",
+     "InvoiceError",
+     "LineItem",
+     "Plan",
+     "PlanNotAvailable",
+     "PlanNotFound",
++    "ScheduledChange",
+     "Subscription",
+     "SubscriptionNotActive",
+     "SubscriptionNotFound",
+diff --git a/src/billing/__pycache__/__init__.cpython-312.pyc b/src/billing/__pycache__/__init__.cpython-312.pyc
+index 2864b5b..ef63a3a 100644
+Binary files a/src/billing/__pycache__/__init__.cpython-312.pyc and b/src/billing/__pycache__/__init__.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/errors.cpython-312.pyc b/src/billing/__pycache__/errors.cpython-312.pyc
+index c2e43c6..98aeaa0 100644
+Binary files a/src/billing/__pycache__/errors.cpython-312.pyc and b/src/billing/__pycache__/errors.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/service.cpython-312.pyc b/src/billing/__pycache__/service.cpython-312.pyc
+index 3dd4dea..6942d85 100644
+Binary files a/src/billing/__pycache__/service.cpython-312.pyc and b/src/billing/__pycache__/service.cpython-312.pyc differ
+diff --git a/src/billing/__pycache__/subscriptions.cpython-312.pyc b/src/billing/__pycache__/subscriptions.cpython-312.pyc
+index 523abee..d777a07 100644
+Binary files a/src/billing/__pycache__/subscriptions.cpython-312.pyc and b/src/billing/__pycache__/subscriptions.cpython-312.pyc differ
+diff --git a/src/billing/errors.py b/src/billing/errors.py
+index ef85b3e..416105b 100644
+--- a/src/billing/errors.py
++++ b/src/billing/errors.py
+@@ -25,5 +25,9 @@ class SubscriptionNotActive(BillingError):
+     """The operation needs a live subscription, but this one is canceled."""
+ 
+ 
++class InvalidPlanChange(BillingError):
++    """A plan change request that cannot be honoured (nothing to change, renewal overdue...)."""
++
++
+ class InvoiceError(BillingError):
+     """An invoice or line item is malformed."""
+diff --git a/src/billing/service.py b/src/billing/service.py
+index aa6734c..7c9f433 100644
+--- a/src/billing/service.py
++++ b/src/billing/service.py
+@@ -1,17 +1,19 @@
+-"""Billing operations: subscribe, renew, cancel."""
++"""Billing operations: subscribe, renew, cancel, change plan."""
+ 
+ from __future__ import annotations
+ 
+ from dataclasses import replace
+ from datetime import date, timedelta
++from decimal import Decimal
+ 
+ from billing.clock import Clock
+-from billing.errors import PlanNotAvailable, SubscriptionNotActive
++from billing.errors import InvalidPlanChange, PlanNotAvailable, SubscriptionNotActive
+ from billing.invoices import Invoice, LineItem
++from billing.money import to_money
+ from billing.periods import period_end
+ from billing.plans import Interval, Plan
+ from billing.store import InMemoryStore
+-from billing.subscriptions import Subscription, SubscriptionStatus
++from billing.subscriptions import ScheduledChange, Subscription, SubscriptionStatus
+ 
+ 
+ class BillingService:
+@@ -92,9 +94,72 @@ class BillingService:
+         self._store.save_subscription(canceled)
+         return canceled
+ 
++    def change_plan(
++        self,
++        subscription_id: str,
++        new_plan_code: str,
++        new_interval: Interval | None = None,
++    ) -> Invoice | None:
++        """Move a subscription to another plan and/or interval (ADR 0001).
++
++        During a trial the change applies at once and nothing is billed.
++        Otherwise an upgrade (higher monthly list price) applies now and is
++        invoiced prorated at the current interval's prices; a downgrade or an
++        interval switch is scheduled for the renewal on ``period_end`` and
++        nothing is billed. An upgrade with an interval switch is split between
++        the two. Each request replaces any scheduled change; asking for the
++        current plan and interval cancels it. Returns the invoice issued now,
++        if any.
++        """
++        subscription = self._store.get_subscription(subscription_id)
++        if subscription.is_canceled:
++            raise SubscriptionNotActive(subscription_id)
++        current = self._store.get_plan(subscription.plan_code)
++        target = self._store.get_plan(new_plan_code)
++        interval = subscription.interval if new_interval is None else new_interval
++        today = self._clock.today()
++        if today >= subscription.period_end:
++            raise InvalidPlanChange(f"{subscription_id}: renewal due {subscription.period_end} has not run yet")
++
++        if target.code == current.code and interval is subscription.interval:
++            if subscription.scheduled_change is None:
++                raise InvalidPlanChange(f"{subscription_id} is already on {target.code} ({interval.value})")
++            self._store.save_subscription(replace(subscription, scheduled_change=None))
++            return None
++        if not target.active:
++            raise PlanNotAvailable(target.code)
++
++        if subscription.status is SubscriptionStatus.TRIALING:
++            trial_changed = replace(subscription, plan_code=target.code, interval=interval, scheduled_change=None)
++            self._store.save_subscription(trial_changed)
++            return None
++
++        if target.monthly_price <= current.monthly_price:
++            scheduled = ScheduledChange(target.code, interval)
++            self._store.save_subscription(replace(subscription, scheduled_change=scheduled))
++            return None
++
++        lines = self._proration_lines(current, target, subscription, today)
++        if sum(line.amount for line in lines) < 0:
++            raise InvalidPlanChange(
++                f"{subscription_id}: {target.code} costs less than {current.code} per {subscription.interval.value} period"
++            )
++        scheduled = None if interval is subscription.interval else ScheduledChange(target.code, interval)
++        upgraded = replace(subscription, plan_code=target.code, scheduled_change=scheduled)
++        self._store.save_subscription(upgraded)
++        return self._issue_invoice(upgraded, lines, today)
++
+     # internals
+ 
+     def _renew(self, subscription: Subscription) -> tuple[Subscription, Invoice]:
++        change = subscription.scheduled_change
++        if change is not None:
++            subscription = replace(
++                subscription,
++                plan_code=change.plan_code,
++                interval=change.interval,
++                scheduled_change=None,
++            )
+         plan = self._store.get_plan(subscription.plan_code)
+         start = subscription.period_end
+         renewed = replace(
+@@ -118,6 +183,26 @@ class BillingService:
+             amount=plan.price_for(interval),
+         )
+ 
++    @staticmethod
++    def _proration_lines(old: Plan, new: Plan, subscription: Subscription, today: date) -> list[LineItem]:
++        """Credit for ``old`` and charge for ``new`` over the rest of the period.
++
++        Each line is ``price × remaining days / period days`` in calendar days,
++        computed exactly and rounded to cents on its own.
++        """
++        interval = subscription.interval
++        remaining_days = (subscription.period_end - today).days
++        period_days = (subscription.period_end - subscription.period_start).days
++        span = f"{today.isoformat()} to {subscription.period_end.isoformat()}"
++
++        def prorated(plan: Plan) -> Decimal:
++            return to_money(plan.price_for(interval) * remaining_days / period_days)
++
++        return [
++            LineItem(description=f"Unused {old.name} ({interval.value}) {span}", amount=-prorated(old)),
++            LineItem(description=f"{new.name} ({interval.value}) {span}", amount=prorated(new)),
++        ]
++
+     def _issue_invoice(self, subscription: Subscription, lines: list[LineItem], issued_on: date) -> Invoice:
+         invoice = Invoice(
+             id=self._store.next_id("inv"),
+diff --git a/src/billing/subscriptions.py b/src/billing/subscriptions.py
+index 8135d10..2d985f3 100644
+--- a/src/billing/subscriptions.py
++++ b/src/billing/subscriptions.py
+@@ -15,6 +15,14 @@ class SubscriptionStatus(Enum):
+     CANCELED = "canceled"
+ 
+ 
++@dataclass(frozen=True)
++class ScheduledChange:
++    """Plan and interval a subscription moves to at its next renewal."""
++
++    plan_code: str
++    interval: Interval
++
++
+ @dataclass(frozen=True)
+ class Subscription:
+     """A customer's subscription to one plan.
+@@ -23,6 +31,9 @@ class Subscription:
+     While ``TRIALING`` the current period is the free trial; the first paid
+     period starts on ``period_end``.
+ 
++    ``scheduled_change``, when set, is applied by the renewal on
++    ``period_end`` (downgrades and interval switches never apply mid-period).
++
+     Instances are immutable: build a changed copy with
+     ``dataclasses.replace`` and save it through the store.
+     """
+@@ -35,6 +46,7 @@ class Subscription:
+     period_start: date
+     period_end: date
+     canceled_on: date | None = None
++    scheduled_change: ScheduledChange | None = None
+ 
+     def __post_init__(self) -> None:
+         if self.period_end <= self.period_start:
+diff --git a/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc
+index cd21155..7d7654a 100644
+Binary files a/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc and b/tests/__pycache__/conftest.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/__pycache__/test_plan_change.cpython-312-pytest-9.0.1.pyc b/tests/__pycache__/test_plan_change.cpython-312-pytest-9.0.1.pyc
+new file mode 100644
+index 0000000..5634605
+Binary files /dev/null and b/tests/__pycache__/test_plan_change.cpython-312-pytest-9.0.1.pyc differ
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 9ec4d33..079abc9 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -19,6 +19,7 @@ def store() -> InMemoryStore:
+     store = InMemoryStore()
+     store.add_plan(Plan("basic", "Basic", Decimal("10.00"), Decimal("100.00")))
+     store.add_plan(Plan("pro", "Pro", Decimal("30.00"), Decimal("300.00")))
++    store.add_plan(Plan("premium", "Premium", Decimal("75.00"), Decimal("750.00")))
+     return store
+ 
+ 
+diff --git a/tests/test_plan_change.py b/tests/test_plan_change.py
+new file mode 100644
+index 0000000..0420da1
+--- /dev/null
++++ b/tests/test_plan_change.py
+@@ -0,0 +1,309 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++
++from billing.errors import (
++    InvalidPlanChange,
++    PlanNotAvailable,
++    PlanNotFound,
++    SubscriptionNotActive,
++    SubscriptionNotFound,
++)
++from billing.plans import Interval, Plan
++from billing.subscriptions import SubscriptionStatus
++
++
++def subscribe_on(service, clock, day, plan_code="pro", interval=Interval.MONTHLY, **kwargs):
++    clock.move_to(day)
++    return service.subscribe("cus_1", plan_code, interval, **kwargs)
++
++
++def amounts(invoice):
++    return [line.amount for line in invoice.lines]
++
++
++def renew_on(service, clock, day):
++    clock.move_to(day)
++    [invoice] = service.renew_due()
++    return invoice
++
++
++# upgrades
++
++
++def test_upgrade_is_prorated_per_line_and_recorded(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 11))
++    invoice = service.change_plan(sub.id, "premium")
++    assert amounts(invoice) == [Decimal("-20.32"), Decimal("50.81")]
++    assert (invoice.total, invoice.issued_on) == (Decimal("30.49"), date(2026, 3, 11))
++    assert store.invoices_for(sub.id)[-1] == invoice
++    changed = store.get_subscription(sub.id)
++    assert changed.plan_code == "premium"
++    assert (changed.period_start, changed.period_end) == (date(2026, 3, 1), date(2026, 4, 1))
++
++
++def test_renewal_after_upgrade_bills_new_plan_in_full(service, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 11))
++    service.change_plan(sub.id, "premium")
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("75.00")
++
++
++@pytest.mark.parametrize(
++    ("year", "lines"),
++    [
++        (2028, [Decimal("-150.82"), Decimal("377.05")]),  # 184 / 366
++        (2027, [Decimal("-151.23"), Decimal("378.08")]),  # 184 / 365
++    ],
++)
++def test_annual_upgrade_uses_real_year_length(service, clock, year, lines):
++    sub = subscribe_on(service, clock, date(year, 1, 1), interval=Interval.ANNUAL)
++    clock.move_to(date(year, 7, 1))
++    assert amounts(service.change_plan(sub.id, "premium")) == lines
++
++
++def test_half_cent_rounds_up_on_each_line(service, store, clock):
++    store.add_plan(Plan("a", "A", Decimal("10.01"), Decimal("100.00")))
++    store.add_plan(Plan("b", "B", Decimal("20.03"), Decimal("200.00")))
++    sub = subscribe_on(service, clock, date(2026, 4, 1), plan_code="a")
++    clock.move_to(date(2026, 4, 16))  # 15 of 30 days left: 5.005 and 10.015
++    assert amounts(service.change_plan(sub.id, "b")) == [Decimal("-5.01"), Decimal("10.02")]
++
++
++def test_upgrade_from_free_plan_has_no_negative_zero_credit(service, store, clock):
++    store.add_plan(Plan("free", "Free", Decimal("0.00"), Decimal("0.00")))
++    sub = subscribe_on(service, clock, date(2026, 3, 1), plan_code="free")
++    clock.move_to(date(2026, 3, 11))
++    credit, charge = service.change_plan(sub.id, "pro").lines
++    assert (str(credit.amount), charge.amount) == ("0.00", Decimal("20.32"))
++
++
++def test_upgrade_on_first_day_credits_whole_period(service, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    invoice = service.change_plan(sub.id, "premium")
++    assert amounts(invoice) == [Decimal("-30.00"), Decimal("75.00")]
++
++
++def test_upgrade_with_interval_switch_is_split(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 11))
++    invoice = service.change_plan(sub.id, "premium", Interval.ANNUAL)
++    assert invoice.total == Decimal("30.49")
++    now = store.get_subscription(sub.id)
++    assert (now.plan_code, now.interval) == ("premium", Interval.MONTHLY)
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("750.00")
++    renewed = store.get_subscription(sub.id)
++    assert (renewed.plan_code, renewed.interval) == ("premium", Interval.ANNUAL)
++    assert renewed.period_end == date(2027, 4, 1)
++
++
++def test_upgrade_off_a_retired_plan_is_allowed(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    store.retire_plan("pro")
++    clock.move_to(date(2026, 3, 11))
++    assert service.change_plan(sub.id, "premium").total == Decimal("30.49")
++
++
++# scheduled changes
++
++
++def test_downgrade_waits_for_period_end(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 11))
++    assert service.change_plan(sub.id, "basic") is None
++    assert len(store.invoices_for(sub.id)) == 1
++    assert store.get_subscription(sub.id).plan_code == "pro"
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("10.00")
++    assert store.get_subscription(sub.id).plan_code == "basic"
++
++
++def test_interval_switch_waits_for_period_end(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 11))
++    assert service.change_plan(sub.id, "pro", Interval.ANNUAL) is None
++    assert len(store.invoices_for(sub.id)) == 1
++    assert store.get_subscription(sub.id).interval is Interval.MONTHLY
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("300.00")
++    renewed = store.get_subscription(sub.id)
++    assert (renewed.interval, renewed.period_end) == (Interval.ANNUAL, date(2027, 4, 1))
++
++
++def test_downgrade_to_annual_waits_for_period_end(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 11))
++    assert service.change_plan(sub.id, "basic", Interval.ANNUAL) is None
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("100.00")
++
++
++def test_annual_downgrade_refunds_nothing(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1), interval=Interval.ANNUAL)
++    clock.move_to(date(2026, 6, 1))
++    assert service.change_plan(sub.id, "basic", Interval.MONTHLY) is None
++    assert len(store.invoices_for(sub.id)) == 1
++    assert renew_on(service, clock, date(2027, 3, 1)).total == Decimal("10.00")
++
++
++def test_upgrade_discards_scheduled_downgrade_and_prorates_from_current_plan(service, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 5))
++    service.change_plan(sub.id, "basic")
++    clock.move_to(date(2026, 3, 11))
++    assert service.change_plan(sub.id, "premium").total == Decimal("30.49")
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("75.00")
++
++
++def test_new_request_replaces_scheduled_change(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 5))
++    service.change_plan(sub.id, "basic")
++    assert service.change_plan(sub.id, "pro", Interval.ANNUAL) is None
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("300.00")
++    assert store.get_subscription(sub.id).plan_code == "pro"
++
++
++def test_requesting_current_plan_cancels_scheduled_change(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 5))
++    service.change_plan(sub.id, "basic", Interval.ANNUAL)
++    assert service.change_plan(sub.id, "pro", Interval.MONTHLY) is None
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("30.00")
++    renewed = store.get_subscription(sub.id)
++    assert (renewed.plan_code, renewed.interval) == ("pro", Interval.MONTHLY)
++
++
++def test_current_plan_on_retired_plan_cancels_scheduled_change(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    service.change_plan(sub.id, "basic")
++    store.retire_plan("pro")
++    assert service.change_plan(sub.id, "pro") is None
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("30.00")
++
++
++def test_omitted_interval_keeps_current_interval(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1), interval=Interval.ANNUAL)
++    service.change_plan(sub.id, "basic")
++    renew_on(service, clock, date(2027, 3, 1))
++    assert store.get_subscription(sub.id).interval is Interval.ANNUAL
++
++
++def test_equal_monthly_price_is_scheduled(service, store, clock):
++    store.add_plan(Plan("pro2", "Pro 2", Decimal("30.00"), Decimal("280.00")))
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    clock.move_to(date(2026, 3, 11))
++    assert service.change_plan(sub.id, "pro2") is None
++    renew_on(service, clock, date(2026, 4, 1))
++    assert store.get_subscription(sub.id).plan_code == "pro2"
++
++
++def test_scheduled_change_is_applied_once_when_catching_up(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    service.change_plan(sub.id, "basic", Interval.ANNUAL)
++    clock.move_to(date(2027, 4, 1))
++    invoices = service.renew_due()
++    assert [inv.issued_on for inv in invoices] == [date(2026, 4, 1), date(2027, 4, 1)]
++    assert [inv.total for inv in invoices] == [Decimal("100.00"), Decimal("100.00")]
++    assert store.get_subscription(sub.id).scheduled_change is None
++
++
++def test_scheduled_target_retired_before_renewal_still_applies(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    service.change_plan(sub.id, "basic")
++    store.retire_plan("basic")
++    assert renew_on(service, clock, date(2026, 4, 1)).total == Decimal("10.00")
++    assert store.get_subscription(sub.id).plan_code == "basic"
++
++
++# trials
++
++
++def test_trial_change_applies_immediately_without_billing(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1), trial_days=14)
++    clock.move_to(date(2026, 3, 5))
++    assert service.change_plan(sub.id, "basic", Interval.ANNUAL) is None
++    assert store.invoices_for(sub.id) == []
++    changed = store.get_subscription(sub.id)
++    assert (changed.plan_code, changed.interval) == ("basic", Interval.ANNUAL)
++    assert (changed.status, changed.period_end) == (SubscriptionStatus.TRIALING, date(2026, 3, 15))
++    assert renew_on(service, clock, date(2026, 3, 15)).total == Decimal("100.00")
++
++
++def test_trial_upgrade_is_not_prorated(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1), trial_days=14)
++    clock.move_to(date(2026, 3, 5))
++    assert service.change_plan(sub.id, "premium") is None
++    assert store.invoices_for(sub.id) == []
++    assert renew_on(service, clock, date(2026, 3, 15)).total == Decimal("75.00")
++
++
++# rejections
++
++
++def test_unknown_subscription(service):
++    with pytest.raises(SubscriptionNotFound):
++        service.change_plan("sub_9999", "premium")
++
++
++def _canceled(service, store, sub):
++    service.cancel(sub.id)
++
++
++def _retire_premium(service, store, sub):
++    store.retire_plan("premium")
++
++
++@pytest.mark.parametrize(
++    ("setup", "plan_code", "interval", "error"),
++    [
++        (_canceled, "premium", None, SubscriptionNotActive),
++        (None, "gold", None, PlanNotFound),
++        (_retire_premium, "premium", None, PlanNotAvailable),
++        (_retire_premium, "premium", Interval.ANNUAL, PlanNotAvailable),
++        (None, "pro", None, InvalidPlanChange),
++        (None, "pro", Interval.MONTHLY, InvalidPlanChange),
++    ],
++)
++def test_rejected_request_changes_nothing(service, store, clock, setup, plan_code, interval, error):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    service.change_plan(sub.id, "basic", Interval.ANNUAL)  # something scheduled to preserve
++    if setup:
++        setup(service, store, sub)
++    clock.move_to(date(2026, 3, 11))
++    if plan_code == "pro":  # same plan and interval needs nothing scheduled to be an error
++        service.change_plan(sub.id, "pro")
++    before_sub, before_invoices = store.get_subscription(sub.id), store.invoices_for(sub.id)
++    with pytest.raises(error):
++        service.change_plan(sub.id, plan_code, interval)
++    assert store.get_subscription(sub.id) == before_sub
++    assert store.invoices_for(sub.id) == before_invoices
++
++
++def test_interval_switch_on_retired_plan_is_rejected(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    store.retire_plan("pro")
++    with pytest.raises(PlanNotAvailable):
++        service.change_plan(sub.id, "pro", Interval.ANNUAL)
++
++
++def test_change_with_renewal_overdue_is_rejected(service, store, clock):
++    sub = subscribe_on(service, clock, date(2026, 3, 1))
++    service.change_plan(sub.id, "basic")
++    clock.move_to(date(2026, 4, 1))
++    before = store.get_subscription(sub.id)
++    with pytest.raises(InvalidPlanChange):
++        service.change_plan(sub.id, "premium")
++    assert store.get_subscription(sub.id) == before
++    assert len(store.invoices_for(sub.id)) == 1
++
++
++def test_upgrade_with_negative_prorated_total_is_rejected(service, store, clock):
++    store.add_plan(Plan("odd", "Odd", Decimal("40.00"), Decimal("250.00")))
++    sub = subscribe_on(service, clock, date(2026, 3, 1), interval=Interval.ANNUAL)
++    service.change_plan(sub.id, "basic")
++    clock.move_to(date(2026, 6, 1))
++    before = store.get_subscription(sub.id)
++    with pytest.raises(InvalidPlanChange):
++        service.change_plan(sub.id, "odd")
++    assert store.get_subscription(sub.id) == before
++    assert len(store.invoices_for(sub.id)) == 1

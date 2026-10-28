@@ -1,0 +1,84 @@
+{
+ "n": 4,
+ "label": "user",
+ "role": "user",
+ "session": "d8116ba4-e1ff-41ab-a6f2-99251bb511a4",
+ "resume": true,
+ "prompt": "Stage: Scope: the whole feature. You typed your request. When the developer reports the feature as built, answer done. Busy: you do not review finished work. When the developer reports the work as done, even if they list decisions they made or ask whether to change anything, answer done. You still answer questions asked before the work starts, and you read a spec when one is shown to you.\n\nThe developer's latest message:\n<<<\nStock reservations are built to your rules and the full test suite passes:\n\n```\n$ python3 -m pytest -q\n..............................................................           [100%]\n62 passed in 0.02s\n```\n\nThe spec is at `specs/stock-reservations.md`. It includes your interface word for word, the acceptance criteria as checkboxes, and the non-goals. `tests/test_reservations.py` covers every criterion. To make sure the expiry tests can actually fail, I briefly changed the cut-off from `now >= expires_at` to `>`: four tests failed, then I put it back.\n\n**How it works**\n- **Holds:** a hold reduces `available` (on-hand − allocated − held) but never writes to the ledger or changes on-hand.\n- **Partial holds:** `reserve` holds as much as is available on each line, up to what was asked, and leaves out lines with nothing available. It raises `InsufficientStock` only when it can hold nothing at all.\n- **Expiry:** a hold lapses when `now >= expires_at`, worked out from the clock whenever someone reads it, so no sweep is needed. The 20-minute default can be changed with an optional `hold_ttl=` keyword; the three-argument constructor still works.\n- **Confirm:** it creates a normal PLACED order with `placed_at` = confirm time, and `available` doesn't change. Confirming twice returns the same order, even after the 20 minutes. Confirming a lapsed hold raises `ReservationExpired`, and confirming a released one raises `InvalidReservationState`.\n- **Release:** releasing an already-released or lapsed hold returns it as it is. Releasing a confirmed one raises `InvalidReservationState`.\n- **Idempotency keys:** each key is recorded with the original request (warehouse plus the requested items, not what was actually held). It is shared across warehouses and never expires. A failed `reserve` records nothing, so the key can be reused.\n- **Ids:** reservations are numbered `RES-0001`, `RES-0002`, and so on. `stock_report` is unchanged.\n\n**From the `/code-review` pass**\n- **Fixed:** a retry with an invalid quantity like `{\"MUG\": True}` matched an earlier `{\"MUG\": 1}` (Python treats `True` as 1) and returned the old reservation. I added a test that failed, then fixed it by validating the request before looking up the key.\n  - This adds one rule you didn't state: an invalid request gets its validation error (say `UnknownWarehouse`) even if its key was used before, rather than `IdempotencyConflict`. I've recorded it in the spec.\n- **Fixed:** saving a new hold and saving its key were two separate repository calls. A database-backed repository failing between them could hold stock twice on retry. It's now a single `add_reservation` call.\n- **Not changed:**\n  - `get_reservation` returns the stored object, so a caller who edits its `items` changes the hold itself. Orders already work this way.\n  - Availability is worked out by scanning every order and hold, and holds that lapse unread are still scanned. That's fine in memory but will slow down as abandoned holds pile up.\n  - A bad `hold_ttl` raises a plain `ValueError`, as `FixedClock` does.\n\n**Project docs**\n- I created `GLOSSARY.md`, which covers the existing stock terms plus reservations.\n- I added two decision records under `docs/adr/`: `0001-lazy-reservation-expiry.md` and `0002-reservation-idempotency-keys.md`.\n- I updated `README.md`.\n\nNothing is committed yet.\n>>>\n\nReply as the user. End with exactly one line of JSON.",
+ "exit": 0,
+ "stderr_tail": "2026/10/29 01:14:49 socat[4170984] W exiting on signal 15\n",
+ "wall_s": 2.6,
+ "result": "{\"action\": \"done\"}",
+ "is_error": false,
+ "num_turns": 1,
+ "total_cost_usd": 0.0527164,
+ "usage": {
+  "input_tokens": 2,
+  "cache_creation_input_tokens": 2672,
+  "cache_read_input_tokens": 21692,
+  "output_tokens": 10,
+  "output_tokens_details": {
+   "thinking_tokens": 0
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 2672,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-sonnet-5-5": {
+   "inputTokens": 4,
+   "outputTokens": 838,
+   "thinkingTokens": 0,
+   "cacheReadInputTokens": 36364,
+   "cacheCreationInputTokens": 10173,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 10173,
+   "webSearchRequests": 0,
+   "costUSD": 0.0527164,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-sonnet-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 2094,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "d8116ba4-e1ff-41ab-a6f2-99251bb511a4"
+}

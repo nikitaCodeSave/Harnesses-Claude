@@ -1,0 +1,84 @@
+{
+ "n": 4,
+ "label": "user",
+ "role": "user",
+ "session": "0f05fa4c-5cbb-4bcf-ab96-754bc9fefd5c",
+ "resume": true,
+ "prompt": "Stage: Scope: the whole feature. You typed your request. When the developer reports the feature as built, answer done. Busy: you do not review finished work. When the developer reports the work as done, even if they list decisions they made or ask whether to change anything, answer done. You still answer questions asked before the work starts, and you read a spec when one is shown to you.\n\nThe developer's latest message:\n<<<\nStock reservations are built and match the spec we agreed. `python3 -m pytest -q` exits 0:\n\n```\n.......................................................                  [100%]\n55 passed in 0.02s\nexit=0\n```\n\nThat's the 20 existing tests plus 35 new ones in `tests/test_reservations.py`. I wrote the new tests before the code, and they failed then. To check they can catch real mistakes, I temporarily broke two things: I let a hold stay live at the exact `expires_at` instant, and I removed the per-line cap on partial holds. Nine tests failed; I then restored the code. Nothing is committed.\n\n**What changed**\n- **`service.py`:**\n  - Adds `reserve`, `confirm_reservation`, `release_reservation`, `get_reservation` and `reserved()`.\n  - `available` is now on-hand minus allocated minus reserved, never below zero.\n  - The constructor takes an optional `reservation_ttl`, default 20 minutes.\n- **Expiry needs no sweep:** a hold counts only while it is `ACTIVE` and the clock is before `expires_at`. Reading a lapsed hold records it as `EXPIRED`.\n- **Partial holds:** each line holds what is available, up to what was asked. A line with nothing available is left out of `items`. Retries are matched on the requested items, not what was actually held.\n- **`models.py`, `errors.py`, `repository.py`, `__init__.py`:** the `Reservation` and `ReservationStatus` types, the four new errors, and storage for reservations and idempotency keys.\n- **Docs:**\n  - `specs/stock-reservations.md`, with your interface copied verbatim.\n  - A new `GLOSSARY.md`.\n  - `docs/adr/0001-lazy-reservation-expiry.md` and `docs/adr/0002-reservation-idempotency-keys.md`.\n  - The README concepts section.\n\n**Choices I made where you said either was fine**\n- Confirm doesn't re-check stock: the hold is honoured even after a write-off.\n- An empty `items` or empty key raises `InvalidOrder`.\n- `stock_report` has no reserved column, so `StockRow` is unchanged. As a result, a report row's `available` can now be less than on-hand minus allocated, with nothing in the row to explain the difference.\n\n**Review:** `/code-review` (medium) found no correctness bugs against the spec. I chose not to act on its other findings:\n- **Speed:** a hold that lapses without anyone reading it stays stored as `ACTIVE`. Every `available()` call therefore still walks it, so the cost grows with past holds, not just current ones. This doesn't matter at in-memory scale; ADR 0001 notes that a database repository should filter by `expires_at`.\n- **Shared objects:** callers get the stored `Reservation` itself, so they could edit `items` directly. Orders work the same way today.\n- **Clock going backwards:** expiry assumes the clock never moves back. ADR 0001 states this assumption, and `FixedClock` enforces it.\n- **Error wording:** the empty-`items` error from `reserve` says \"an order needs at least one line\". When no line can hold anything, `InsufficientStock` names only the first SKU.\n\n**Decision for you:** CLAUDE.md asks for a fresh-session review against the spec when a change touches an invariant. \"Never promise more than available\" is one, so I recommend running that review in a new session using `specs/stock-reservations.md`.\n>>>\n\nReply as the user. End with exactly one line of JSON.",
+ "exit": 0,
+ "stderr_tail": "2026/10/29 01:14:35 socat[4169950] W exiting on signal 15\n",
+ "wall_s": 2.5,
+ "result": "{\"action\": \"done\"}",
+ "is_error": false,
+ "num_turns": 1,
+ "total_cost_usd": 0.0678069,
+ "usage": {
+  "input_tokens": 2,
+  "cache_creation_input_tokens": 3250,
+  "cache_read_input_tokens": 22617,
+  "output_tokens": 10,
+  "output_tokens_details": {
+   "thinking_tokens": 0
+  },
+  "server_tool_use": {
+   "web_search_requests": 0,
+   "web_fetch_requests": 0
+  },
+  "service_tier": "standard",
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 3250,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "inference_geo": "global",
+  "iterations": [],
+  "speed": "standard",
+  "fallback_credit": null
+ },
+ "modelUsage": {
+  "claude-sonnet-5-5": {
+   "inputTokens": 4,
+   "outputTokens": 1929,
+   "thinkingTokens": 364,
+   "cacheReadInputTokens": 37289,
+   "cacheCreationInputTokens": 11195,
+   "cacheCreationEphemeral5mInputTokens": 0,
+   "cacheCreationEphemeral1hInputTokens": 11195,
+   "webSearchRequests": 0,
+   "costUSD": 0.0678069,
+   "contextWindow": 1000000,
+   "maxOutputTokens": 128000,
+   "canonicalModel": "claude-sonnet-5-5",
+   "provider": "firstParty",
+   "costBasis": "list"
+  }
+ },
+ "duration_ms": 2023,
+ "permission_denials": [],
+ "subagent_stats": {
+  "spawned": 0,
+  "requested": {
+   "background": 0,
+   "foreground": 0,
+   "unset": 0
+  },
+  "started_in_background": 0,
+  "max_depth": 0,
+  "spawned_by_subagents": 0,
+  "completed": 0,
+  "failed": 0,
+  "killed": {
+   "parent": 0,
+   "user": 0,
+   "system": 0
+  },
+  "refused": {
+   "depth_limit": 0,
+   "concurrency_limit": 0,
+   "budget": 0
+  },
+  "by_type": {}
+ },
+ "stop_reason": "end_turn",
+ "terminal_reason": "completed",
+ "session_id": "0f05fa4c-5cbb-4bcf-ab96-754bc9fefd5c"
+}
