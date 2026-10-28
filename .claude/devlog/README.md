@@ -1,5 +1,8 @@
 # Devlog
 
+> **Закрыт 2026-10-28** — замороженный архив, новых записей нет. Решения —
+> `.claude/docs/adr/` ([ADR 0001](../docs/adr/0001-devlog-zakryt-resheniya-v-adr.md)).
+
 Хронология значимых изменений в проекте. Источник правды — `entries/*.md`,
 `index.json` и `tldr.md` регенерируются из их frontmatter и body.
 

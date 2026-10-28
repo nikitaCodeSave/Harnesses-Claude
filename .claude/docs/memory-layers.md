@@ -1,6 +1,6 @@
 ---
 owner: @harness
-last-updated: 2026-08-29
+last-updated: 2026-10-28
 ---
 
 # Memory layers (harness reference)
@@ -16,22 +16,22 @@ last-updated: 2026-08-29
 | Layer | Что | Где у нас | Persistence | Owner |
 |---|---|---|---|---|
 | L0 in-session scratchpad | runtime task list | **на текущем поколении моделей пуст**: task-list тулы и `TodoWrite` не выдаются без явного opt-in (`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`) — модель ведёт многошаговую работу без письменного чеклиста; версии и точные условия — `native-capabilities.md` | session | session |
-| L1 procedural | как работать, инварианты, action-skills | `.claude/CLAUDE.md`, `.claude/rules/`, плагин `devlog` (проектных skills нет) | cross-session, в git | repo |
+| L1 procedural | как работать, инварианты, action-skills | `.claude/CLAUDE.md`, `.claude/rules/` (проектных skills нет) | cross-session, в git | repo |
 | L2 episodic | session summaries, recurring patterns | `~/.claude/projects/<hash>/memory/MEMORY.md` + per-topic `.md` | cross-session, user-scoped | user |
-| L3 durable artifacts | what happened, why | `.claude/devlog/entries/*.md` + `index.json` | cross-session, в git | repo |
-| L4 semantic / decisions | architectural rationale | `.claude/docs/principles.md` (active), `.claude/docs/archive/` (frozen) | cross-session, в git | repo |
+| L3 durable artifacts | what happened, why | сообщения коммитов (что изменилось), `.claude/benchmark/*/RESULTS.md` (замеры); `.claude/devlog/` — замороженный журнал до 2026-10-28 | cross-session, в git | repo |
+| L4 semantic / decisions | architectural rationale | `.claude/docs/adr/` (действующие решения), `.claude/docs/principles.md` (active), `.claude/docs/archive/` (frozen) | cross-session, в git | repo |
 | inter-agent | filesystem blackboard | `.claude/audits/<slug>/*.json` — вердикт свежей сессии; внутри dynamic workflow состояние несут сами агент-узлы | per-deliverable, transient | repo |
 
 ## Curation rituals
 
 - **L2 → L1 promotion**: `/remember` skill после сессий с ≥3 memory writes или ≥2 корректирующими feedback'ами — чтобы recurring patterns переходили в CLAUDE.md / rules, а не оставались user-scoped только. Каждое promotion требует явного user-confirmation.
-- **L0 → L3 promotion**: после значимого изменения — devlog entry через `devlog` skill, регенерация `index.json` через `devlog-reindex`.
+- **L0 → L3 promotion**: после значимого изменения — описательный коммит; замер — в `RESULTS.md` своего стенда. Журнала сессий нет ([ADR 0001](adr/0001-devlog-zakryt-resheniya-v-adr.md)).
 - **Работа в полёте → L3**: носитель — открытая спека (operator-global §6): она говорит, что должно стать правдой и чего ещё нет. Отдельный progress-журнал не заводится; где проект уже ведёт журнал — встречать его там.
-- **L4 capture**: ADR при решениях, объяснение которых в Slack заняло бы >5 минут (per docs-discipline rule 6).
+- **L4 capture**: ADR в `.claude/docs/adr/` в той же сессии, где принято решение, которому должна следовать будущая работа (порог — docs-discipline rule 6). Отменяется новым ADR, не правкой.
 
 ## Anti-patterns
 
-- **Vendor memory stores** (Letta/Mem0/Zep/vector DB) — overkill для CLI meta-harness, filesystem + devlog справляются на нашем масштабе.
+- **Vendor memory stores** (Letta/Mem0/Zep/vector DB) — overkill для CLI meta-harness, filesystem + git справляются на нашем масштабе.
 - **Shared blackboard для inter-agent внутри одной сессии** — Cognition explicit против; subagents read/investigation only, main thread owns writes.
 - **Self-описывающие skills/agents/docs** (повторяют CLAUDE.md о роли main thread'а) — anti-pattern из ADR-017.
 - **Multi-step memory pipeline** (write → embed → retrieve → synthesise) — premature; structured notes per Anthropic достаточны.
@@ -51,6 +51,6 @@ Opt-in: вызывает оператор, за пределами авторс�
 
 ## Что специально НЕ делаем
 
-- Не персистим task-list state между сессиями — это L0 (session-scoped) by design; cross-session goals переходят в L3 (devlog) или progress.md. На текущем поколении L0 пуст by default, и это усиливает то же правило: in-flight состояние живёт на диске, а не в тулах сессии.
+- Не персистим task-list state между сессиями — это L0 (session-scoped) by design; cross-session goals живут в открытой спеке, решения — в ADR. На текущем поколении L0 пуст by default, и это усиливает то же правило: in-flight состояние живёт на диске, а не в тулах сессии.
 - Не делаем nested CLAUDE.md per subdir (Boris допускает lazy-load, у нас не нужен — single repo, плоская структура).
-- Не делаем semantic search над devlog — `grep` справляется при ~40 entries; пересмотреть при ≥200.
+- Не делаем semantic search над ADR и архивом devlog — `grep` справляется на этом масштабе.

@@ -166,7 +166,7 @@ Live ground-truth по фичам Claude Code CLI. **Источник для «�
 ### [claude.com/blog/onboarding-claude-code-like-a-new-developer](https://claude.com/blog/onboarding-claude-code-like-a-new-developer-lessons-from-17-years-of-development)
 **Автор:** Brendan MacLean (Skyline, 700K+ LoC C#, 17 лет dev).
 **Цитата:** *«Understand that Claude can't learn without you recording 'context.' Don't expect magic … Invest in building and maintaining your context layer. And treat it like any other project artifact: version it, grow it, maintain it»*.
-**Применяется:** обоснование `.claude/docs/`, devlog, progress.md как versioned context-layer.
+**Применяется:** обоснование `.claude/docs/`, ADR и открытой спеки как versioned context-layer.
 
 ### [claude.com/blog/common-workflow-patterns-for-ai-agents](https://claude.com/blog/common-workflow-patterns-for-ai-agents-and-when-to-use-them)
 **Тезисы:** sequential / parallel (sectioning, voting) / evaluator-optimizer патт`ерны. Когда какой применять.
@@ -340,10 +340,10 @@ cross-validation к T1–T2 и источником кандидатов на п
 **Авторы:** Pan, Zou, Guo, Ni, Zheng. Март 2026.
 **Тезисы:** Harness как редактируемый natural-language артефакт. Три опоры:
 1. **Explicit contracts** (rules / API constraints / testing invariants)
-2. **Durable artifacts** (devlog, ADR, MEMORY.md)
+2. **Durable artifacts** (ADR, журналы решений, MEMORY.md)
 3. **Lightweight adapters** (hooks для gating/observability, не для logic).
 Runtime = Intelligent Harness Runtime (IHR).
-**Применяется:** `.claude/rules/*.md` = contracts, `.claude/devlog/` = artifacts, hooks = adapters. См. `reference_harness_papers_2026.md` memory.
+**Применяется:** `.claude/rules/*.md` = contracts, `.claude/docs/adr/` + `RESULTS.md` стендов = artifacts, hooks = adapters. См. `reference_harness_papers_2026.md` memory.
 
 ### [arXiv 2603.28052v1 — Stanford «Meta-Harness»](https://arxiv.org/abs/2603.28052)
 **Авторы:** Lee, Nair, Zhang, Lee, Khattab, Finn. Март 2026.

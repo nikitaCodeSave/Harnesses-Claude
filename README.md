@@ -13,7 +13,7 @@
 
 Репозиторий, в котором эмпирически выращивается ответ на один вопрос: **какой минимум
 обвязки даёт максимум продуктивности под способной моделью.** Здесь живут принципы,
-бенчмарки, журнал решений (116 devlog-записей) и архив ретайренных экспериментов, на которых
+бенчмарки, решения (ADR) и архив — журнал до 2026-10-28 (149 devlog-записей) и ретайренные эксперименты, на которых
 обкатывается и калибруется канон, отгружаемый в другие проекты через плагин.
 
 ## Центральный принцип
@@ -38,7 +38,7 @@ thread'а — anti-pattern.
 |---|---|---|
 | **Кит** (отгружается) | плагин `harness`, репо `~/PROJECTS/claude-code-harness` | один скилл: читает репо и выбирает путь (новый / существующий / с harness'ом), ставит корневой `CLAUDE.md` с блоками *How we work* и *Project knowledge*, `settings.json`, `CLAUDE.md` компонентов, подключает `mattpocock-skills`. Ни агентов, ни команд, ни хуков; каждая строка шаблона опирается на замер `benchmark/pipeline-ab/` |
 | **Practice baseline §1–8** | operator-global `~/.claude/CLAUDE.md` | think-first · simplicity · surgical · goal-driven · testing · continuity · guardrails · independent-verification. Применяется во всех проектах, **не дублируется** в каждый репо |
-| **Лаборатория** (этот репо) | `.claude/` | R&D-машинерия: эволюция канона, бенчмарки, devlog, архив ретайренных экспериментов — **не копируется** |
+| **Лаборатория** (этот репо) | `.claude/` | R&D-машинерия: эволюция канона, бенчмарки, ADR, архив ретайренных экспериментов — **не копируется** |
 
 ## Структура репозитория
 
@@ -51,8 +51,8 @@ WORKFLOW.md              — портативный human-facing гайд: ст�
 │                          principles · harness-architecture · workflow(+async/orchestration/cloud/evolution)
 │                          · multi-agent · memory-layers · benchmark · external-sources
 ├── rules/               — 3 инварианта: api-constraint · testing · docs-discipline
-│                          (проектных hooks/commands нет — ретайрены 2026-07-15; единственный внешний хук — SessionStart-дайджест плагина devlog)
-├── devlog/              — записи (live + archive/), index.json/tldr.md (авто, через devlog-reindex)
+│                          (проектных hooks/commands нет — ретайрены 2026-07-15)
+├── devlog/              — замороженный журнал до 2026-10-28; решения — docs/adr/
 ├── benchmark/           — 4-layer измерительная методология (static → headless → cross-fixture → smoke), text2sql-оракулы
 ├── memory/              — JSONL event-логи (session-starts, agent-spawn, denied, …) для continuity
 ├── audits/              — provenance независимых аудитов (AUDIT-*.json + логи), frozen
@@ -87,7 +87,7 @@ typo/one-liner — сразу Build → Review). Выбран замером `.c
 
 **Practice baseline §1–8** (живёт в operator-global, отгружается через канон):
 think-before-coding · simplicity-first · surgical-changes · goal-driven · tests-verify-behavior ·
-continuity (devlog/progress/memory) · mechanical-guardrails · independent-verification.
+continuity (открытая спека/ADR/memory) · mechanical-guardrails · independent-verification.
 
 Полная развёртка — [`WORKFLOW.md`](WORKFLOW.md).
 
@@ -102,7 +102,7 @@ continuity (devlog/progress/memory) · mechanical-guardrails · independent-veri
   триггер ревизии.
 - **D-цикл** (≈1 сессия, на milestone-close) — fold доказанных находок внутрь канона:
   собрать → классифицировать (`kit-gap` / `project-specific` / `single-incident` / `noise`) →
-  gate (только `kit-gap` с multi-source evidence) → point-edit reference → commit + devlog.
+  gate (только `kit-gap` с multi-source evidence) → point-edit reference → commit (+ ADR, если это решение).
 - **Strip-ревизия** (раз в 3–6 мес / major-релиз модели / дельта CC-версии), два прохода:
   **external-intake** (что сдвинулось снаружи: changelog, first-party docs, essays — по дельте
   от ledger) → **re-test** (что из канона устарело: `claude --safe-mode` как быстрый тест
@@ -129,5 +129,5 @@ continuity (devlog/progress/memory) · mechanical-guardrails · independent-veri
 | Полный workflow разработчика | [`WORKFLOW.md`](WORKFLOW.md) |
 | Принцип, anti-patterns, spawn-policy | [`.claude/CLAUDE.md`](.claude/CLAUDE.md) |
 | Машинный routing-spine | `.claude/docs/workflow.md` |
-| Хронология решений | `.claude/devlog/` (`tldr.md` для холодного входа) |
+| Действующие решения | `.claude/docs/adr/`; хронология до 2026-10-28 — архив `.claude/devlog/` (`tldr.md`) |
 | Поставить harness в проект (новый, существующий, большой) | плагин `harness`: «set up Claude Code harness in this project» |

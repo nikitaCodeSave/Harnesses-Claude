@@ -7,7 +7,8 @@ other vendors get this file.
 ## What this repository is
 
 A **laboratory for Claude Code harness design**, not an application and not a template. There is no
-build, no runtime, no package to ship. The artifacts are markdown, benchmark rigs, and a devlog.
+build, no runtime, no package to ship. The artifacts are markdown, benchmark rigs, and decision
+records (ADRs).
 
 The shippable product lives in a **different repository** — `~/PROJECTS/claude-code-harness`
 (public: `github.com/nikitaCodeSave/claude-code-harness`). That is the source of truth for the
@@ -17,9 +18,6 @@ belongs there, not here.
 ## Commands
 
 ```bash
-# regenerate the devlog index after adding an entry (required — index.json/tldr.md are derived)
-~/PROJECTS/claude-code-harness/plugins/devlog/bin/devlog-reindex
-
 # validate the plugin manifest (run in the kit repo)
 claude plugin validate .
 
@@ -27,8 +25,8 @@ claude plugin validate .
 claude --print "ok" </dev/null 2>&1 >/dev/null | grep -E '^(Permission |Ignoring .*permissions\.allow)'
 ```
 
-Done = these exit 0 and the reindex reports no ERRORS. There is no test suite to run: the oracle
-for a documentation change is the reindex validator plus the drift detector below.
+Done = these exit 0 and the drift detector below reports no hit in a file you touched. There is no
+test suite to run: for a documentation change those two are the oracle.
 
 ```bash
 # drift detector — version pins that leaked into version-free docs
@@ -38,15 +36,16 @@ grep -rnE "Opus 4\.[0-9]|Opus [0-9]|Sonnet [0-9]|v?2\.1\.[0-9]{3}" --include="*.
 
 ## Boundaries
 
-- **Always**: put a devlog entry in `.claude/devlog/entries/NNNN-<slug>.md` after a substantive
-  change and regenerate the index. The filename slug must equal `slugify(title)` — the reindexer
-  rejects a mismatch, and that check is the reason entries stay findable.
+- **Always**: a decision that later work must follow becomes an ADR in
+  `.claude/docs/adr/NNNN-<slug>.md` (Context / Decision / Consequences) in the session that made
+  it; a measurement goes into its rig's `RESULTS.md`; what changed and why goes into the commit
+  message. There is no journal beyond these — `.claude/docs/adr/0001-*` says why.
 - **Ask first**: anything under `.claude/benchmark/` (measurement provenance), and any change to
   the plugin content in the other repository.
-- **Never**: edit frozen layers — `.claude/docs/archive/`, `.claude/devlog/entries/archive/`,
-  `.claude/audits/`, and existing devlog entries. They are point-in-time records; rewriting them
-  falsifies the provenance later work stands on. Never hand-edit `index.json` or `tldr.md` —
-  they are generated.
+- **Never**: edit frozen layers — `.claude/docs/archive/`, `.claude/devlog/` (the whole journal,
+  closed 2026-10-28; "devlog #NNN" references still point into it), `.claude/audits/`, and an
+  accepted ADR (a new ADR supersedes it instead). They are point-in-time records; rewriting them
+  falsifies the provenance later work stands on.
 
 ## Conventions that are not obvious from the files
 
@@ -57,13 +56,13 @@ grep -rnE "Opus 4\.[0-9]|Opus [0-9]|Sonnet [0-9]|v?2\.1\.[0-9]{3}" --include="*.
   `.claude/docs/harness-evolution.md` records which version each grounding pass ran against — dated
   provenance, not a pin, so the detector skips it too.
 - **Live layer vs archive.** Documents under `.claude/docs/` describe the current state, not the
-  history of how it got there — "was → became" narrative belongs in git and the devlog. The
+  history of how it got there — "was → became" narrative belongs in git and the ADRs. The
   archive directories are the opposite: frozen, never edited.
 - **Single-incident does not become a rule.** A new invariant needs multi-source evidence or
   repeated empirics. This is the repository's central discipline; a change that adds a rule on one
   observation will be rejected on review.
-- **The devlog is in Russian, the shipped kit is in English.** That split is deliberate: the kit
-  travels to other people, the lab's journal does not.
+- **The lab is written in Russian, the shipped kit in English.** That split is deliberate: the kit
+  travels to other people, the lab's docs and ADRs do not.
 
 ## TypeSafe (Jev) — rules for writing integrations
 

@@ -73,7 +73,7 @@ Default для **нетривиальной** задачи, которая по�
 - `/code-review` built-in — дефолтная ступень для substantive change (working diff или PR, local, free, codebase-aware); `/review` — его алиас
 - `/code-review ultra` (алиас `/ultrareview`, CLI `claude ultrareview`) — high-stakes (cloud multi-agent, ~5-10min, ~$5-20 via usage credits)
 - Doc-with-code rule: PR обновляет doc в том же PR ([docs-discipline](../rules/docs-discipline.md) rule 1)
-- Devlog entry через `devlog` skill после significant change
+- Решение, которому должна следовать будущая работа, — ADR в той же сессии; что изменилось — описательный коммит
 
 ## Долгий проект: слой знаний между сессиями
 

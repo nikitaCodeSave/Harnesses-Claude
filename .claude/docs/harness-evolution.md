@@ -63,10 +63,11 @@ fresh-context audits are what work; don't wait for "5 observations" that have no
    evidence provenance (dates, n) is acceptable and desirable. Empirics: harness gains localize in
    tools/middleware/memory, NOT in prose (AHE ablation, arXiv 2604.25850) — prefer a fold into a
    mechanical carrier (a checklist step, a permission rule, a schema) over a new paragraph of prose.
-5. **Record it**: a commit to the plugin repo + a devlog entry there listing
-   "finding → where it went → evidence". A significant change to the kit's composition →
-   a release via `scripts/release.sh <version>` (bump `version` in `plugin.json` — the single
-   source of truth — + tag + push). (Maintainer's step: commit/devlog — in the plugin repo;
+5. **Record it**: a commit to the plugin repo whose message lists
+   "finding → where it went → evidence"; a decision later work must follow → an ADR. A
+   significant change to the kit's composition → a release via `scripts/release.sh <version>`
+   (bump `version` in `plugin.json` — the single source of truth — + tag + push) with a
+   `CHANGELOG.md` entry. (Maintainer's step: commit/ADR — in the plugin repo;
    the empirics of experiments — in the lab repo. On a consumer machine this step does not
    exist — there the canon is updated with `/plugin update`.)
 
@@ -107,7 +108,7 @@ Compare the delta *from the refresh ledger*, not "everything from scratch". Sour
 2. Re-test each: does the model do X natively now. The quick tool is
    `claude --safe-mode` (start with no CLAUDE.md/skills/hooks/MCP): if it's no worse without the
    component — it's obsolete.
-3. Obsolete pieces are **deleted, not archived into the canon** (history stays in git + devlog).
+3. Obsolete pieces are **deleted, not archived into the canon** (history stays in git).
 4. Whatever the last D-cycle added and that didn't work is the first candidate for removal.
 5. **Check the oracle's scope against the claim's scope before writing either down.** A probe
    answers about the moment and the layer where it was taken; a sentence in a reference asserts
@@ -118,7 +119,7 @@ Compare the delta *from the refresh ledger*, not "everything from scratch". Sour
    match, write the narrower claim you actually measured.
 
 At the end of the revision — **update the refresh ledger** (new CC version / model / date /
-checked sources), sync the version line of `native-capabilities.md`, and record a devlog entry. A
+checked sources), sync the version line of `native-capabilities.md`, and commit with the findings in the message. A
 significant shift in the canon's composition → bump `version` (see D-cycle step 5).
 
 ## The procedure's evidence base

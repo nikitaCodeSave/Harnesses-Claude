@@ -39,7 +39,7 @@ Tools / middleware / memory contribute; prose tunings do not transfer. Practical
 |-------|---------|---------------|
 | **Tools** (hooks, slash-commands, skills) | Pass-rate delta on task suite | Number of lines added |
 | **Middleware** (rules, validators, gates) | False-completion rate (target <5%) | Subjective "feels safer" |
-| **Memory** (devlog, auto-memory, MEMORY.md curation) | Re-work rate at session start | Tokens used |
+| **Memory** (ADR, auto-memory, MEMORY.md curation) | Re-work rate at session start | Tokens used |
 | **Subagents** (custom agents) | Spawn ROI (quality lift vs token cost) | Inventory size |
 | **System prompt prose** (CLAUDE.md content) | Quality on calibration tasks | Length |
 

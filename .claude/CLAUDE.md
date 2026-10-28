@@ -79,9 +79,10 @@ paths для DENY. Сохранить в проектном CLAUDE.md (в кор
 - Расширение harness'а (agents/hooks/commands) main thread делает нативно;
   skills — через плагин skill-creator из marketplace, не форком.
 - Проектных skills нет — каталога `.claude/skills/` в репо не существует.
-  Devlog едет плагином `devlog@claude-code-harness` (project scope, только в лабе); в репо ничего devlog'ового не
-  дублируется. Self-описывающие skills не создаются; action-skill появляется
-  только под повторяющуюся операцию, которой нет built-in'а.
+  Self-описывающие skills не создаются; action-skill появляется только под
+  повторяющуюся операцию, которой нет built-in'а.
+- Решение, которому должна следовать будущая работа, — ADR в `docs/adr/`;
+  журнала сессий нет ([ADR 0001](docs/adr/0001-devlog-zakryt-resheniya-v-adr.md)).
 - Знание о дизайне harness'а — здесь, в `.claude/docs/`; вывод из замера
   попадает в проекты только через плагин `harness` (`~/PROJECTS/claude-code-harness`),
   и только когда строка шаблона опирается на измерение или first-party источник.
@@ -106,12 +107,12 @@ paths для DENY. Сохранить в проектном CLAUDE.md (в кор
 **Инварианты** (загружены всегда): [testing](rules/testing.md) ·
 [docs-discipline](rules/docs-discipline.md) · [api-constraint](rules/api-constraint.md).
 
-**История и провенанс:** `.claude/devlog/entries/` (индекс — `devlog-reindex`) ·
+**История и провенанс:** git · `docs/adr/` (действующие решения) ·
+`.claude/devlog/` (frozen: журнал до 2026-10-28) ·
 `docs/archive/` (frozen: ADR-лог, pre-split workflow) · `.claude/audits/` ·
 `.claude/benchmark/` (в т.ч. `guard-ab/` — A/B ваниль vs harness vs §8).
 
 Каталогов `.claude/agents/` и `.claude/hooks/` нет: custom-агентов harness не
-держит (audit-роли едут плагином), проектных хуков тоже — активны глобальный
-SessionStart-дайджест из плагина `devlog`. Глобального `system-guard` тоже больше нет —
+держит (audit-роли едут плагином), проектных хуков тоже. Глобального `system-guard` больше нет —
 ретайрен 2026-08-29 в пользу нативного слоя (auto-mode классификатор + встроенный блок
 деструктивных git/IaC); devlog #134.

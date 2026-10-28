@@ -72,17 +72,25 @@ for d_num in $(grep -oE '^### D-[0-9]+' .claude/docs/principles.md 2>/dev/null |
     fi
 done
 
-# Check 4: Devlog index integrity (ADR-004)
-# devlog-reindex ships with the devlog plugin; it is on PATH inside Claude Code's Bash
-# tool, but not in a plain terminal — hence the bundle-path fallback.
-reindex="$(command -v devlog-reindex || echo "$HOME/.claude/skills/devlog/bin/devlog-reindex")"
-if [[ ! -x "$reindex" ]]; then
-    check "Devlog index integrity" "devlog-reindex not found (devlog plugin not installed?)" fail
-elif "$reindex" .claude/devlog >/dev/null 2>&1; then
-    entries=$(python3 -c "import json; print(len(json.load(open('.claude/devlog/index.json'))['entries']))" 2>/dev/null || echo "?")
-    check "Devlog index integrity" "$entries entries, valid" pass
+# Check 4: ADR format (.claude/docs/adr/0001-*: devlog closed, decisions live in ADRs)
+# NNNN-<slug>.md, unique number, Context / Decision / Consequences sections present.
+adr_bad=""
+adr_count=0
+for adr in .claude/docs/adr/*.md; do
+    [[ -f "$adr" ]] || continue
+    adr_count=$((adr_count + 1))
+    name=$(basename "$adr")
+    [[ "$name" =~ ^[0-9]{4}-[a-z0-9-]+\.md$ ]] || { adr_bad+=" $name(name)"; continue; }
+    for section in Context Decision Consequences; do
+        grep -q "^## $section" "$adr" || adr_bad+=" $name(no $section)"
+    done
+done
+adr_dups=$(ls .claude/docs/adr/ 2>/dev/null | grep -oE '^[0-9]{4}' | sort | uniq -d | tr '\n' ' ')
+[[ -n "$adr_dups" ]] && adr_bad+=" duplicate:$adr_dups"
+if [[ -z "$adr_bad" ]]; then
+    check "ADR format" "$adr_count ADRs, valid" pass
 else
-    check "Devlog index integrity" "devlog-reindex exit != 0" fail
+    check "ADR format" "$adr_bad" fail
 fi
 
 # Check 5: Skill frontmatter present (name + description required per Claude Code spec)

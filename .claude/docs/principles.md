@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-10-27
+last-updated: 2026-10-28
 ---
 
 # Claude Code harness principles
@@ -12,16 +12,16 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 - **Минимум обвязки → максимум продуктивности под способной моделью** (принцип model-agnostic — не пере-привязывай к версии; провенанс последнего re-grounding — refresh-ledger в `harness-evolution.md`). Anthropic: *«As models improve, developers should strip away unnecessary scaffolding rather than accumulate complexity»* — [Harness Design for Long-Running Apps](https://www.anthropic.com/engineering/harness-design-long-running-apps). Сильнейшая первопартийная эмпирика этого принципа: из системного промпта самого Claude Code **вырезано более 80%** под текущее поколение моделей «with no measurable loss on coding evaluations» — [The new rules of context engineering](https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models). Там же назван механизм вреда: over-constraining через system prompt + CLAUDE.md + skills порождает **конфликтующие инструкции в одном запросе**.
 - **Single-agent first; spawn fewer subagents by default**. Под способной моделью один main thread остаётся дефолтом для most coding. Bounded fan-out — через built-in **dynamic workflows** (keyword `ultracode`), не кастомную обвязку, и только когда scope превышает один контекст (см. Subagents).
 - **Adaptive thinking; effort — единственный рычаг глубины**. Дефолтный effort tier зависит от модели и пиннится только в `native-capabilities.md`; поднимать его — для трудных и long-running async задач. Model сама decides when to reason deeply; fixed thinking budgets deprecated.
-- **1M context — constraint, не resource to ignore**. *«Context rot — steady degradation of model performance as the window gets full — kicks in well before the hard limit»* — [Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents). Текущее поколение заметно надёжнее на long-context и при восстановлении после compaction, но context rot сохраняется — bigger ≠ free. Эмпирический pre-rot порог ~256–400K ([Chroma «Context Rot»](https://research.trychroma.com/context-rot), operational data Manus [Phil Schmid Part 2](https://philschmid.de/context-engineering-part-2)) — **pending re-measurement на текущем поколении**; компактифицируй *до* входа в зону деградации, не у потолка. State живёт на диске (git history, devlog, MEMORY.md), не аккумулируется в context.
+- **1M context — constraint, не resource to ignore**. *«Context rot — steady degradation of model performance as the window gets full — kicks in well before the hard limit»* — [Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents). Текущее поколение заметно надёжнее на long-context и при восстановлении после compaction, но context rot сохраняется — bigger ≠ free. Эмпирический pre-rot порог ~256–400K ([Chroma «Context Rot»](https://research.trychroma.com/context-rot), operational data Manus [Phil Schmid Part 2](https://philschmid.de/context-engineering-part-2)) — **pending re-measurement на текущем поколении**; компактифицируй *до* входа в зону деградации, не у потолка. State живёт на диске (git history, ADR, открытая спека, MEMORY.md), не аккумулируется в context.
 - **Verification — highest-leverage practice**. *«Claude performs dramatically better when it can verify its own work — run tests, compare screenshots, validate outputs. Without clear success criteria, it might produce something that looks right but actually doesn't work»* — Best Practices.
 - **CLI subscription only** (harness-specific). Out of scope: managed-agents (Dreams/Outcomes/Memory stores), beta headers (`--betas`, `managed-agents-*`, `dreaming-*`), `--max-budget-usd`, prompt caching / batch / files / citations API. CLI native primitives (hooks, skills, subagents, slash commands) — единственный execution surface.
 
 ## Components inventory (current state)
 
-- **Skills** (action-only, workflow-templates): проектных нет. Devlog — плагин `devlog@claude-code-harness` (project scope, только в лабе) (скилл + `devlog-reindex` на PATH + SessionStart-дайджест), в репо не дублируется. SKILL.md ≤500 строк. Каноничное знание о дизайне harness'а — глобальный `~/.claude/skills/claude-code-harness/`. (`project-docs-bootstrap` в harness не входит — native + WORKFLOW.md §3 + docs-discipline покрывают bootstrap.)
+- **Skills** (action-only, workflow-templates): проектных нет; журнала сессий нет — решения в `.claude/docs/adr/` ([ADR 0001](adr/0001-devlog-zakryt-resheniya-v-adr.md)). SKILL.md ≤500 строк. Каноничное знание о дизайне harness'а — здесь, в `.claude/docs/`; в проекты едет плагин `harness` (глобально — `~/.claude/skills/harness`). (`project-docs-bootstrap` в harness не входит — native + WORKFLOW.md §3 + docs-discipline покрывают bootstrap.)
 - **Custom agents**: нет. Дубли built-in не создаются: orchestrator-роль — сам main thread, security — built-in `/security-review`, audit — `/code-review ultra` для изменения и свежая сессия для deliverable'а.
 - **Built-in agents** — пять специалистов: `Explore` (read-only research), `Plan` (architect-level planning), `general-purpose` (open-ended), `statusline-setup` (UI), `claude-code-guide` (вопросы про Claude Code); плюс catch-all `claude` — дефолт для фонового dispatch, не специалист для пересоздания.
-- **Hooks**: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером), глобальных своих — тоже: `system-guard` ретайрен 2026-08-29, его землю занял нативный слой (auto-mode классификатор адъюдицирует опасный `rm`, деструктивные git/IaC блокируются из коробки). Активен один внешний: `session-start-digest` (SessionStart: devlog + active-progress inject) из плагина `devlog`. Test-quality — за глобальным CLAUDE.md §5, хуком не дублируется.
+- **Hooks**: проектных хуков harness не держит (ретайрены 2026-07-15 вместе с loop-кластером), глобальных своих — тоже: `system-guard` ретайрен 2026-08-29, его землю занял нативный слой (auto-mode классификатор адъюдицирует опасный `rm`, деструктивные git/IaC блокируются из коробки). Test-quality — за глобальным CLAUDE.md §5, хуком не дублируется.
 - **Always-loaded rules**: `testing.md` (5 invariants), `docs-discipline.md` (7 invariants), `api-constraint.md`.
 - **Reference docs** (on-demand): `workflow.md` (Spec→Build→Review spine + slice docs), `multi-agent.md`, `benchmark.md`, и др. в `.claude/docs/`.
 
@@ -36,7 +36,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 ## Skills (Agent Skills)
 
-- **Action-skills only**. Workflow-templates для конкретной операции (`devlog`). Self-описывающие skills (повторяют CLAUDE.md о role main thread'а) — anti-pattern.
+- **Action-skills only**. Workflow-templates для конкретной операции (`harness` — установка обвязки в проект). Self-описывающие skills (повторяют CLAUDE.md о role main thread'а) — anti-pattern.
 - **Frontmatter required**: `name` (lowercase, hyphens, ≤64 chars), `description` (когда применять, обязательно включать trigger-контекст).
 - **Optional**: `allowed-tools`, `model`, `paths` (glob для auto-load), `disable-model-invocation`, `user-invocable`.
 - **SKILL.md ≤500 строк**. Длинный reference content — в `references/` subfolder, читается on-demand.
@@ -47,7 +47,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 
 - **Use hook когда action must happen every time с zero exceptions**. *«Unlike CLAUDE.md instructions which are advisory, hooks are deterministic and guarantee the action happens»* — Best Practices.
 - **Block-at-decision (PreToolUse), не block-at-write**. PreToolUse инспектирует tool input до execution; `UserPromptSubmit` — инспектирует user prompt content. Avoid blocking mid-thought.
-- **Event types**: Claude Code определяет десятки hook-событий (точное число — только в `.claude/docs/native-capabilities.md`, единственном version-pinned файле). Собственных хуков harness не держит вовсе; активен один внешний — `session-start-digest` (SessionStart: devlog + progress inject) из плагина `devlog`.
+- **Event types**: Claude Code определяет десятки hook-событий (точное число — только в `.claude/docs/native-capabilities.md`, единственном version-pinned файле). Собственных хуков harness не держит вовсе.
 - **Handler types**: `command` (shell + JSON), `mcp_tool`, `http`. Exit code 0 = allow, 2 = block, other = non-blocking error.
 - Source: [Hooks documentation](https://docs.claude.com/en/docs/claude-code/hooks).
 
@@ -60,7 +60,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 - **`@path/to/file.md` import syntax** — expanded at launch. Resolves relative к containing file. Max depth 5 hops (cycle detection enabled).
 - **Auto-memory**: `~/.claude/projects/<slug>/memory/MEMORY.md` (first 200 lines / 25KB auto-loaded). Topic files (`feedback_*.md`, `user_*.md`) загружаются on-demand при relevance.
 - **Curate-and-delete loop**: значимые learnings в MEMORY.md / topic files; ephemeral session-log trim. Stale (>6 months) — review.
-- **State on disk, не в context**: git history, devlog entries, MEMORY.md — primary truth между сессиями.
+- **State on disk, не в context**: git history, ADR, открытая спека, MEMORY.md — primary truth между сессиями.
 - Source: [Memory documentation](https://docs.claude.com/en/docs/claude-code/memory).
 
 ## Settings & permissions

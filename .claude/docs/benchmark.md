@@ -40,7 +40,7 @@ Empirical insight (own data, 22 runs × 5 tasks, devlog #24-25): **harness ROI �
 
 `.claude/benchmark/static-checks.sh` — 14 checks, ~44ms. Pre-commit blocker.
 
-Покрытие: CLAUDE.md ≤200, SKILL.md ≤500/каждый, principles.md ≤200, devlog index integrity, skill/rules frontmatter, skill discovery runtime, agent inventory, hook smoke, retired-component grep, active+archive paths.
+Покрытие: CLAUDE.md ≤200, SKILL.md ≤500/каждый, principles.md ≤200, ADR format, skill/rules frontmatter, skill discovery runtime, agent inventory, hook smoke, retired-component grep, active+archive paths.
 
 Когда ослаблять: false-positive rate >20% — пересмотр constraints (counter-evidence per ADR-019).
 
@@ -152,7 +152,6 @@ Aggregate summary обязан включать:
 
 - `.claude/benchmark/static-checks.sh` — Layer A implementation.
 - `.claude/benchmark/headless-runner.sh` — Layer B+C runner.
-- `devlog-reindex` (плагин `devlog`) — Layer A check #4.
 - `.claude/skills/skill-creator:skill-creator` (marketplace) — Layer B+C для skills (eval + Comparator).
 
 ---

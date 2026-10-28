@@ -1,6 +1,6 @@
 ---
 owner: nikitaCodeSave
-last-updated: 2026-08-29
+last-updated: 2026-10-28
 ---
 
 # Harness architecture (evergreen reference)
@@ -15,13 +15,13 @@ Reference doc: что этот проект производит, где как�
 
 | Артефакт | Где | Что | Роль |
 |---|---|---|---|
-| **Плагин `claude-code-harness`** | marketplace → `~/.claude/skills/claude-code-harness/` | режимы bootstrap / audit / extend / explain + `references/` (native-capabilities, harness-discipline, harness-evolution, evidence-base). Ни агентов, ни команд, ни хуков — с v1.23.0 кит везёт только скилл и справочники | **канон**: как поставить harness в любой проект |
-| **Глобальная обвязка** | `~/.claude/` | practice baseline §1–8 (в `CLAUDE.md`), skills-dir плагины (`claude-code-harness`, `devlog` — последний несёт SessionStart-дайджест). Своих хуков нет: `system-guard` ретайрен 2026-08-29 | **practice-слой**, действующий во всех проектах без копирования |
-| **Лаборатория** (этот репо) | `.claude/` | R&D: эволюция канона через devlog/benchmark; архив ретайренных экспериментов | питает первые два, сам не отгружается |
+| **Плагин `harness`** | marketplace `claude-code-harness` → `~/.claude/skills/harness` | один скилл (новый / существующий / уже с harness'ом проект) и три шаблона: корневой `CLAUDE.md`, `CLAUDE.md` компонента, `settings.json`. Ни агентов, ни команд, ни хуков | **канон**: как поставить harness в любой проект |
+| **Глобальная обвязка** | `~/.claude/` | practice baseline §1–8 (в `CLAUDE.md`), скилл `harness`, плагин `mattpocock-skills`. Своих хуков нет: `system-guard` ретайрен 2026-08-29 | **practice-слой**, действующий во всех проектах без копирования |
+| **Лаборатория** (этот репо) | `.claude/` | R&D: эволюция канона через benchmark и ADR; архив ретайренных экспериментов | питает первые два, сам не отгружается |
 
 Следствие для этого репо: hooks/commands harness **не держит** ни проектных, ни своих глобальных —
 safety закрыт нативным слоем (auto-mode классификатор + встроенный блок деструктивных git/IaC),
-continuity (`session-start-digest` inject devlog+progress) — плагином `devlog`, verify (§5) —
+continuity — открытой спекой и ADR (operator-global §6), verify (§5) —
 глобальным practice-слоем без хука. Дублировать их проектной
 копией — anti-pattern.
 
@@ -62,11 +62,11 @@ rubber-stamp.
 | Знание нужно … | Слой | Пример |
 |---|---|---|
 | Всегда (cross-session invariant) | 1 — CLAUDE.md / rules | «нет Anthropic API, только CLI», testing invariants |
-| Раз за сессию (situational) | 2 — SessionStart hook | devlog + active-progress pointer |
+| Раз за сессию (situational) | 2 — SessionStart hook | состояние окружения (в этом harness'е не используется) |
 | При касании конкретных файлов | 1 с `paths:` glob | rules с paths-scope |
-| В нужный момент (workflow trigger) | 4 — skill | devlog entry creation |
+| В нужный момент (workflow trigger) | 4 — skill | установка обвязки в проект (`harness`) |
 | Для одной задачи | 5 — subagent / slash | security review, evaluator pass |
-| История решений | 6 — devlog / ADR | architectural rationale |
+| История решений | 6 — ADR / git | architectural rationale |
 
 **Не делать**: ситуационное в CLAUDE.md (каждый turn тянет лишнее) · invariant в skill (может не
 подгрузиться) · decision history в CLAUDE.md (файл разрастается, «if rules get lost in noise, file
@@ -88,10 +88,9 @@ is too long» — Anthropic).
 |---|---|---|---|
 | `settings.json` permissions | ✅ | — | — |
 | нативный auto-mode классификатор | ✅ (вероятностно) | partial (reason) | — |
-| Plugin-`SessionStart` (`devlog:session-start-digest`) | — | ✅ | — |
 | Свежая сессия, промптнутая рефьютить | partial (whitelist) | ✅ (только audited surface) | ✅ (fresh context) |
 | Built-in `/code-review ultra` | — | ✅ | ✅ (изолированный флот) |
-| Skill (`devlog`) | — | ✅ (при триггере) | — |
+| Skill (`harness`) | — | ✅ (при триггере) | — |
 | Always-loaded rule (`testing.md`) | — | ✅ | — |
 
 ## Бюджеты и retire-trigger
@@ -123,8 +122,8 @@ ops-сложности: больше компонентов → больше con
 | **L0 in-session scratchpad** | task-list тулы, по умолчанию выключенные на текущем поколении моделей | session |
 | **L1 procedural** | CLAUDE.md, rules, skills | cross-session, в git |
 | **L2 episodic** | `~/.claude/projects/<hash>/memory/MEMORY.md` + topic files | cross-session, user-scoped |
-| **L3 durable artifacts** | `.claude/devlog/entries/` + `index.json` | cross-session, в git |
-| **L4 semantic** | `.claude/docs/principles.md`, archive | cross-session, в git |
+| **L3 durable artifacts** | коммиты, `benchmark/*/RESULTS.md`; `.claude/devlog/` — замороженный архив | cross-session, в git |
+| **L4 semantic** | `.claude/docs/adr/`, `.claude/docs/principles.md`, archive | cross-session, в git |
 | **inter-agent** | filesystem blackboard (PREMORTEM/EVIDENCE/CRITIC) | per-deliverable, transient |
 
 ### Actor views — кто что видит
@@ -132,7 +131,7 @@ ops-сложности: больше компонентов → больше con
 | Actor | Видит | Не видит |
 |---|---|---|
 | **main thread** | L1 (всегда), L2 (`MEMORY.md` first ~200 lines auto), L3/L4 при manual Read | inter-agent transient artefacts unless cwd-loaded |
-| **subagent** (custom) | spawn prompt + tool results | `MEMORY.md`, devlog, conversation history unless explicit pass |
+| **subagent** (custom) | spawn prompt + tool results | `MEMORY.md`, ADR, conversation history unless explicit pass |
 | **built-in subagent** (Explore/Plan/general-purpose) | spawn prompt + tool results + project CLAUDE.md | episodic memory |
 | **hook** | stdin payload (JSON event) + filesystem + env vars | model conversation state |
 
@@ -147,8 +146,8 @@ decision в L0 scratchpad — компонент сломан.
 - **Stale компонент без retire trigger** — паразитный по умолчанию.
 - **Vague always-loaded rule** («be careful», «write clean code») — empirically ignored; specific
   bans / verification criteria > vague guidance.
-- **Проектная копия глобального слоя** — дублировать devlog-скилл с его reindex-скриптом и
-  SessionStart-дайджестом или practice §1–8 в репо (они уже действуют глобально).
+- **Проектная копия глобального слоя** — дублировать скилл `harness` или practice §1–8 в репо
+  (они уже действуют глобально).
 
 ## Sources
 
