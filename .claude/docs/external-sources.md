@@ -43,7 +43,7 @@ truth для harness-philosophy.**
 - **Cross-session durable artifacts** — `claude-progress.txt`, `feature-list.json`, `init.sh`, initializer agent.
 - **Context rot** — *«steady degradation of model performance as the window gets full — kicks in well before the hard limit»*.
 - **JSON > Markdown для state-файлов**: «model less likely to inappropriately change or overwrite JSON files compared to Markdown».
-**Применяется:** спека как носитель состояния в полёте (operator-global §6), PREMORTEM.json/EVIDENCE.json/CRITIC.json (devlog #39, #41).
+**Применяется:** спека как носитель состояния в полёте (`workflow.md`; в проектах — блок *How we work* кита), PREMORTEM.json/EVIDENCE.json/CRITIC.json (devlog #39, #41).
 
 ### [Effective Context Engineering for AI Agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
 **Тезисы:** compaction, structured note-taking, multi-agent isolation, just-in-time retrieval.

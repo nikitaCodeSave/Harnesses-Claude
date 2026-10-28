@@ -87,7 +87,7 @@ Active principles этого harness'а. Self-contained, evidence-based на can
 - **Project docs layout** (bootstrap нативно под способной моделью — рычаг `WORKFLOW.md` §3 + `docs-discipline.md`): `docs/ARCHITECTURE.md`, `docs/CODE-MAP.md`, `docs/GLOSSARY.md`, `docs/CONVENTIONS.md`, `docs/ADR/`, `docs/RUNBOOKS/`. Read-before-write — каждый doc отражает реальное состояние, не template.
 - **Harness docs** (этого pack'а): `.claude/docs/principles.md` (этот файл, current state), `workflow.md`, `multi-agent.md`, `benchmark.md`. Archive layer (`.claude/docs/archive/`) — frozen historical snapshot.
 - **Live vs archive**: active docs редактируются inline для evolve; archive — frozen, изменяется только через structural migrations.
-- 6 invariants в `.claude/rules/docs-discipline.md`: doc-with-code rule / CLAUDE.md как indexer / live vs archive / owner+last-updated / glossary first-use / ADR для non-trivial decisions. Continuity туда не входит — где живёт состояние между сессиями, решает operator-global §6.
+- 6 invariants в `.claude/rules/docs-discipline.md`: doc-with-code rule / CLAUDE.md как indexer / live vs archive / owner+last-updated / glossary first-use / ADR для non-trivial decisions. Continuity туда не входит — состояние между сессиями держит открытая спека (или трекер), решения — ADR.
 
 ## Process
 

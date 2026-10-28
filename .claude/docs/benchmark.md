@@ -18,7 +18,7 @@ Empirical insight (own data, 22 runs × 5 tasks, devlog #24-25): **harness ROI �
 5,194 trajectories × 106 tasks × 6 harness configs × 8 model backends. Подтверждает методологию:
 
 - **Harness качает aggregate score на 23.8 пункта** (76.2% vs 52.4%) при идентичных условиях — сопоставимо/выше различий между моделями. → capability надо репортить на уровне **model × harness configuration**, не модели в одиночку (усиливает Layer D).
-- **«Сильнее модель → ниже cross-harness variance»** (более терпима к качеству обвязки). Это эмпирика foundational-принципа «минимум обвязки под способной моделью» — и **caution**: single-shot A/B на сильной модели систематически **недомеряет** ценность practice-слоя (ровно то, что лаб увидел в devlog #61/#63).
+- **«Сильнее модель → ниже cross-harness variance»** (более терпима к качеству обвязки). Это эмпирика foundational-принципа «минимум обвязки под способной моделью» — и **caution**: single-shot A/B на сильной модели систематически **недомеряет** ценность обвязки, действующей между сессиями (ровно то, что лаб увидел в devlog #61/#63).
 - **Failure-symptom taxonomy** (reusable axes для Layer C, лучше ad-hoc Q1–Q9): contract/format violations 36.4% · tool-failure-without-recovery 24.6% · incomplete evidence grounding 14.6% · uncommitted outputs 11.1% · state-preservation failures 9.3%. Маппинг на наши «invariant pings» / trajectory-метрики — кандидат на P-итерацию.
 
 Концептуально это open-challenge #1 из survey [«Code as Agent Harness» (arXiv 2605.18747)](https://arxiv.org/abs/2605.18747) — *harness-level evaluation / oracle adequacy: «beyond final-task success»*. Тот же сигнал: Layer C (как Claude дошёл) нельзя свести к Layer B (прошёл/нет) — symptom-taxonomy и есть oracle поверх траектории, а не итога.

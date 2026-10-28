@@ -124,7 +124,7 @@ L0 in-session scratchpad — **session-scoped**, not persisted между сес
 
 ### Cross-session — что делать?
 
-Task-list state NOT персистится между сессиями (L0 by design), а на текущем поколении моделей эти тулы вообще не выдаются без opt-in — тем более для cross-session goals → открытая спека (L3 — durable artefact, operator-global §6).
+Task-list state NOT персистится между сессиями (L0 by design), а на текущем поколении моделей эти тулы вообще не выдаются без opt-in — тем более для cross-session goals → открытая спека (L3 — durable artefact).
 
 ---
 

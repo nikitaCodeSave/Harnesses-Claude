@@ -16,14 +16,13 @@ Reference doc: что этот проект производит, где как�
 | Артефакт | Где | Что | Роль |
 |---|---|---|---|
 | **Плагин `harness`** | marketplace `claude-code-harness` → `~/.claude/skills/harness` | один скилл (новый / существующий / уже с harness'ом проект) и три шаблона: корневой `CLAUDE.md`, `CLAUDE.md` компонента, `settings.json`. Ни агентов, ни команд, ни хуков | **канон**: как поставить harness в любой проект |
-| **Глобальная обвязка** | `~/.claude/` | practice baseline §1–8 (в `CLAUDE.md`), скилл `harness`, плагин `mattpocock-skills`. Своих хуков нет: `system-guard` ретайрен 2026-08-29 | **practice-слой**, действующий во всех проектах без копирования |
+| **Глобальная обвязка** | `~/.claude/` | `CLAUDE.md` нет (решение 2026-10-05, devlog #142); `settings.json` — приватность и прокси, запрет `/tdd`, автообновление `mattpocock-skills`; скилл `harness` (симлинк на рабочую копию кита), плагин `mattpocock-skills`. Своих хуков нет: `system-guard` ретайрен 2026-08-29 | **окружение**, действующее во всех проектах без копирования |
 | **Лаборатория** (этот репо) | `.claude/` | R&D: эволюция канона через benchmark и ADR; архив ретайренных экспериментов | питает первые два, сам не отгружается |
 
 Следствие для этого репо: hooks/commands harness **не держит** ни проектных, ни своих глобальных —
 safety закрыт нативным слоем (auto-mode классификатор + встроенный блок деструктивных git/IaC),
-continuity — открытой спекой и ADR (operator-global §6), verify (§5) —
-глобальным practice-слоем без хука. Дублировать их проектной
-копией — anti-pattern.
+continuity — открытой спекой и ADR, verify — блоком *How we work* кита («готово» с командой и
+выводом) без хука.
 
 ## Foundational principle
 
@@ -146,8 +145,8 @@ decision в L0 scratchpad — компонент сломан.
 - **Stale компонент без retire trigger** — паразитный по умолчанию.
 - **Vague always-loaded rule** («be careful», «write clean code») — empirically ignored; specific
   bans / verification criteria > vague guidance.
-- **Проектная копия глобального слоя** — дублировать скилл `harness` или practice §1–8 в репо
-  (они уже действуют глобально).
+- **Проектная копия глобального слоя** — дублировать скилл `harness` в репо (он уже действует
+  глобально).
 
 ## Sources
 

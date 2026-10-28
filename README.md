@@ -37,7 +37,7 @@ thread'а — anti-pattern.
 | | Где | Что |
 |---|---|---|
 | **Кит** (отгружается) | плагин `harness`, репо `~/PROJECTS/claude-code-harness` | один скилл: читает репо и выбирает путь (новый / существующий / с harness'ом), ставит корневой `CLAUDE.md` с блоками *How we work* и *Project knowledge*, `settings.json`, `CLAUDE.md` компонентов, подключает `mattpocock-skills`. Ни агентов, ни команд, ни хуков; каждая строка шаблона опирается на замер `benchmark/pipeline-ab/` |
-| **Practice baseline §1–8** | operator-global `~/.claude/CLAUDE.md` | think-first · simplicity · surgical · goal-driven · testing · continuity · guardrails · independent-verification. Применяется во всех проектах, **не дублируется** в каждый репо |
+| **Глобальный слой** | `~/.claude/` | `CLAUDE.md` нет (решение оператора 2026-10-05, devlog #142): строка появляется в нём только через `/retro`, когда её отсутствие навредило там, где у неё нет другого носителя. В `settings.json` — приватность и прокси, запрет `/tdd`, автообновление `mattpocock-skills`; скилл `harness` — симлинк на рабочую копию кита |
 | **Лаборатория** (этот репо) | `.claude/` | R&D-машинерия: эволюция канона, бенчмарки, ADR, архив ретайренных экспериментов — **не копируется** |
 
 ## Структура репозитория
@@ -56,7 +56,7 @@ WORKFLOW.md              — портативный human-facing гайд: ст�
 ├── benchmark/           — 4-layer измерительная методология (static → headless → cross-fixture → smoke), text2sql-оракулы
 ├── memory/              — JSONL event-логи (session-starts, agent-spawn, denied, …) для continuity
 ├── audits/              — provenance независимых аудитов (AUDIT-*.json + логи), frozen
-├── plans/               — долгоживущие планы (in-flight состояние держит открытая спека, per operator-global §6)
+├── plans/               — долгоживущие планы (in-flight состояние держит открытая спека)
 └── worktrees/           — эфемерные git-worktree'ы (gitignored)
 ```
 
@@ -85,9 +85,8 @@ typo/one-liner — сразу Build → Review). Выбран замером `.c
 **Лестница верификации** (cheapest → strongest): in-prompt check → `/goal` → Stop-hook →
 `/code-review` → fresh-context критик / dynamic workflow.
 
-**Practice baseline §1–8** (живёт в operator-global, отгружается через канон):
-think-before-coding · simplicity-first · surgical-changes · goal-driven · tests-verify-behavior ·
-continuity (открытая спека/ADR/memory) · mechanical-guardrails · independent-verification.
+**Как работать** — блок *How we work* кита (каждая строка опирается на замер или first-party
+источник) и пошаговый мануал кита `docs/manual.md`. Поведенческого baseline в глобальном слое нет.
 
 Полная развёртка — [`WORKFLOW.md`](WORKFLOW.md).
 

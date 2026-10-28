@@ -2,8 +2,8 @@
 
 The procedure for evolving the **canon** — this plugin's repository
 (`nikitaCodeSave/claude-code-harness`) — by empirical signals, not by taste.
-(An operator's own behavioral baseline lives in their `~/.claude/CLAUDE.md` and evolves
-separately — the kit does not ship or re-distill a copy of it.)
+(An operator's own `~/.claude/CLAUDE.md`, if they keep one, evolves separately — the kit does
+not ship or re-distill a copy of it. This lab's operator keeps none.)
 Two operations: the **D-cycle** (folding proven findings inward) and the **strip revision**
 (carrying obsolete pieces outward). Both are subordinate to the headline principle: a component
 lives only as long as it encodes something the model does not do natively.
