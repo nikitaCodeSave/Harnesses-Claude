@@ -12,7 +12,7 @@
 содержит R&D-машинерию (`benchmark/`, архив `docs/archive/`), которую НЕЛЬЗЯ
 копировать целиком в целевой проект. Исследование и замеры живут здесь
 (`.claude/docs/`, `benchmark/`); в проекты едет только измеренный минимум —
-плагин `harness` из `~/PROJECTS/claude-code-harness` (один скилл и три шаблона,
+плагин `harness` из `~/PROJECTS/claude-code-harness` (скилл установки, команды потока `/harness:*` и три шаблона,
 фраза «set up Claude Code harness in this project»), а не копия этого репо.
 
 ## Foundational principle
