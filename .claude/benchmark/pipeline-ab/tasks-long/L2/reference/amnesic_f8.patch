@@ -1,0 +1,177 @@
+diff --git a/src/lending/policy.py b/src/lending/policy.py
+index 45aa92e..127a32d 100644
+--- a/src/lending/policy.py
++++ b/src/lending/policy.py
+@@ -25,14 +25,12 @@ LOAN_LIMITS: dict[MemberCategory, int] = {
+ DAILY_FINE: dict[Material, Decimal] = {
+     Material.BOOK: Decimal("0.25"),
+     Material.DVD: Decimal("1.00"),
+-    Material.MAGAZINE: Decimal("0.10"),  # product decision, fines feature F1-L5
++    Material.MAGAZINE: Decimal("0.25"),
+ }
+ 
+ # A fine never exceeds the title's replacement cost, or this cap where one is set
+ # (product decision, fines feature F1-L5).
+-FINE_CAPS: dict[Material, Decimal] = {
+-    Material.MAGAZINE: Decimal("2.00"),
+-}
++FINE_CAPS: dict[Material, Decimal] = {}
+ 
+ # Magazines on loan at once, inside the member's normal loan limit.
+ MAGAZINE_LIMIT = 3
+@@ -43,9 +41,7 @@ BORROWING_BLOCK = Decimal("10.00")
+ # Days a member has to collect a copy set aside for their hold. Magazines wait
+ # less (product decision, membership feature F5-L1, which made them holdable).
+ PICKUP_DAYS = 7
+-PICKUP_DAYS_BY_MATERIAL: dict[Material, int] = {
+-    Material.MAGAZINE: 3,
+-}
++PICKUP_DAYS_BY_MATERIAL: dict[Material, int] = {}
+ 
+ # Product decision (fines feature, F1-L1): a member owing this much or more
+ # can't place a hold. Deliberately lower than BORROWING_BLOCK.
+@@ -64,7 +60,7 @@ LOST_MAGAZINE_FEE = Decimal("2.00")
+ LOST_PROCESSING_FEE = Decimal("3.00")
+ 
+ # Renewals: books only, at most twice, from a few days before the due date.
+-RENEWABLE: frozenset[Material] = frozenset({Material.BOOK})
++RENEWABLE: frozenset[Material] = frozenset({Material.BOOK, Material.MAGAZINE})
+ MAX_RENEWALS = 2
+ RENEWAL_OPENS_DAYS_BEFORE_DUE = 5
+ 
+@@ -82,7 +78,7 @@ CLOSING_WRITE_OFF_BELOW = Decimal("5.00")
+ # Product decision (lost-items feature F4-L2, changed in the closing feature F7-L1):
+ # the daily job declares a loan lost once it is more than this many days past due.
+ # It never touches children's loans (F4-L2) or magazines (magazines feature F6-L1).
+-LONG_OVERDUE_DAYS = 28
++LONG_OVERDUE_DAYS = 60
+ 
+ # date.weekday(): Monday is 0, Sunday is 6. The library is closed on Sundays.
+ CLOSED_WEEKDAYS: frozenset[int] = frozenset({6})
+diff --git a/src/lending/service.py b/src/lending/service.py
+index 6df2385..90a3611 100644
+--- a/src/lending/service.py
++++ b/src/lending/service.py
+@@ -61,8 +61,7 @@ class LendingService:
+         today = self._clock.today()
+         member = Member(member_id, name, category, joined_on=today)
+         # F1-L6: children's memberships never expire.
+-        if category is not MemberCategory.CHILD:
+-            member.expires_on = policy.membership_expiry(today)
++        member.expires_on = policy.membership_expiry(today)
+         self._repo.add_member(member)
+         return member
+ 
+@@ -75,9 +74,6 @@ class LendingService:
+         opens = member.expires_on - timedelta(days=policy.MEMBERSHIP_RENEWAL_OPENS_DAYS_BEFORE)
+         if today < opens:
+             raise MembershipRenewalRefused(member_id, f"renewal opens on {opens}")
+-        owed = self.balance(member_id)
+-        if owed >= policy.MEMBERSHIP_RENEWAL_BLOCK:
+-            raise MembershipRenewalRefused(member_id, f"owes {owed}")
+         start = member.expires_on if today <= member.expires_on else today
+         member.expires_on = policy.membership_expiry(start)
+         return member
+@@ -87,15 +83,11 @@ class LendingService:
+         self._require_open_account(member)
+         if self.open_loans(member_id):
+             raise CannotClose(member_id, "copies are still on loan")
+-        # F5-L3: holds are cancelled with the member first, never silently.
+-        if any(h.member_id == member_id and h.is_active for h in self._repo.all_holds()):
+-            raise CannotClose(member_id, "holds are still active")
+-        # F5-L2: a small debt is written off; a larger one must be paid first.
+         owed = self.balance(member_id)
+-        if owed >= policy.CLOSING_WRITE_OFF_BELOW:
+-            raise CannotClose(member_id, f"owes {owed}")
+         if owed > ZERO:
+-            self._charge(member_id, -owed, "written off at closing")
++            raise CannotClose(member_id, f"owes {owed}")
++        for hold in [h for h in self._repo.all_holds() if h.member_id == member_id and h.is_active]:
++            self.cancel_hold(hold.hold_id)
+         member.closed_on = self._clock.today()
+         return member
+ 
+@@ -214,13 +206,7 @@ class LendingService:
+         fine = overdue_fine(title, member, loan.due_on, today)
+         if fine > ZERO:
+             self._charge(member.member_id, fine, "overdue fine at loss", loan.loan_id)
+-        if member.category is MemberCategory.CHILD:
+-            pass  # F3-L1: children pay nothing for a lost copy
+-        elif title.material is Material.MAGAZINE:
+-            self._charge(member.member_id, policy.LOST_MAGAZINE_FEE, "lost magazine", loan.loan_id)
+-        else:
+-            self._charge(member.member_id, title.replacement_cost, LOST_REPLACEMENT, loan.loan_id)
+-            self._charge(member.member_id, policy.LOST_PROCESSING_FEE, "lost copy processing fee", loan.loan_id)
++        self._charge(member.member_id, title.replacement_cost, LOST_REPLACEMENT, loan.loan_id)
+         loan.lost_on = today
+         copy.status = CopyStatus.LOST
+         return loan
+@@ -233,8 +219,6 @@ class LendingService:
+             for loan in self._repo.all_loans()
+             if loan.is_open
+             and (today - loan.due_on).days > policy.LONG_OVERDUE_DAYS
+-            and self._repo.get_member(loan.member_id).category is not MemberCategory.CHILD
+-            and self._material_of(loan) is not Material.MAGAZINE
+         ]
+         return [self.declare_lost(loan.loan_id) for loan in due]
+ 
+@@ -252,7 +236,7 @@ class LendingService:
+                  if c.loan_id == loan.loan_id and c.reason == LOST_REPLACEMENT),
+                 ZERO,
+             )
+-            refund = min(replacement, self.balance(loan.member_id))
++            refund = replacement
+             if refund > ZERO:
+                 self._charge(loan.member_id, -refund, "lost copy found", loan.loan_id)
+         self._shelve_or_set_aside(copy)
+@@ -277,20 +261,13 @@ class LendingService:
+             raise RenewalRefused(loan_id, f"renewal opens on {opens}")
+         # F2-L1: someone still waiting in the queue blocks renewal; a hold
+         # already ready on the hold shelf has its copy and does not.
+-        if any(h.status is HoldStatus.WAITING for h in self._repo.holds_on(title.isbn)):
+-            raise RenewalRefused(loan_id, "other members are waiting for this title")
+         # F2-L2: renewals only for members who owe nothing when they ask.
+         owed = self.balance(member.member_id)
+-        if owed > ZERO:
++        if owed >= policy.BORROWING_BLOCK:
+             raise AccountBlocked(member.member_id, owed)
+         # F1-L3: lateness so far is charged now, as if returned today.
+         new_due = policy.due_date(title.material, today)
+         # F3-L3: a renewal never runs past the member's membership.
+-        if member.expires_on is not None and new_due > member.expires_on:
+-            raise RenewalRefused(loan_id, f"membership ends on {member.expires_on}")
+-        fine = overdue_fine(title, member, loan.due_on, today)
+-        if fine > ZERO:
+-            self._charge(member.member_id, fine, "overdue fine at renewal", loan.loan_id)
+         loan.due_on = new_due
+         loan.renewals += 1
+         return loan
+@@ -327,9 +304,6 @@ class LendingService:
+             raise HoldNotAllowed(f"{member_id} already holds {isbn}")
+         if any(self._repo.get_copy(l.copy_id).isbn == isbn for l in self.open_loans(member_id)):
+             raise HoldNotAllowed(f"{member_id} has {isbn} on loan")
+-        owed = self.balance(member.member_id)
+-        if owed >= policy.HOLD_BLOCK:
+-            raise AccountBlocked(member_id, owed)
+         hold = Hold(self._repo.next_id("H"), member_id, isbn, self._clock.today())
+         self._repo.add_hold(hold)
+         return hold
+@@ -354,9 +328,6 @@ class LendingService:
+         ]
+         for hold in expired:
+             hold.status = HoldStatus.EXPIRED
+-            member = self._repo.get_member(hold.member_id)
+-            if member.category is not MemberCategory.CHILD:
+-                self._charge(member.member_id, policy.NO_SHOW_FEE, "hold not collected")
+             self._shelve_or_set_aside(self._repo.get_copy(hold.copy_id))
+         return expired
+ 
+@@ -382,7 +353,7 @@ class LendingService:
+         # F2-L5: never set a copy aside for an expired member; their hold keeps its place.
+         waiting = [
+             h for h in self._repo.holds_on(copy.isbn)
+-            if h.status is HoldStatus.WAITING and self._repo.get_member(h.member_id).is_active(today)
++            if h.status is HoldStatus.WAITING
+         ]
+         if not waiting:
+             copy.status = CopyStatus.AVAILABLE

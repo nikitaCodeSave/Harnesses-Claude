@@ -1,0 +1,63 @@
+diff --git a/src/lending/policy.py b/src/lending/policy.py
+index 45aa92e..bffaf0e 100644
+--- a/src/lending/policy.py
++++ b/src/lending/policy.py
+@@ -43,9 +43,7 @@ BORROWING_BLOCK = Decimal("10.00")
+ # Days a member has to collect a copy set aside for their hold. Magazines wait
+ # less (product decision, membership feature F5-L1, which made them holdable).
+ PICKUP_DAYS = 7
+-PICKUP_DAYS_BY_MATERIAL: dict[Material, int] = {
+-    Material.MAGAZINE: 3,
+-}
++PICKUP_DAYS_BY_MATERIAL: dict[Material, int] = {}
+ 
+ # Product decision (fines feature, F1-L1): a member owing this much or more
+ # can't place a hold. Deliberately lower than BORROWING_BLOCK.
+@@ -61,7 +59,7 @@ LOST_MAGAZINE_FEE = Decimal("2.00")
+ 
+ # Product decision (holds feature F2-L3, changed in the renewals feature F3-L1):
+ # a lost copy costs its replacement cost plus this fee. Children pay nothing at all.
+-LOST_PROCESSING_FEE = Decimal("3.00")
++LOST_PROCESSING_FEE = Decimal("5.00")
+ 
+ # Renewals: books only, at most twice, from a few days before the due date.
+ RENEWABLE: frozenset[Material] = frozenset({Material.BOOK})
+@@ -82,7 +80,7 @@ CLOSING_WRITE_OFF_BELOW = Decimal("5.00")
+ # Product decision (lost-items feature F4-L2, changed in the closing feature F7-L1):
+ # the daily job declares a loan lost once it is more than this many days past due.
+ # It never touches children's loans (F4-L2) or magazines (magazines feature F6-L1).
+-LONG_OVERDUE_DAYS = 28
++LONG_OVERDUE_DAYS = 42
+ 
+ # date.weekday(): Monday is 0, Sunday is 6. The library is closed on Sundays.
+ CLOSED_WEEKDAYS: frozenset[int] = frozenset({6})
+diff --git a/src/lending/service.py b/src/lending/service.py
+index 6df2385..07f2cf5 100644
+--- a/src/lending/service.py
++++ b/src/lending/service.py
+@@ -214,13 +214,12 @@ class LendingService:
+         fine = overdue_fine(title, member, loan.due_on, today)
+         if fine > ZERO:
+             self._charge(member.member_id, fine, "overdue fine at loss", loan.loan_id)
+-        if member.category is MemberCategory.CHILD:
+-            pass  # F3-L1: children pay nothing for a lost copy
+-        elif title.material is Material.MAGAZINE:
++        if title.material is Material.MAGAZINE:
+             self._charge(member.member_id, policy.LOST_MAGAZINE_FEE, "lost magazine", loan.loan_id)
+         else:
+             self._charge(member.member_id, title.replacement_cost, LOST_REPLACEMENT, loan.loan_id)
+-            self._charge(member.member_id, policy.LOST_PROCESSING_FEE, "lost copy processing fee", loan.loan_id)
++            if member.category is not MemberCategory.CHILD:
++                self._charge(member.member_id, policy.LOST_PROCESSING_FEE, "lost copy processing fee", loan.loan_id)
+         loan.lost_on = today
+         copy.status = CopyStatus.LOST
+         return loan
+@@ -319,6 +318,8 @@ class LendingService:
+         self._require_active(member)
+         self._repo.get_title(isbn)
+         copies = self._repo.copies_of(isbn)
++        if self._repo.get_title(isbn).material is Material.MAGAZINE:
++            raise HoldNotAllowed(f"{isbn} is a magazine")
+         if any(c.status is CopyStatus.AVAILABLE for c in copies):
+             raise HoldNotAllowed(f"a copy of {isbn} is on the shelf")
+         if all(c.status in (CopyStatus.WITHDRAWN, CopyStatus.LOST) for c in copies):

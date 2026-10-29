@@ -1,0 +1,196 @@
+diff --git a/src/lending/fines.py b/src/lending/fines.py
+index 66f2307..4e62bd3 100644
+--- a/src/lending/fines.py
++++ b/src/lending/fines.py
+@@ -32,7 +32,8 @@ def overdue_fine(title: Title, member: Member, due_on: date, on: date) -> Decima
+     if member.category is MemberCategory.CHILD:
+         return ZERO
+     fine = policy.DAILY_FINE[title.material] * late_days(due_on, on)
+-    return min(fine, title.replacement_cost).quantize(CENT)
++    cap = min(title.replacement_cost, policy.FINE_CAPS.get(title.material, title.replacement_cost))
++    return min(fine, cap).quantize(CENT)
+ 
+ 
+ def money(amount: object) -> Decimal:
+diff --git a/src/lending/models.py b/src/lending/models.py
+index 56650c7..007fa9b 100644
+--- a/src/lending/models.py
++++ b/src/lending/models.py
+@@ -16,6 +16,7 @@ class MemberCategory(Enum):
+ class Material(Enum):
+     BOOK = "book"
+     DVD = "dvd"
++    MAGAZINE = "magazine"
+ 
+ 
+ class CopyStatus(Enum):
+diff --git a/src/lending/policy.py b/src/lending/policy.py
+index 5de648d..17a6521 100644
+--- a/src/lending/policy.py
++++ b/src/lending/policy.py
+@@ -13,6 +13,7 @@ from .models import Material, MemberCategory
+ LOAN_DAYS: dict[Material, int] = {
+     Material.BOOK: 21,
+     Material.DVD: 7,
++    Material.MAGAZINE: 14,
+ }
+ 
+ LOAN_LIMITS: dict[MemberCategory, int] = {
+@@ -24,13 +25,27 @@ LOAN_LIMITS: dict[MemberCategory, int] = {
+ DAILY_FINE: dict[Material, Decimal] = {
+     Material.BOOK: Decimal("0.25"),
+     Material.DVD: Decimal("1.00"),
++    Material.MAGAZINE: Decimal("0.10"),  # product decision, fines feature F1-L5
+ }
+ 
++# A fine never exceeds the title's replacement cost, or this cap where one is set
++# (product decision, fines feature F1-L5).
++FINE_CAPS: dict[Material, Decimal] = {
++    Material.MAGAZINE: Decimal("2.00"),
++}
++
++# Magazines on loan at once, inside the member's normal loan limit.
++MAGAZINE_LIMIT = 3
++
+ # A member owing this much or more can't borrow.
+ BORROWING_BLOCK = Decimal("10.00")
+ 
+-# Days a member has to collect a copy set aside for their hold.
++# Days a member has to collect a copy set aside for their hold. Magazines wait
++# less (product decision, membership feature F5-L1, which made them holdable).
+ PICKUP_DAYS = 7
++PICKUP_DAYS_BY_MATERIAL: dict[Material, int] = {
++    Material.MAGAZINE: 3,
++}
+ 
+ # Product decision (fines feature, F1-L1): a member owing this much or more
+ # can't place a hold. Deliberately lower than BORROWING_BLOCK.
+@@ -40,6 +55,10 @@ HOLD_BLOCK = Decimal("5.00")
+ # collected in time. Children are exempt, as with fines.
+ NO_SHOW_FEE = Decimal("1.00")
+ 
++# Product decision (lost-items feature F4-L1): a lost magazine costs this flat
++# amount instead of its replacement cost and the processing fee.
++LOST_MAGAZINE_FEE = Decimal("2.00")
++
+ # Product decision (holds feature F2-L3, changed in the renewals feature F3-L1):
+ # a lost copy costs its replacement cost plus this fee. Children pay nothing at all.
+ LOST_PROCESSING_FEE = Decimal("3.00")
+@@ -80,8 +99,9 @@ def loan_limit(category: MemberCategory) -> int:
+     return LOAN_LIMITS[category]
+ 
+ 
+-def pickup_deadline(set_aside_on: date) -> date:
+-    return next_open_day(set_aside_on + timedelta(days=PICKUP_DAYS))
++def pickup_deadline(set_aside_on: date, material: Material = Material.BOOK) -> date:
++    days = PICKUP_DAYS_BY_MATERIAL.get(material, PICKUP_DAYS)
++    return next_open_day(set_aside_on + timedelta(days=days))
+ 
+ 
+ def membership_expiry(start: date) -> date:
+diff --git a/src/lending/service.py b/src/lending/service.py
+index 5f5347b..33eab92 100644
+--- a/src/lending/service.py
++++ b/src/lending/service.py
+@@ -137,10 +137,15 @@ class LendingService:
+         if owed >= policy.BORROWING_BLOCK:
+             raise AccountBlocked(member_id, owed)
+         limit = policy.loan_limit(member.category)
+-        if len(self.open_loans(member_id)) >= limit:
++        open_loans = self.open_loans(member_id)
++        if len(open_loans) >= limit:
+             raise LoanLimitReached(member_id, limit)
+-
+         title = self._repo.get_title(copy.isbn)
++        if title.material is Material.MAGAZINE:
++            magazines = [l for l in open_loans if self._material_of(l) is Material.MAGAZINE]
++            if len(magazines) >= policy.MAGAZINE_LIMIT:
++                raise LoanLimitReached(member_id, policy.MAGAZINE_LIMIT)
++
+         today = self._clock.today()
+         loan = Loan(
+             loan_id=self._repo.next_id("L"),
+@@ -184,7 +189,11 @@ class LendingService:
+         fine = overdue_fine(title, member, loan.due_on, today)
+         if fine > ZERO:
+             self._charge(member.member_id, fine, "overdue fine at loss", loan.loan_id)
+-        if member.category is not MemberCategory.CHILD:
++        if member.category is MemberCategory.CHILD:
++            pass  # F3-L1: children pay nothing for a lost copy
++        elif title.material is Material.MAGAZINE:
++            self._charge(member.member_id, policy.LOST_MAGAZINE_FEE, "lost magazine", loan.loan_id)
++        else:
+             self._charge(member.member_id, title.replacement_cost, LOST_REPLACEMENT, loan.loan_id)
+             self._charge(member.member_id, policy.LOST_PROCESSING_FEE, "lost copy processing fee", loan.loan_id)
+         loan.lost_on = today
+@@ -318,6 +327,9 @@ class LendingService:
+         self._repo.get_title(isbn)
+         return [h for h in self._repo.holds_on(isbn) if h.is_active]
+ 
++    def _material_of(self, loan: Loan) -> Material:
++        return self._repo.get_title(self._repo.get_copy(loan.copy_id).isbn).material
++
+     def _ready_hold_for(self, copy: Copy) -> Hold | None:
+         if copy.status is not CopyStatus.ON_HOLD_SHELF:
+             return None
+@@ -340,7 +352,7 @@ class LendingService:
+         hold = waiting[0]
+         hold.status = HoldStatus.READY
+         hold.copy_id = copy.copy_id
+-        hold.pickup_by = policy.pickup_deadline(today)
++        hold.pickup_by = policy.pickup_deadline(today, self._repo.get_title(copy.isbn).material)
+         copy.status = CopyStatus.ON_HOLD_SHELF
+ 
+     # accounts ----------------------------------------------------------
+diff --git a/tests/test_magazines.py b/tests/test_magazines.py
+new file mode 100644
+index 0000000..82caf20
+--- /dev/null
++++ b/tests/test_magazines.py
+@@ -0,0 +1,46 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++
++from lending.errors import LoanLimitReached, RenewalRefused
++from lending.models import Material
++
++
++@pytest.fixture
++def mags(service):
++    service.add_title("mag-1", "Monthly", Material.MAGAZINE, Decimal("6.00"))
++    for i in range(1, 5):
++        service.add_copy(f"M{i}", "mag-1")
++    return service
++
++
++def test_magazine_goes_out_for_two_weeks(mags):
++    assert mags.checkout("ann", "M1").due_on == date(2026, 3, 16)
++
++
++def test_fourth_magazine_is_refused(mags):
++    for i in range(1, 4):
++        mags.checkout("ann", f"M{i}")
++    with pytest.raises(LoanLimitReached):
++        mags.checkout("ann", "M4")
++
++
++def test_magazine_fine_is_capped_at_two(mags, clock):
++    mags.checkout("ann", "M1")
++    clock.set(date(2026, 4, 30))
++    mags.return_copy("M1")
++    assert mags.balance("ann") == Decimal("2.00")
++
++
++def test_magazines_cannot_be_renewed(mags, clock):
++    loan = mags.checkout("ann", "M1")
++    clock.set(date(2026, 3, 14))
++    with pytest.raises(RenewalRefused):
++        mags.renew(loan.loan_id)
++
++
++def test_lost_magazine_costs_a_flat_two(mags):
++    loan = mags.checkout("ann", "M1")
++    mags.declare_lost(loan.loan_id)
++    assert mags.balance("ann") == Decimal("2.00")

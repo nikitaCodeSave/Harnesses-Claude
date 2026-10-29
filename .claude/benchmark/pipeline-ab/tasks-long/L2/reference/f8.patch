@@ -1,0 +1,69 @@
+diff --git a/src/lending/policy.py b/src/lending/policy.py
+index 56ca5b6..45aa92e 100644
+--- a/src/lending/policy.py
++++ b/src/lending/policy.py
+@@ -79,6 +79,11 @@ MEMBERSHIP_RENEWAL_BLOCK = BORROWING_BLOCK
+ # written off; owing this much or more, the account can't be closed.
+ CLOSING_WRITE_OFF_BELOW = Decimal("5.00")
+ 
++# Product decision (lost-items feature F4-L2, changed in the closing feature F7-L1):
++# the daily job declares a loan lost once it is more than this many days past due.
++# It never touches children's loans (F4-L2) or magazines (magazines feature F6-L1).
++LONG_OVERDUE_DAYS = 28
++
+ # date.weekday(): Monday is 0, Sunday is 6. The library is closed on Sundays.
+ CLOSED_WEEKDAYS: frozenset[int] = frozenset({6})
+ 
+diff --git a/src/lending/service.py b/src/lending/service.py
+index 31bfb12..6df2385 100644
+--- a/src/lending/service.py
++++ b/src/lending/service.py
+@@ -225,6 +225,19 @@ class LendingService:
+         copy.status = CopyStatus.LOST
+         return loan
+ 
++    def mark_long_overdue(self) -> list[Loan]:
++        """Daily job: declare lost every loan too long overdue."""
++        today = self._clock.today()
++        due = [
++            loan
++            for loan in self._repo.all_loans()
++            if loan.is_open
++            and (today - loan.due_on).days > policy.LONG_OVERDUE_DAYS
++            and self._repo.get_member(loan.member_id).category is not MemberCategory.CHILD
++            and self._material_of(loan) is not Material.MAGAZINE
++        ]
++        return [self.declare_lost(loan.loan_id) for loan in due]
++
+     def found_copy(self, copy_id: str) -> Copy:
+         """A lost copy turned up: back into circulation, the loan stays lost."""
+         copy = self._repo.get_copy(copy_id)
+diff --git a/tests/test_long_overdue.py b/tests/test_long_overdue.py
+new file mode 100644
+index 0000000..580f794
+--- /dev/null
++++ b/tests/test_long_overdue.py
+@@ -0,0 +1,23 @@
++from datetime import date
++
++from lending.models import CopyStatus
++
++
++def test_long_overdue_loan_is_declared_lost(service, clock):
++    loan = service.checkout("ann", "B1")  # due 23 March
++    clock.set(date(2026, 4, 21))
++    assert [l.loan_id for l in service.mark_long_overdue()] == [loan.loan_id]
++    assert service.get_copy("B1").status is CopyStatus.LOST
++
++
++def test_job_runs_once_a_day(service, clock):
++    service.checkout("ann", "B1")
++    clock.set(date(2026, 4, 21))
++    service.mark_long_overdue()
++    assert service.mark_long_overdue() == []
++
++
++def test_children_are_left_alone(service, clock):
++    service.checkout("kid", "B1")
++    clock.set(date(2026, 6, 1))
++    assert service.mark_long_overdue() == []

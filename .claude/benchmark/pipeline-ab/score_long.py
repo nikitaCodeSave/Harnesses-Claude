@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """pipeline-ab multi-session scoring.
 
-  score_long.py calibrate <task>        — oracle sizes from the reference chain f1 -> f2 -> f3
+  score_long.py calibrate <task>        — oracle sizes from the reference chain f1 -> fn
   score_long.py run <task> <arm>-<rep>  — score one run's final state
   score_long.py summary                 — per arm: min / median / max
 
-Primary metric: test_cross — later features respecting decisions voiced "for later" in earlier ones.
+Primary metric: test_cross — later features respecting decisions voiced "for later" in earlier ones;
+where the task has test_reversal (L2), transfer = test_cross and test_reversal together.
 """
 import json
 import os
@@ -22,7 +23,7 @@ from score import bracket, pytest
 HERE = pathlib.Path(__file__).resolve().parent
 TASKS = HERE / "tasks-long"
 RESULTS = pathlib.Path(os.environ.get("PAB_RESULTS", HERE / "results-long"))
-ORACLES = ["test_f1", "test_f2", "test_f3", "test_cross", "test_regression"]
+ORACLES = [f"test_f{k}" for k in range(1, 9)] + ["test_cross", "test_reversal", "test_regression"]
 
 
 def run_oracles(src_root, task, tmp):
@@ -52,7 +53,8 @@ def calibrate(task):
 def artefacts(ws):
     adr = list(ws.glob("**/adr/*.md")) + list(ws.glob("**/ADR/*.md"))
     return {"glossary": any(ws.glob("**/GLOSSARY.md")), "adr_files": len([a for a in adr if ".git" not in a.parts]),
-            "scratch": (ws / ".scratch").exists(), "spec_md": (ws / "SPEC.md").exists()}
+            "scratch": (ws / ".scratch").exists(), "spec_md": (ws / "SPEC.md").exists(),
+            "spec_files": len(list(ws.glob("specs/*.md")))}
 
 
 def per_feature(rdir, meta):
@@ -80,7 +82,8 @@ def foreign_refs(meta):
         if "Your private notes are the ground truth" in t:
             continue
         hits |= {x for x in re.findall(r"/tmp/pab-work[\w-]*/([\w.-]+)/ws", t) if x != own}
-        hits |= {n for n in ("pipeline-ab", "Harnesses-Claude", "NOTES.md", "test_cross.py") if n in t}
+        hits |= {n for n in ("pipeline-ab", "Harnesses-Claude", "NOTES.md", "test_cross.py", "test_reversal.py")
+                 if n in t}
     return sorted(hits)
 
 
@@ -110,22 +113,31 @@ def score_run(task, name):
     return out
 
 
+def pooled(score, names):
+    """Share of passed tests over several oracles together, in %."""
+    o = [score["oracles"][n] for n in names if n in score["oracles"]]
+    total = sum(d["total"] for d in o)
+    return round(100 * sum(d["passed"] for d in o) / total, 1) if total else 0.0
+
+
 def summary():
-    pct = lambda d: round(100 * d["passed"] / d["total"], 1) if d["total"] else 0.0
-    rows = ["| task | arm | n | cross % | F1 % | F2 % | F3 % | regression % | cost $ | wall min | user turns |",
-            "|---|---|---|---|---|---|---|---|---|---|---|"]
     for tdir in sorted(p for p in RESULTS.iterdir() if p.is_dir()):
-        for arm in ("S", "K", "PL"):
+        counts = json.loads((TASKS / tdir.name / "oracle_counts.json").read_text())
+        feats = sorted(o for o in counts if re.fullmatch(r"test_f\d+", o))
+        cols = [("transfer %", ["test_cross", "test_reversal"])] if "test_reversal" in counts else []
+        cols += [("cross %", ["test_cross"])] + ([("reversal %", ["test_reversal"])] if "test_reversal" in counts else [])
+        cols += [("acceptance %", feats)] + [(f"F{f[6:]} %", [f]) for f in feats] + [("regression %", ["test_regression"])]
+        rows = ["| arm | n | " + " | ".join(c for c, _ in cols) + " | cost $ | wall min | user turns |",
+                "|---|---|" + "---|" * len(cols) + "---|---|---|"]
+        for arm in ("S", "K", "PL", "N"):
             sc = [json.loads(f.read_text()) for f in sorted(tdir.glob(f"{arm}-*/score.json"))]
             if not sc:
                 continue
-            col = lambda o: bracket([pct(s["oracles"][o]) for s in sc if o in s["oracles"]])
-            rows.append("| " + " | ".join([tdir.name, arm, str(len(sc)), col("test_cross"), col("test_f1"),
-                        col("test_f2"), col("test_f3"), col("test_regression"),
-                        bracket([s["dev_cost_usd"] for s in sc]),
-                        bracket([round((s["wall_s"] or 0) / 60, 1) for s in sc]),
-                        bracket([s["user_turns"] for s in sc])]) + " |")
-    print("min / median / max per cell\n\n" + "\n".join(rows))
+            rows.append("| " + " | ".join([arm, str(len(sc))] + [bracket([pooled(s, names) for s in sc]) for _, names in cols]
+                        + [bracket([s["dev_cost_usd"] for s in sc]),
+                           bracket([round((s["wall_s"] or 0) / 60, 1) for s in sc]),
+                           bracket([s["user_turns"] for s in sc])]) + " |")
+        print(f"## {tdir.name} — min / median / max per cell\n\n" + "\n".join(rows) + "\n")
 
 
 if __name__ == "__main__":

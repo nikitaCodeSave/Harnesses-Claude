@@ -9,6 +9,8 @@ through what the agent wrote down. Arms:
   K   S + the lab's light knowledge rules in CLAUDE.md (GLOSSARY.md on first use, ADR for decisions)
   PL  Pocock long-project flow: /grill-with-docs -> /to-spec -> /to-tickets (one context), then
       /implement per ticket in a fresh session; plugin without tdd and implement-spec
+  N   the kit's root CLAUDE.md (template of KIT_COMMIT, filled as in the N/C stand); per feature the
+      operator types the brief and nothing else
 
   drive_long.py --task L1 --arm PL --rep 1
 """
@@ -22,7 +24,7 @@ import time
 import uuid
 
 import drive
-from drive import HERE, POCOCK_COMMIT, POCOCK_REPO, WORK, Run, deliver, git
+from drive import HERE, KIT_COMMIT, KIT_REPO, POCOCK_COMMIT, POCOCK_REPO, WORK, Run, deliver, git
 
 TASKS_LONG = HERE / "tasks-long"
 RESULTS = pathlib.Path(os.environ.get("PAB_RESULTS", HERE / "results-long"))
@@ -55,7 +57,8 @@ class LongRun(Run):
         self.user_session = None
         self.meta = {"task": task, "arm": arm, "rep": rep, "mode": "long", "model": drive.MODEL,
                      "effort": drive.EFFORT, "user_model": drive.USER_MODEL, "user_mode": drive.USER_MODE,
-                     "pocock_commit": POCOCK_COMMIT if arm == "PL" else None, "stages": [], "errors": [],
+                     "pocock_commit": POCOCK_COMMIT if arm == "PL" else None,
+                     "kit_commit": KIT_COMMIT if arm == "N" else None, "stages": [], "errors": [],
                      "features": []}
 
     def setup(self):
@@ -85,6 +88,19 @@ class LongRun(Run):
             self.apply_pocock_setup()
         if self.arm == "K":
             (self.ws / "CLAUDE.md").write_text(K_CLAUDE)
+        if self.arm == "N":
+            kit = WORK / f"harness-{KIT_COMMIT}"
+            if not kit.exists():
+                tmp = WORK / f"harness-{KIT_COMMIT}.tmp-{os.getpid()}"
+                tmp.mkdir(parents=True)
+                tar = subprocess.run(["git", "-C", str(KIT_REPO), "archive", KIT_COMMIT, "plugins/harness"],
+                                     capture_output=True, check=True).stdout
+                subprocess.run(["tar", "-x", "-C", str(tmp)], input=tar, check=True)
+                try:
+                    tmp.rename(kit)
+                except OSError:
+                    shutil.rmtree(tmp, ignore_errors=True)
+            self.write_kit_claude_md(kit / "plugins/harness/skills/harness/templates/CLAUDE.md")
         git(self.ws, "init", "-q", "-b", "main")
         git(self.ws, "add", "-A")
         git(self.ws, "commit", "-q", "-m", "base")
@@ -119,6 +135,12 @@ class LongRun(Run):
                                      "when the developer reports the feature as built, answer done."))
 
     feature_K = feature_S
+
+    def feature_N(self, fid):
+        """The kit's CLAUDE.md is in the repo; the operator types the brief and nothing else."""
+        self.stage(f"{fid}:build", self.brief, session=str(uuid.uuid4()), resume=False, settings=self.s_dev,
+                   user_desc=deliver("Scope: the whole feature. You typed your request. When the developer "
+                                     "reports the feature as built, answer done."))
 
     def feature_PL(self, fid):
         s1 = str(uuid.uuid4())
@@ -174,7 +196,7 @@ class LongRun(Run):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--task", required=True)
-    ap.add_argument("--arm", required=True, choices=["S", "K", "PL"])
+    ap.add_argument("--arm", required=True, choices=["S", "K", "PL", "N"])
     ap.add_argument("--rep", required=True, type=int)
     a = ap.parse_args()
     LongRun(a.task, a.arm, a.rep).go()

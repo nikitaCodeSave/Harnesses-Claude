@@ -1,0 +1,140 @@
+diff --git a/src/lending/errors.py b/src/lending/errors.py
+index 83479e3..6c57f14 100644
+--- a/src/lending/errors.py
++++ b/src/lending/errors.py
+@@ -125,3 +125,15 @@ class MembershipRenewalRefused(LendingError):
+     def __init__(self, member_id: str, why: str) -> None:
+         super().__init__(f"membership of {member_id!r} can't be renewed: {why}")
+         self.member_id = member_id
++
++
++class AccountClosed(LendingError):
++    def __init__(self, member_id: str) -> None:
++        super().__init__(f"account {member_id!r} is closed")
++        self.member_id = member_id
++
++
++class CannotClose(LendingError):
++    def __init__(self, member_id: str, why: str) -> None:
++        super().__init__(f"account {member_id!r} can't be closed: {why}")
++        self.member_id = member_id
+diff --git a/src/lending/models.py b/src/lending/models.py
+index 007fa9b..42513e1 100644
+--- a/src/lending/models.py
++++ b/src/lending/models.py
+@@ -42,6 +42,7 @@ class Member:
+     category: MemberCategory
+     joined_on: date
+     expires_on: date | None = None  # last day the membership is valid; None never expires
++    closed_on: date | None = None
+ 
+     def is_active(self, on: date) -> bool:
+         return self.expires_on is None or on <= self.expires_on
+diff --git a/src/lending/policy.py b/src/lending/policy.py
+index 17a6521..56ca5b6 100644
+--- a/src/lending/policy.py
++++ b/src/lending/policy.py
+@@ -75,6 +75,10 @@ MEMBERSHIP_RENEWAL_OPENS_DAYS_BEFORE = 30
+ # member under the borrowing bar, unlike a loan renewal.
+ MEMBERSHIP_RENEWAL_BLOCK = BORROWING_BLOCK
+ 
++# Product decision (membership feature F5-L2): owing less than this at closing is
++# written off; owing this much or more, the account can't be closed.
++CLOSING_WRITE_OFF_BELOW = Decimal("5.00")
++
+ # date.weekday(): Monday is 0, Sunday is 6. The library is closed on Sundays.
+ CLOSED_WEEKDAYS: frozenset[int] = frozenset({6})
+ 
+diff --git a/src/lending/service.py b/src/lending/service.py
+index 33eab92..31bfb12 100644
+--- a/src/lending/service.py
++++ b/src/lending/service.py
+@@ -10,6 +10,8 @@ from .fines import ZERO, money, overdue_fine
+ from .clock import Clock
+ from .errors import (
+     AccountBlocked,
++    AccountClosed,
++    CannotClose,
+     CopyNotAvailable,
+     DuplicateCopy,
+     DuplicateMember,
+@@ -66,6 +68,7 @@ class LendingService:
+ 
+     def renew_membership(self, member_id: str) -> Member:
+         member = self._repo.get_member(member_id)
++        self._require_open_account(member)
+         if member.expires_on is None:
+             return member
+         today = self._clock.today()
+@@ -79,7 +82,29 @@ class LendingService:
+         member.expires_on = policy.membership_expiry(start)
+         return member
+ 
++    def close_account(self, member_id: str) -> Member:
++        member = self._repo.get_member(member_id)
++        self._require_open_account(member)
++        if self.open_loans(member_id):
++            raise CannotClose(member_id, "copies are still on loan")
++        # F5-L3: holds are cancelled with the member first, never silently.
++        if any(h.member_id == member_id and h.is_active for h in self._repo.all_holds()):
++            raise CannotClose(member_id, "holds are still active")
++        # F5-L2: a small debt is written off; a larger one must be paid first.
++        owed = self.balance(member_id)
++        if owed >= policy.CLOSING_WRITE_OFF_BELOW:
++            raise CannotClose(member_id, f"owes {owed}")
++        if owed > ZERO:
++            self._charge(member_id, -owed, "written off at closing")
++        member.closed_on = self._clock.today()
++        return member
++
++    def _require_open_account(self, member: Member) -> None:
++        if member.closed_on is not None:
++            raise AccountClosed(member.member_id)
++
+     def _require_active(self, member: Member) -> None:
++        self._require_open_account(member)
+         if not member.is_active(self._clock.today()):
+             raise MembershipExpired(member.member_id, member.expires_on)
+ 
+diff --git a/tests/test_closing.py b/tests/test_closing.py
+new file mode 100644
+index 0000000..b5fe24a
+--- /dev/null
++++ b/tests/test_closing.py
+@@ -0,0 +1,36 @@
++from decimal import Decimal
++
++import pytest
++
++from lending.errors import AccountClosed, CannotClose
++
++
++def test_closed_account_cannot_borrow(service):
++    service.close_account("ann")
++    with pytest.raises(AccountClosed):
++        service.checkout("ann", "B1")
++
++
++def test_cannot_close_with_a_copy_out(service):
++    service.checkout("ann", "B1")
++    with pytest.raises(CannotClose):
++        service.close_account("ann")
++
++
++def test_small_debt_is_written_off(service):
++    service.add_charge("ann", Decimal("4.99"), "damage")
++    service.close_account("ann")
++    assert service.balance("ann") == 0
++
++
++def test_larger_debt_blocks_closing(service):
++    service.add_charge("ann", Decimal("5.00"), "damage")
++    with pytest.raises(CannotClose):
++        service.close_account("ann")
++
++
++def test_active_hold_blocks_closing(service):
++    service.checkout("kid", "D1")
++    service.place_hold("ann", "dvd-1")
++    with pytest.raises(CannotClose):
++        service.close_account("ann")

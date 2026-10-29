@@ -1,0 +1,219 @@
+diff --git a/src/lending/errors.py b/src/lending/errors.py
+index aa014ba..83479e3 100644
+--- a/src/lending/errors.py
++++ b/src/lending/errors.py
+@@ -113,3 +113,15 @@ class NotLost(LendingError):
+     def __init__(self, copy_id: str) -> None:
+         super().__init__(f"copy {copy_id!r} is not lost")
+         self.copy_id = copy_id
++
++
++class MembershipExpired(LendingError):
++    def __init__(self, member_id: str, expired_on: object) -> None:
++        super().__init__(f"membership of {member_id!r} expired after {expired_on}")
++        self.member_id = member_id
++
++
++class MembershipRenewalRefused(LendingError):
++    def __init__(self, member_id: str, why: str) -> None:
++        super().__init__(f"membership of {member_id!r} can't be renewed: {why}")
++        self.member_id = member_id
+diff --git a/src/lending/models.py b/src/lending/models.py
+index 08ab1c5..56650c7 100644
+--- a/src/lending/models.py
++++ b/src/lending/models.py
+@@ -40,6 +40,10 @@ class Member:
+     name: str
+     category: MemberCategory
+     joined_on: date
++    expires_on: date | None = None  # last day the membership is valid; None never expires
++
++    def is_active(self, on: date) -> bool:
++        return self.expires_on is None or on <= self.expires_on
+ 
+ 
+ @dataclass(frozen=True)
+diff --git a/src/lending/policy.py b/src/lending/policy.py
+index f79be49..5de648d 100644
+--- a/src/lending/policy.py
++++ b/src/lending/policy.py
+@@ -49,6 +49,13 @@ RENEWABLE: frozenset[Material] = frozenset({Material.BOOK})
+ MAX_RENEWALS = 2
+ RENEWAL_OPENS_DAYS_BEFORE_DUE = 5
+ 
++# Memberships run a year and can be renewed from this many days before they expire.
++MEMBERSHIP_RENEWAL_OPENS_DAYS_BEFORE = 30
++
++# Product decision (renewals feature, F3-L2): a membership renewal only needs the
++# member under the borrowing bar, unlike a loan renewal.
++MEMBERSHIP_RENEWAL_BLOCK = BORROWING_BLOCK
++
+ # date.weekday(): Monday is 0, Sunday is 6. The library is closed on Sundays.
+ CLOSED_WEEKDAYS: frozenset[int] = frozenset({6})
+ 
+@@ -75,3 +82,11 @@ def loan_limit(category: MemberCategory) -> int:
+ 
+ def pickup_deadline(set_aside_on: date) -> date:
+     return next_open_day(set_aside_on + timedelta(days=PICKUP_DAYS))
++
++
++def membership_expiry(start: date) -> date:
++    """Valid up to and including the same date a year on (28 Feb for 29 Feb)."""
++    try:
++        return start.replace(year=start.year + 1)
++    except ValueError:
++        return start.replace(year=start.year + 1, day=28)
+diff --git a/src/lending/service.py b/src/lending/service.py
+index 3f3eb42..5f5347b 100644
+--- a/src/lending/service.py
++++ b/src/lending/service.py
+@@ -17,6 +17,8 @@ from .errors import (
+     HoldNotAllowed,
+     InvalidAmount,
+     LoanLimitReached,
++    MembershipExpired,
++    MembershipRenewalRefused,
+     NoOpenLoan,
+     NotLost,
+     RenewalRefused,
+@@ -54,10 +56,33 @@ class LendingService:
+     ) -> Member:
+         if self._repo.has_member(member_id):
+             raise DuplicateMember(member_id)
+-        member = Member(member_id, name, category, joined_on=self._clock.today())
++        today = self._clock.today()
++        member = Member(member_id, name, category, joined_on=today)
++        # F1-L6: children's memberships never expire.
++        if category is not MemberCategory.CHILD:
++            member.expires_on = policy.membership_expiry(today)
+         self._repo.add_member(member)
+         return member
+ 
++    def renew_membership(self, member_id: str) -> Member:
++        member = self._repo.get_member(member_id)
++        if member.expires_on is None:
++            return member
++        today = self._clock.today()
++        opens = member.expires_on - timedelta(days=policy.MEMBERSHIP_RENEWAL_OPENS_DAYS_BEFORE)
++        if today < opens:
++            raise MembershipRenewalRefused(member_id, f"renewal opens on {opens}")
++        owed = self.balance(member_id)
++        if owed >= policy.MEMBERSHIP_RENEWAL_BLOCK:
++            raise MembershipRenewalRefused(member_id, f"owes {owed}")
++        start = member.expires_on if today <= member.expires_on else today
++        member.expires_on = policy.membership_expiry(start)
++        return member
++
++    def _require_active(self, member: Member) -> None:
++        if not member.is_active(self._clock.today()):
++            raise MembershipExpired(member.member_id, member.expires_on)
++
+     def get_member(self, member_id: str) -> Member:
+         return self._repo.get_member(member_id)
+ 
+@@ -101,6 +126,7 @@ class LendingService:
+ 
+     def checkout(self, member_id: str, copy_id: str) -> Loan:
+         member = self._repo.get_member(member_id)
++        self._require_active(member)
+         copy = self._repo.get_copy(copy_id)
+         # A copy on the hold shelf may only go to the member it was set aside for.
+         hold = self._ready_hold_for(copy)
+@@ -193,6 +219,7 @@ class LendingService:
+         copy = self._repo.get_copy(loan.copy_id)
+         title = self._repo.get_title(copy.isbn)
+         member = self._repo.get_member(loan.member_id)
++        self._require_active(member)
+         today = self._clock.today()
+         if title.material not in policy.RENEWABLE:
+             raise RenewalRefused(loan_id, f"{title.material.value}s can't be renewed")
+@@ -210,10 +237,14 @@ class LendingService:
+         if owed > ZERO:
+             raise AccountBlocked(member.member_id, owed)
+         # F1-L3: lateness so far is charged now, as if returned today.
++        new_due = policy.due_date(title.material, today)
++        # F3-L3: a renewal never runs past the member's membership.
++        if member.expires_on is not None and new_due > member.expires_on:
++            raise RenewalRefused(loan_id, f"membership ends on {member.expires_on}")
+         fine = overdue_fine(title, member, loan.due_on, today)
+         if fine > ZERO:
+             self._charge(member.member_id, fine, "overdue fine at renewal", loan.loan_id)
+-        loan.due_on = policy.due_date(title.material, today)
++        loan.due_on = new_due
+         loan.renewals += 1
+         return loan
+ 
+@@ -238,6 +269,7 @@ class LendingService:
+ 
+     def place_hold(self, member_id: str, isbn: str) -> Hold:
+         member = self._repo.get_member(member_id)
++        self._require_active(member)
+         self._repo.get_title(isbn)
+         copies = self._repo.copies_of(isbn)
+         if any(c.status is CopyStatus.AVAILABLE for c in copies):
+@@ -296,14 +328,19 @@ class LendingService:
+ 
+     def _shelve_or_set_aside(self, copy: Copy) -> None:
+         """A copy is free again: give it to the first waiting hold, else shelve it."""
+-        waiting = [h for h in self._repo.holds_on(copy.isbn) if h.status is HoldStatus.WAITING]
++        today = self._clock.today()
++        # F2-L5: never set a copy aside for an expired member; their hold keeps its place.
++        waiting = [
++            h for h in self._repo.holds_on(copy.isbn)
++            if h.status is HoldStatus.WAITING and self._repo.get_member(h.member_id).is_active(today)
++        ]
+         if not waiting:
+             copy.status = CopyStatus.AVAILABLE
+             return
+         hold = waiting[0]
+         hold.status = HoldStatus.READY
+         hold.copy_id = copy.copy_id
+-        hold.pickup_by = policy.pickup_deadline(self._clock.today())
++        hold.pickup_by = policy.pickup_deadline(today)
+         copy.status = CopyStatus.ON_HOLD_SHELF
+ 
+     # accounts ----------------------------------------------------------
+diff --git a/tests/test_membership.py b/tests/test_membership.py
+new file mode 100644
+index 0000000..32b3ab0
+--- /dev/null
++++ b/tests/test_membership.py
+@@ -0,0 +1,38 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++
++from lending.errors import MembershipExpired, MembershipRenewalRefused
++
++
++def test_membership_runs_a_year(service):
++    assert service.get_member("ann").expires_on == date(2027, 3, 2)
++
++
++def test_child_membership_never_expires(service):
++    assert service.get_member("kid").expires_on is None
++
++
++def test_expired_member_cannot_borrow(service, clock):
++    clock.set(date(2027, 3, 3))
++    with pytest.raises(MembershipExpired):
++        service.checkout("ann", "B1")
++
++
++def test_renewal_on_time_adds_a_year(service, clock):
++    clock.set(date(2027, 2, 15))
++    assert service.renew_membership("ann").expires_on == date(2028, 3, 2)
++
++
++def test_renewal_too_early_is_refused(service, clock):
++    clock.set(date(2027, 1, 30))
++    with pytest.raises(MembershipRenewalRefused):
++        service.renew_membership("ann")
++
++
++def test_renewal_with_debt_at_the_borrowing_bar_is_refused(service, clock):
++    service.add_charge("ann", Decimal("10.00"), "damage")
++    clock.set(date(2027, 2, 15))
++    with pytest.raises(MembershipRenewalRefused):
++        service.renew_membership("ann")

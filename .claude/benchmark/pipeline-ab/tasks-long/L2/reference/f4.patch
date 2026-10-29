@@ -1,0 +1,226 @@
+diff --git a/src/lending/errors.py b/src/lending/errors.py
+index 6e38c85..aa014ba 100644
+--- a/src/lending/errors.py
++++ b/src/lending/errors.py
+@@ -105,3 +105,11 @@ class RenewalRefused(LendingError):
+     def __init__(self, loan_id: str, why: str) -> None:
+         super().__init__(f"loan {loan_id!r} can't be renewed: {why}")
+         self.loan_id = loan_id
++
++
++class NotLost(LendingError):
++    """A copy was reported found that was never declared lost."""
++
++    def __init__(self, copy_id: str) -> None:
++        super().__init__(f"copy {copy_id!r} is not lost")
++        self.copy_id = copy_id
+diff --git a/src/lending/models.py b/src/lending/models.py
+index 959965c..08ab1c5 100644
+--- a/src/lending/models.py
++++ b/src/lending/models.py
+@@ -23,6 +23,7 @@ class CopyStatus(Enum):
+     ON_LOAN = "on_loan"
+     ON_HOLD_SHELF = "on_hold_shelf"
+     WITHDRAWN = "withdrawn"
++    LOST = "lost"
+ 
+ 
+ class HoldStatus(Enum):
+@@ -66,10 +67,11 @@ class Loan:
+     due_on: date
+     returned_on: date | None = None
+     renewals: int = 0
++    lost_on: date | None = None  # declared lost; the copy never came back
+ 
+     @property
+     def is_open(self) -> bool:
+-        return self.returned_on is None
++        return self.returned_on is None and self.lost_on is None
+ 
+     def is_overdue(self, on: date) -> bool:
+         return self.is_open and on > self.due_on
+@@ -77,7 +79,10 @@ class Loan:
+ 
+ @dataclass(frozen=True)
+ class Charge:
+-    """Something the member owes: an overdue fine or a manual staff charge."""
++    """Something the member owes: a fine, a fee or a manual staff charge.
++
++    A negative amount takes money off again (a lost copy that turned up).
++    """
+ 
+     charge_id: str
+     member_id: str
+diff --git a/src/lending/policy.py b/src/lending/policy.py
+index b598024..f79be49 100644
+--- a/src/lending/policy.py
++++ b/src/lending/policy.py
+@@ -40,6 +40,10 @@ HOLD_BLOCK = Decimal("5.00")
+ # collected in time. Children are exempt, as with fines.
+ NO_SHOW_FEE = Decimal("1.00")
+ 
++# Product decision (holds feature F2-L3, changed in the renewals feature F3-L1):
++# a lost copy costs its replacement cost plus this fee. Children pay nothing at all.
++LOST_PROCESSING_FEE = Decimal("3.00")
++
+ # Renewals: books only, at most twice, from a few days before the due date.
+ RENEWABLE: frozenset[Material] = frozenset({Material.BOOK})
+ MAX_RENEWALS = 2
+diff --git a/src/lending/repository.py b/src/lending/repository.py
+index a407375..34ed48a 100644
+--- a/src/lending/repository.py
++++ b/src/lending/repository.py
+@@ -91,6 +91,10 @@ class InMemoryRepository:
+                 return loan
+         return None
+ 
++    def last_lost_loan_for_copy(self, copy_id: str) -> Loan | None:
++        lost = [l for l in self._loans.values() if l.copy_id == copy_id and l.lost_on is not None]
++        return lost[-1] if lost else None
++
+     def loans_of(self, member_id: str) -> list[Loan]:
+         return [l for l in self._loans.values() if l.member_id == member_id]
+ 
+diff --git a/src/lending/service.py b/src/lending/service.py
+index 0560704..3f3eb42 100644
+--- a/src/lending/service.py
++++ b/src/lending/service.py
+@@ -18,6 +18,7 @@ from .errors import (
+     InvalidAmount,
+     LoanLimitReached,
+     NoOpenLoan,
++    NotLost,
+     RenewalRefused,
+ )
+ from .models import (
+@@ -35,6 +36,8 @@ from .models import (
+ )
+ from .repository import InMemoryRepository
+ 
++LOST_REPLACEMENT = "lost copy replacement"
++
+ 
+ class LendingService:
+     def __init__(self, repo: InMemoryRepository, clock: Clock) -> None:
+@@ -143,6 +146,45 @@ class LendingService:
+         self._shelve_or_set_aside(copy)
+         return loan
+ 
++    def declare_lost(self, loan_id: str) -> Loan:
++        """Staff write off a copy that is not coming back; the loan is over."""
++        loan = self._repo.get_loan(loan_id)
++        if not loan.is_open:
++            raise NoOpenLoan(loan.copy_id)
++        copy = self._repo.get_copy(loan.copy_id)
++        title = self._repo.get_title(copy.isbn)
++        member = self._repo.get_member(loan.member_id)
++        today = self._clock.today()
++        fine = overdue_fine(title, member, loan.due_on, today)
++        if fine > ZERO:
++            self._charge(member.member_id, fine, "overdue fine at loss", loan.loan_id)
++        if member.category is not MemberCategory.CHILD:
++            self._charge(member.member_id, title.replacement_cost, LOST_REPLACEMENT, loan.loan_id)
++            self._charge(member.member_id, policy.LOST_PROCESSING_FEE, "lost copy processing fee", loan.loan_id)
++        loan.lost_on = today
++        copy.status = CopyStatus.LOST
++        return loan
++
++    def found_copy(self, copy_id: str) -> Copy:
++        """A lost copy turned up: back into circulation, the loan stays lost."""
++        copy = self._repo.get_copy(copy_id)
++        if copy.status is not CopyStatus.LOST:
++            raise NotLost(copy_id)
++        loan = self._repo.last_lost_loan_for_copy(copy_id)
++        if loan is not None:
++            # F1-L4: the replacement cost comes off again, but no account goes into
++            # credit; fines and fees charged with the loss stay.
++            replacement = sum(
++                (c.amount for c in self._repo.charges_of(loan.member_id)
++                 if c.loan_id == loan.loan_id and c.reason == LOST_REPLACEMENT),
++                ZERO,
++            )
++            refund = min(replacement, self.balance(loan.member_id))
++            if refund > ZERO:
++                self._charge(loan.member_id, -refund, "lost copy found", loan.loan_id)
++        self._shelve_or_set_aside(copy)
++        return copy
++
+     def renew(self, loan_id: str) -> Loan:
+         """Extend an open loan in place: a fresh loan period from today."""
+         loan = self._repo.get_loan(loan_id)
+@@ -200,7 +242,7 @@ class LendingService:
+         copies = self._repo.copies_of(isbn)
+         if any(c.status is CopyStatus.AVAILABLE for c in copies):
+             raise HoldNotAllowed(f"a copy of {isbn} is on the shelf")
+-        if all(c.status is CopyStatus.WITHDRAWN for c in copies):
++        if all(c.status in (CopyStatus.WITHDRAWN, CopyStatus.LOST) for c in copies):
+             raise HoldNotAllowed(f"{isbn} has no copies in circulation")
+         if any(h.member_id == member_id and h.is_active for h in self._repo.holds_on(isbn)):
+             raise HoldNotAllowed(f"{member_id} already holds {isbn}")
+diff --git a/tests/test_lost.py b/tests/test_lost.py
+new file mode 100644
+index 0000000..39d45fe
+--- /dev/null
++++ b/tests/test_lost.py
+@@ -0,0 +1,61 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++
++from lending.errors import CopyNotAvailable, NoOpenLoan, NotLost
++from lending.models import CopyStatus
++
++
++def test_lost_loan_is_over(service):
++    loan = service.checkout("ann", "B1")
++    service.declare_lost(loan.loan_id)
++    assert service.open_loans("ann") == []
++    assert service.get_copy("B1").status is CopyStatus.LOST
++
++
++def test_adult_pays_replacement_and_fee(service):
++    loan = service.checkout("ann", "B1")
++    service.declare_lost(loan.loan_id)
++    assert service.balance("ann") == Decimal("21.00")
++
++
++def test_child_pays_nothing(service):
++    loan = service.checkout("kid", "B1")
++    service.declare_lost(loan.loan_id)
++    assert service.balance("kid") == 0
++
++
++def test_lost_loan_cannot_be_declared_again(service):
++    loan = service.checkout("ann", "B1")
++    service.declare_lost(loan.loan_id)
++    with pytest.raises(NoOpenLoan):
++        service.declare_lost(loan.loan_id)
++
++
++def test_lost_copy_cannot_be_borrowed(service):
++    loan = service.checkout("ann", "B1")
++    service.declare_lost(loan.loan_id)
++    with pytest.raises(CopyNotAvailable):
++        service.checkout("ann", "B1")
++
++
++def test_found_copy_goes_back_on_the_shelf_and_refunds_replacement(service):
++    loan = service.checkout("ann", "B1")
++    service.declare_lost(loan.loan_id)
++    service.found_copy("B1")
++    assert service.get_copy("B1").status is CopyStatus.AVAILABLE
++    assert service.balance("ann") == Decimal("3.00")
++
++
++def test_found_never_leaves_credit(service):
++    loan = service.checkout("ann", "B1")
++    service.declare_lost(loan.loan_id)
++    service.pay("ann", Decimal("21.00"))
++    service.found_copy("B1")
++    assert service.balance("ann") == 0
++
++
++def test_found_on_a_copy_that_is_not_lost(service):
++    with pytest.raises(NotLost):
++        service.found_copy("B1")
