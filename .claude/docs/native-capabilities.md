@@ -40,7 +40,8 @@ that version, not a re-check at the stamp.
 - **CC primitives:** v2.1.311 · 2026-10-28 — official CHANGELOG.md 2.1.252→2.1.312 read in three
   slices against this file and the kit; live probes on v2.1.311 (settings-error output of the
   permission check, `Edit` deny vs `sed -i` and redirects, dead `Write()` rule warning); [FP]
-  `plugins/loading`, `discover-plugins`, `memory`.
+  `plugins/loading`, `discover-plugins`, `memory`. Spot check 2026-10-29: [FP] `memory` — auto-memory
+  default and the per-project `autoMemoryEnabled` setting.
 - **Models:** v2.1.311 · 2026-10-28, from the changelog only (Sonnet 5.5, Haiku 5.5,
   `ultrathink`); platform model pages last read 2026-09-22.
 - **Approaches:** 2026-10-28 — `external-sources.md` blocks 1, 2, 4, 5 (two first-source passes)
@@ -664,7 +665,11 @@ project `./CLAUDE.md` or `./.claude/CLAUDE.md` → local `./CLAUDE.local.md`; pl
 in `~/.claude/projects/<project>/memory/` with a `MEMORY.md` index (first 200 lines / 25 KB
 loaded each session). Command is **`/memory`** (lists loaded files, toggles auto memory).
 **There is no built-in `/remember`** — "remember X" is natural-language behavior writing to
-auto memory.
+auto memory. **Auto memory is on by default in local sessions** (off by default in self-hosted
+environments); the `/memory` toggle saves `autoMemoryEnabled` to user settings, and a project turns
+it off for itself with `"autoMemoryEnabled": false` in its settings, or
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` [FP, `/en/memory`]. The lab and the kit's settings template
+keep it off (ADR 0006).
 
 **`AGENTS.md` — read only while no `CLAUDE.md` is on the path** [FP, `/en/memory`, re-checked
 2026-10-28]. It is the file Codex, Cursor and Copilot look for. **Since v2.1.277 Claude Code reads

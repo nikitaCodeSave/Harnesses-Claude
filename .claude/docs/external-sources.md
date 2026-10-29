@@ -386,7 +386,7 @@ Runtime = Intelligent Harness Runtime (IHR).
 
 ### [arXiv 2606.05894 — EMBER: Budgeted Evidence Retention for Long-Horizon Agents](https://arxiv.org/abs/2606.05894)
 **Дата:** июнь 2026. **Тезисы:** *Budgeted Pre-Query Retention* — что сохранить ДО появления запроса под фиксированным token-бюджетом. Память пишется при ingestion, читается без доступа к raw-stream. Юнит — **evidence capsule**: *дословная выдержка источника + retrieval-key + update-metadata* (grounding + discoverability + контекст). Learned retention-policy на post-query outcome-feedback. Результат: EMBER-14B 0.30 F1 @ 8192-budget на LongMemEval-RR (vs 0.18 strongest baseline).
-**Применяется:** **method out of scope** (learned RL-policy, как SLIM/Meta-Harness — нужен training). Переносимый принцип: *source-backed / verbatim, не перефраз* + бюджет форсит приоритизацию — совпадает с memory-layers.md (frontmatter `description` = retrieval-key, `[[links]]` = update-metadata) и с заметкой про 63%-wrong-accept (держать storage детерминированным). НЕ строим learned-pipeline (наш anti-pattern «multi-step memory pipeline premature»). T3.
+**Применяется:** **method out of scope** (learned RL-policy, как SLIM/Meta-Harness — нужен training). Переносимый принцип: *source-backed / verbatim, не перефраз* + бюджет форсит приоритизацию — совпадает с memory-layers.md: storage и переходы состояния держать детерминированными (заметка про 63%-wrong-accept). НЕ строим learned-pipeline (наш anti-pattern «multi-step memory pipeline premature»). T3.
 
 ### [arXiv 2607.14275 — AI Agents Do Not Fail Alone: The Context Fails First](https://arxiv.org/abs/2607.14275)
 **Автор:** Fouad Bousetouane. 15 июля 2026.
@@ -473,5 +473,3 @@ Runtime = Intelligent Harness Runtime (IHR).
 - `.claude/docs/archive/research-audit.md` — 65 atomic claims, 5-вердиктная classification (frozen 2026-05-09).
 - `.claude/docs/archive/practices-from-projects.md` — обширный survey community practices (frozen 2026-05-10).
 - `.claude/docs/archive/harnesses-guide.md` — первая итерация research-guide (frozen, источник research-audit'а).
-- `reference_harness_papers_2026.md` (auto-memory) — NLAH + Meta-Harness detailed notes.
-- `feedback_grow_with_community.md` (auto-memory) — invariant «первоисточники приоритетнее внутренних ADR».

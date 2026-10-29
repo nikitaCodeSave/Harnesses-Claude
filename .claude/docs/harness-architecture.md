@@ -116,7 +116,7 @@ ops-сложности: больше компонентов → больше con
 |---|---|---|
 | **L0 in-session scratchpad** | task-list тулы, по умолчанию выключенные на текущем поколении моделей | session |
 | **L1 procedural** | CLAUDE.md, rules, skills | cross-session, в git |
-| **L2 episodic** | `~/.claude/projects/<hash>/memory/MEMORY.md` + topic files | cross-session, user-scoped |
+| **L2 episodic** | пусто: авто-память выключена ([ADR 0006](adr/0006-arkhitektura-artefaktov-proekta-i-ikh-zhiznennyy-tsikl.md)) | — |
 | **L3 durable artifacts** | коммиты, `benchmark/*/RESULTS.md`; `.claude/devlog/` — замороженный архив | cross-session, в git |
 | **L4 semantic** | `.claude/docs/adr/`, `.claude/docs/principles.md`, archive | cross-session, в git |
 | **inter-agent** | filesystem blackboard (JSON-вердикт свежей сессии в `.claude/audits/<slug>/`) | per-deliverable, transient |
@@ -125,8 +125,8 @@ ops-сложности: больше компонентов → больше con
 
 | Actor | Видит | Не видит |
 |---|---|---|
-| **main thread** | L1 (всегда), L2 (`MEMORY.md` first ~200 lines auto), L3/L4 при manual Read | inter-agent transient artefacts unless cwd-loaded |
-| **subagent** (custom) | spawn prompt + tool results | `MEMORY.md`, ADR, conversation history unless explicit pass |
+| **main thread** | L1 (всегда), L3/L4 при manual Read | inter-agent transient artefacts unless cwd-loaded |
+| **subagent** (custom) | spawn prompt + tool results | ADR, conversation history unless explicit pass |
 | **built-in subagent** (Explore/Plan/general-purpose) | spawn prompt + tool results + project CLAUDE.md | episodic memory |
 | **hook** | stdin payload (JSON event) + filesystem + env vars | model conversation state |
 
