@@ -44,9 +44,9 @@ grep -rnE "(Opus|Sonnet|Haiku|Fable) [0-9]|v?2\.1\.[0-9]{3}|20[0-9]{2}-[0-9]{2}-
 - **Ask first**: anything under `.claude/benchmark/` (measurement provenance), and any change to
   the plugin content in the other repository.
 - **Never**: edit frozen layers — `.claude/docs/archive/`, `.claude/devlog/` (a closed journal),
-  an existing `.claude/audits/<slug>/` (a new audit writes its own), and an accepted ADR (a new ADR
-  supersedes it instead). They are point-in-time records; rewriting them
-  falsifies the provenance later work stands on.
+  an existing `.claude/audits/<slug>/` (a new audit writes its own), and the text of an accepted ADR
+  (a new ADR supersedes it; the one edit an accepted ADR takes is its `Status:` line). They are
+  point-in-time records; rewriting them falsifies the provenance later work stands on.
 
 ## Conventions that are not obvious from the files
 

@@ -1,3 +1,5 @@
+Status: accepted
+
 # 1. Devlog закрыт: решения — в ADR, замеры — в RESULTS.md, история — в git
 
 Дата: 2026-10-28 · Решение оператора · Источник замеров: `.claude/benchmark/pipeline-ab/RESULTS.md`
