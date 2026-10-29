@@ -9,8 +9,8 @@ owner: nikitaCodeSave
 Группировка по логическим блокам, не по дате.
 
 > Этот файл — **active layer reference**, не invariant. Stale-проверка
-> при значимом расширении harness'а (см. `feedback_grow_with_community` —
-> первоисточники приоритетнее внутренних ADR). Цитаты-claim'ы
+> при значимом расширении harness'а: первоисточники и сообщество приоритетнее
+> внутренних ADR. Цитаты-claim'ы
 > валидированы в `.claude/docs/archive/research-audit.md` (65 утверждений,
 > 5-вердиктная шкала).
 
@@ -268,8 +268,9 @@ Cat Wu + Cherny transcripted podcast — sub-agent / slash-command usage pattern
 
 ## Блок 4 — Independent practitioners (T4)
 
-Публичные сетапы сильных практиков. Не обосновывают invariant; служат
-cross-validation к T1–T2 и источником кандидатов на пробу.
+Публичные сетапы и устоявшиеся практики сильных практиков. Названная практика — основание для
+строки шаблона или инструкции без собственного замера; инвариант — только вместе с другим
+независимым источником (блок 10).
 
 ### Andrej Karpathy — [твит о сбоях coding-агентов, 26 янв 2026](https://x.com/karpathy/status/2015883857489522876) · [`autoresearch/program.md`](https://github.com/karpathy/autoresearch/blob/master/program.md)
 **Тезисы (твит, первоисточник):** модели молча принимают неверные допущения, не задают вопросов и не спорят, переусложняют код, правят ортогональный код как побочный эффект. Ключевая строка: *«All of this happens despite a few simple attempts to fix it via instructions in CLAUDE.md»*. Рабочий рецепт оттуда же: *«Don't tell it what to do, give it success criteria and watch it go»*.
@@ -298,6 +299,11 @@ cross-validation к T1–T2 и источником кандидатов на п
 **Тезисы:** поведенческая обвязка (спеки, примеры, контрактные тесты) подняла дешёвую модель с 3/10 до 10/10 прогонов и обошлась на 33% дешевле передовой ($0.273 против $0.406); передовая проходит 178 приёмочных тестов 10/10 и без обвязки, а с ней тратит ×10.5 токенов, ×3 времени и ×7 денег. Вывод автора: *«What changes with model capability is when and how often the sensors run, not whether an independent check is needed.»*
 **Ограничения:** конфликт интересов (автор — основатель Specmatic, обвязка на нём же), 10 парных прогонов, одна greenfield-задача, контракты писал сам автор. Совет «для передовой модели — только финальный гейт» **не проверялся** — автор сам называет его следующим сравнением.
 **Применяется:** workflow.md § Work (строгость проверок по классу модели исполнителя). Сходится с arXiv 2609.20804 (блок 5). T4.
+
+### Michael Nygard — [Documenting Architecture Decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+**Дата:** 15 ноября 2011. Сверено 2026-10-29.
+**Тезисы (первоисточник):** у ADR есть статус: *«A decision may be "proposed" if the project stakeholders haven't agreed with it yet, or "accepted" once it is agreed. If a later ADR changes or reverses a decision, it may be marked as "deprecated" or "superseded" with a reference to its replacement.»* Отменённое решение не удаляется и не переписывается: *«If a decision is reversed, we will keep the old one around, but mark it as superseded.»*
+**Применяется:** строка `Status:` ADR в проектах кита и в лаборатории ([ADR 0006](adr/0006-arkhitektura-artefaktov-proekta-i-ikh-zhiznennyy-tsikl.md), [ADR 0007](adr/0007-status-adr-i-v-laboratorii.md)); те же статусы — в формате ADR mattpocock-skills. Устоявшаяся практика, T4.
 
 ### HumanLayer — QRSPI: [интервью Heavybit с Dex Horthy](https://www.heavybit.com/library/article/whats-missing-to-make-ai-agents-mainstream) (17 мар 2026) и [скиллы RPI в открытом репо](https://github.com/humanlayer/humanlayer) (открыт 23 окт 2026, Apache-2.0)
 **Сверено** по интервью и коду скиллов (`apps/riptide-rpi-claude-plugin/skills/`).
@@ -342,7 +348,7 @@ cross-validation к T1–T2 и источником кандидатов на п
 2. **Durable artifacts** (ADR, журналы решений, MEMORY.md)
 3. **Lightweight adapters** (hooks для gating/observability, не для logic).
 Runtime = Intelligent Harness Runtime (IHR).
-**Применяется:** `.claude/rules/*.md` = contracts, `.claude/docs/adr/` + `RESULTS.md` стендов = artifacts, hooks = adapters. См. `reference_harness_papers_2026.md` memory.
+**Применяется:** `.claude/rules/*.md` = contracts, `.claude/docs/adr/` + `RESULTS.md` стендов = artifacts, hooks = adapters.
 
 ### [arXiv 2603.28052v1 — Stanford «Meta-Harness»](https://arxiv.org/abs/2603.28052)
 **Авторы:** Lee, Nair, Zhang, Lee, Khattab, Finn. Март 2026.
@@ -457,9 +463,7 @@ Runtime = Intelligent Harness Runtime (IHR).
 | **T6 curated lists / reference impls** | awesome-*, OpenHarness, showcase repos | discovery resource |
 | **T7 live evidence** | `claude --help`, GitHub issues, CHANGELOG | ground-truth для current state |
 
-**Правило:** T1+T2 могут обосновать invariant в `.claude/rules/`. T3-T4 — кандидат на active layer (`.claude/docs/`). T5-T6 — supplementary, обязательна cross-reference с T1-T4.
-
-См. также `feedback_grow_with_community.md` (memory): не зарываться во внутренние ADR'ы, **first-party + community первичны** при значимых решениях.
+**Правило** ([ADR 0008](adr/0008-osnovanie-stroki-nazvannyy-istochnik.md)): строка инструкции или шаблона остаётся, если у неё названо основание — собственный замер или источник T1–T4. Инвариант в `.claude/rules/` требует нескольких независимых источников (T1–T4 в любом сочетании) или повторяющейся эмпирики; единичное наблюдение его не обосновывает. T5–T6 — supplementary, только вместе с T1–T4. Собственный стенд нужен, когда источники расходятся, когда утверждение зависит от нашей среды (модель, поведение Claude Code) или когда ошибка дорога, а проверка дешёвая. При значимых решениях не зарываться во внутренние ADR: **first-party и сообщество первичны**.
 
 ## Что НЕ включено и почему
 

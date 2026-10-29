@@ -83,7 +83,9 @@ paths для DENY. Сохранить в проектном CLAUDE.md (в кор
   журнала сессий нет ([ADR 0001](docs/adr/0001-devlog-zakryt-resheniya-v-adr.md)).
 - Знание о дизайне harness'а — здесь, в `.claude/docs/`; вывод из замера
   попадает в проекты только через плагин `harness` (`~/PROJECTS/claude-code-harness`),
-  и только когда строка шаблона опирается на измерение или first-party источник.
+  и только когда у строки шаблона есть названное основание: замер, first-party источник,
+  опубликованное исследование или устоявшаяся практика (рубрика — `external-sources.md`, блок 10;
+  [ADR 0008](docs/adr/0008-osnovanie-stroki-nazvannyy-istochnik.md)).
 
 ## Reference materials
 
