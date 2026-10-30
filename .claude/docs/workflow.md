@@ -72,7 +72,7 @@ Default для **нетривиальной** задачи, которая по�
 - `/code-review` built-in — дефолтная ступень для substantive change (working diff или PR, local, free, codebase-aware); `/review` — его алиас
 - `/code-review ultra` (алиас `/ultrareview`, CLI `claude ultrareview`) — high-stakes (cloud multi-agent, ~5-10min, ~$5-20 via usage credits)
 - Doc-with-code rule: PR обновляет doc в том же PR ([docs-discipline](../rules/docs-discipline.md) rule 1)
-- Решение, которому должна следовать будущая работа, — ADR в той же сессии; что изменилось — описательный коммит
+- Решение, которому должна следовать будущая работа, — ADR, когда оно принято, в одном коммите с изменением, которое его применяет; `/harness:wrap` только ловит пропущенное ([ADR 0009](adr/0009-reshenie-zapisyvaetsya-kogda-prinyato.md)); что изменилось — описательный коммит
 
 ## Долгий проект: слой знаний между сессиями
 
